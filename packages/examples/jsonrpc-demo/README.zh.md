@@ -6,7 +6,7 @@
 
 ## 配置发现
 
-第一个非空通道生效：先 `$DSH_CORDIS_CONFIG`，再位置参数 `argv[2]`。如果二者都没有指向现有文件，bin 会向 stderr 打印单行用法并以 1 退出；没有工作目录回退或内置回退。[`dsh-app-boot`](../../boot/app-boot/README.md) 会使插件加载失败成为致命错误。此协议不使用 `DSH_SNAPSHOT`。
+第一个非空通道生效：先 `$DSH_CORDIS_CONFIG`，再位置参数 `argv[2]`。已指定但文件不存在时，bin 会向 stderr 打印单行用法并以 1 退出。未打包启动没有工作目录回退或内置回退。打包后的可执行文件（`node:sea` 或文件名以 `dsh-jsonrpc-agent-pkg` 开头）在两个通道都为空时使用 `<executable-dir>/cordis.yml`：文件不存在就写入捆绑的默认配置，并在 stderr 报告这次写入，同时把未设置的 `DSH_CWD` / `DSH_SESSION_ROOT` 默认到该目录和 `<executable-dir>/.sessions`。它还会从可执行文件目录加载 `.env`，且不覆盖已有变量。[`dsh-app-boot`](../../boot/app-boot/README.md) 会使插件加载失败成为致命错误。此协议不使用 `DSH_SNAPSHOT`。
 
 不含 `dsh-sdk-jsonrpc-server` 的配置仍然有效，只是不提供任何服务；bin 不会指定服务器插件。
 
@@ -16,7 +16,7 @@ stdin EOF 和 `SIGTERM` 会 dispose（释放资源）根上下文，等待完全
 
 ## stdout 是协议
 
-stdout 只承载 JSON-RPC 帧。bin 和启动守卫在 stderr 上输出诊断，配置必须省略 stdout logger。
+stdout 只承载 JSON-RPC 帧。bin 和启动守卫在 stderr 上输出诊断，配置必须省略 stdout logger。当 stdin 是 TTY 时，boot 成功后再向 stderr 打印一行，避免控制台启动后看起来像无响应。
 
 ## 模型体验
 
@@ -29,5 +29,5 @@ stdout 只承载 JSON-RPC 帧。bin 和启动守卫在 stderr 上输出诊断，
 ## 已知限制与暂缓事项
 
 - **bin 无法证明配置提供 JSON-RPC 服务**：不含 `dsh-sdk-jsonrpc-server` 条目的有效配置也能成功启动，但不会提供任何服务。
-- **不存在内置或默认配置**：每次启动都必须提供 `DSH_CORDIS_CONFIG` 或位置路径；部署方负责完整的插件树和 stdout 纪律。
+- **未打包启动没有默认配置**：通用 bin 和 node 载体必须提供 `DSH_CORDIS_CONFIG` 或位置路径。打包后的可执行文件在两个通道都为空时会写入并启动 `<executable-dir>/cordis.yml`。
 - **stdin EOF 会截断正在处理的工作**：客户端消失时立即释放根上下文；需要有序完成的调用方应使用协议级 `shutdown` 请求。

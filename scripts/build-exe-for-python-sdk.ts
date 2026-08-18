@@ -49,7 +49,7 @@ const ASSET_GLOBS = [
   'node_modules/**/*.wasm',
 ]
 
-const PLATFORMS = ['linux', 'macos'] as const
+const PLATFORMS = ['linux', 'macos', 'win'] as const
 const ARCHES = ['x64', 'arm64'] as const
 type Platform = (typeof PLATFORMS)[number]
 type Arch = (typeof ARCHES)[number]
@@ -111,7 +111,13 @@ class Target {
    * @returns the host target; throws on an unsupported host platform or arch.
    */
   static host(): Target {
-    const platform = process.platform === 'darwin' ? 'macos' : process.platform === 'linux' ? 'linux' : undefined
+    const platform = process.platform === 'darwin'
+      ? 'macos'
+      : process.platform === 'linux'
+        ? 'linux'
+        : process.platform === 'win32'
+          ? 'win'
+          : undefined
     if (platform === undefined) {
       throw new Error(`build-exe-for-python-sdk: unsupported host platform ${process.platform}; pass --targets explicitly.`)
     }
@@ -393,6 +399,10 @@ class SingleExeBuild {
       '--output',
       product,
     ])
+    const windowsProduct = `${product}.exe`
+    if (!this.cli.dryRun && !existsSync(product) && existsSync(windowsProduct)) {
+      return [windowsProduct]
+    }
     if (!this.cli.dryRun && !existsSync(product)) {
       throw new Error(`build-exe-for-python-sdk: product ${product} is missing after the pkg run; inspect ${this.outDir}.`)
     }
@@ -493,6 +503,8 @@ class SingleExeBuild {
         stdio: 'inherit',
         // Artifact builds must not mutate or validate a developer's Git hooks.
         env: { ...process.env, CI: 'true' },
+        // Node 20+ refuses to spawn .cmd/.bat without a shell (EINVAL).
+        shell: process.platform === 'win32',
       })
       child.once('error', (error) => {
         reject(new Error(`build-exe-for-python-sdk: ${label} failed to spawn: ${error.message} (${printable})`))

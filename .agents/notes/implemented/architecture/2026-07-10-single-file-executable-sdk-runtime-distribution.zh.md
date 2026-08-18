@@ -30,7 +30,7 @@ exe 使用 [@yao-pkg/pkg](https://github.com/yao-pkg/pkg)（vercel/pkg 归档后
 - [`packages/sdk/server`](../../../../packages/sdk/server/README.md)（`@deepseek-ai/dsh-sdk-jsonrpc-server`）：纯协议插件；执行 `apply` 时，在进程 stdio 上挂载 `HarnessSdkJsonRpcServer` 与按行分隔的 JSON-RPC 传输层，资源释放走 `ctx.effect()`。是否提供服务由 `cordis.yml` 决定；未挂载该插件的配置会启动一个不提供此服务的合法进程。协议级退出归插件所有（应答并确保 `shutdown` 响应发送完毕后，对根运行时执行 dispose（资源释放），让待处理的持久化操作完成，再调用 `exit(0)`；HMR（热模块替换）式卸载只停止服务，不退出进程）。
 - [`packages/examples/jsonrpc-demo`](../../../../packages/examples/jsonrpc-demo/README.md)（`@deepseek-ai/dsh-sdk-jsonrpc-demo`）：轻量应用入口——`installFailLoud` + `loadEnv` + 配置发现 + [`dsh-app-boot`](../../../../packages/boot/app-boot/src/index.ts) 的 `boot()`；`boot()` 完成后入口即完成，服务器由 `cordis.yml` 中的 `dsh-sdk-jsonrpc-server` 条目启动。它只依赖 `app-boot`。进程级退出归 `bin` 所有（stdin EOF/SIGTERM → dispose 后返回 0，SIGINT → 130）。
 
-配置发现有两个通道，均缺失时立即报错：优先使用 `DSH_CORDIS_CONFIG` 环境变量（SDK 客户端约定），其次使用 argv 位置参数；没有默认路径或内置回退——「实际启动的插件由外部 `cordis.yml` 决定」是硬语义。
+配置发现优先使用 `DSH_CORDIS_CONFIG`，其次使用 argv 位置参数；已指定但文件缺失时立即报错。未打包启动和 node 载体没有回退。打包后的可执行文件在两个通道都为空时使用 `<executable-dir>/cordis.yml`，文件不存在就写入捆绑的默认配置，因此实际启动的插件仍来自外部文件（[同目录默认配置](../feature/2026-08-17-packaged-exe-sidecar-default-cordis-yml.md)）。
 
 ### 插件解析：VFS 装载真实包树，闭包 manifest（元数据清单）就是部署根目录
 

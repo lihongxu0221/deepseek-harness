@@ -42,6 +42,13 @@ profile 目录包含一个 `package.json`，其中记录树外插件依赖，以
 
 层的确切优先级、flag、关闭行为、部署默认值和源码执行方式，以 [CLI（命令行界面）行为参考](reference/README.md)为准。
 
+
+## 打包桌面可执行文件
+
+`dist-exe/dsh-web-<platform>-<arch>/` 是双击即用的 Web GUI 文件夹。`dsh-web.exe` 只是薄启动器，必须与旁边的 `lib/`、`config/` 和 `node_modules/` 一起保留。整个文件夹可独立运行：exe 内嵌 Node，打开界面不需要安装系统 Node.js 或 Python。若第一个额外参数是已存在的 `.js`/`.cjs`/`.mjs` 文件，启动器会导入该脚本而不是 GUI，以便原生辅助程序把 exe 当作 Node 使用。双击会启动 `web` profile，在 Edge 或 Chrome 的应用模式窗口中打开本地 URL，并把该文件夹当作调用目录。若未设置 `$DSH_HOME`，用户数据写在 exe 旁边的 `.config/`，作用等同于 `~/.dsh`。再次构建会保留 `.config`。关闭应用窗口或控制台即可停止。这不是 JSON-RPC 的 `dsh-jsonrpc-agent-pkg` 可执行文件。
+
+在仓库根目录运行 `build-exe.bat`（Windows）或 `pnpm run build:web-exe`。
+
 ## 开发
 
 生产运行需要已构建的包与前端产物。请在仓库根目录单独运行 `pnpm run build`，然后使用 `pnpm dsh <args...>` 运行 TypeScript 入口并转发所有参数；模块解析约定以[源码执行参考](reference/README.md#source-execution)为准。

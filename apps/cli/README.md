@@ -42,6 +42,13 @@ Use `--dump-default-config` and `--dump-config` to inspect the composed tree wit
 
 The [CLI behavior reference](reference/README.md) owns exact layer precedence, flags, shutdown behavior, deployment defaults, and source execution.
 
+
+## Packaged desktop executable
+
+`dist-exe/dsh-web-<platform>-<arch>/` is the double-click Web GUI folder. `dsh-web.exe` is only a thin launcher; keep `lib/`, `config/`, and `node_modules/` beside it. The folder is self-contained: the exe embeds Node, so a machine does not need a system Node.js or Python install to open the GUI. When the first extra argument is an existing `.js`/`.cjs`/`.mjs` file, the launcher imports that script instead of the GUI so native helpers can reuse the exe as Node. Double-click boots the `web` profile, opens the local URL in an Edge or Chrome app-mode window, and treats that folder as the invoking directory. Unless `$DSH_HOME` is already set, user data lives in `.config/` beside the exe — the packaged equivalent of `~/.dsh`. Rebuilding the folder keeps `.config`. Close the app window or the console to stop. This is not the JSON-RPC `dsh-jsonrpc-agent-pkg` executable.
+
+From the repository root, run `build-exe.bat` on Windows or `pnpm run build:web-exe`.
+
 ## Development
 
 Production runs require built package and frontend artifacts. From the repository root, run `pnpm run build` separately, then use `pnpm dsh <args...>` to run the TypeScript entry and forward every argument; the [source-execution reference](reference/README.md#source-execution) owns the module-resolution contract.

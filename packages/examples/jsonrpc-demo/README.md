@@ -6,7 +6,7 @@ Bin-only app that boots an external `cordis.yml`; its [`jsonrpc`](../../sdk/serv
 
 ## Config discovery
 
-The first non-empty channel wins: `$DSH_CORDIS_CONFIG`, then positional `argv[2]`. If neither names an existing file, the bin prints one-line usage to stderr and exits 1; there is no working-directory or built-in fallback. [`dsh-app-boot`](../../boot/app-boot/README.md) makes plugin load failures fatal. This protocol does not use `DSH_SNAPSHOT`.
+The first non-empty channel wins: `$DSH_CORDIS_CONFIG`, then positional `argv[2]`. A named path that does not exist prints one-line usage to stderr and exits 1. Unpackaged launches have no working-directory or built-in fallback. A packaged executable (`node:sea` or a `dsh-jsonrpc-agent-pkg*` filename) with neither channel uses `<executable-dir>/cordis.yml`, writes the bundled default there when the file is absent, reports the write on stderr, and defaults unset `DSH_CWD` / `DSH_SESSION_ROOT` to that directory and `<executable-dir>/.sessions`. It also loads `.env` from the executable directory without overriding existing variables. [`dsh-app-boot`](../../boot/app-boot/README.md) makes plugin load failures fatal. This protocol does not use `DSH_SNAPSHOT`.
 
 A config without `dsh-sdk-jsonrpc-server` is valid and serves nothing; the bin does not designate a server plugin.
 
@@ -16,7 +16,7 @@ stdin EOF and `SIGTERM` dispose the root to quiescence and exit 0; `SIGINT` exit
 
 ## stdout is the protocol
 
-stdout carries only JSON-RPC frames. The bin and boot guards diagnose on stderr, and the config must omit stdout loggers.
+stdout carries only JSON-RPC frames. The bin and boot guards diagnose on stderr, and the config must omit stdout loggers. A TTY stdin also gets one post-boot stderr line so a console launch is not silent.
 
 ## Model Experience
 
@@ -29,5 +29,5 @@ No direct invalidation; the named consumer owns any request-prefix changes.
 ## Known Limitations and Deferred Work
 
 - **The bin cannot prove that the config serves JSON-RPC** — a valid config with no `dsh-sdk-jsonrpc-server` entry boots successfully and serves nothing.
-- **No built-in or default config exists** — every launch must provide `DSH_CORDIS_CONFIG` or a positional path, and deployment owns the complete plugin tree and stdout discipline.
+- **Unpackaged launches have no default config** — the generic bin and the node carrier require `DSH_CORDIS_CONFIG` or a positional path. A packaged executable with neither channel writes and boots `<executable-dir>/cordis.yml`.
 - **stdin EOF cuts off in-flight work** — client disappearance disposes the root immediately; callers that need orderly completion use the protocol-level `shutdown` request.

@@ -71,6 +71,13 @@ New sessions default to the `workspace-write` permission preset. Bash and filesy
 
 `DSH_TOOLS_MODE` selects `native`, `code`, or `both` for the process; another value fails at boot. The shipped `minimal` agent preset keeps that deployment presentation, fixes the complete system prompt to `You are a helpful software engineer assistant.`, and composes only persistent `bash` plus `str_replace_editor`. Select 极简模式 when creating a Web session; every other prompt section and model-facing plugin remains absent from that agent while the shared browser, workspace, persistence, sandbox, and permission host stays in place.
 
+
+## Packaged desktop executable
+
+`scripts/build-web-exe.ts` deploys the same `web` profile into `dist-exe/dsh-web-<platform>-<arch>/` and wraps a thin `dsh-web` launcher that imports on-disk `lib/packaged-web-bin.js`, or an existing `.js`/`.cjs`/`.mjs` extra argument when a helper spawn()s the exe as Node. The Web GUI is not a single-file pkg snapshot, because profile module fallback needs real packages. Double-clicking the launcher boots the GUI, opens the loopback URL in an Edge or Chrome app-mode window, and uses the executable directory as the invoking directory so Explorer's process cwd is not `System32`. Keep the whole folder together. A target machine does not need a system Node.js or Python install: the launcher embeds Node, and `node_modules/` ships beside it. Close the app window or the console to stop. The JSON-RPC `dsh-jsonrpc-agent-pkg` executable is a different product and still speaks stdio.
+
+Windows: `build-exe.bat` or `pnpm run build:web-exe -- --targets=node24-win-x64`.
+
 ## Shared deployment behavior
 
 The base bundle mounts the native DeepSeek adapter, settings and credential providers, stable `web_search`, and disabled session telemetry. Provider credentials resolve from the inherited environment, `$DSH_HOME/.credentials.yaml`, the invoking directory's `.env`, then `$DSH_HOME/.env`; the managed document is never materialized into `process.env`, while both `.env` files are ordinary launch environment layers. Search uses `DEEPSEEK_API_KEY` and accepts `DEEPSEEK_SEARCH_BASE_URL`; `web_fetch` is disabled unless a patch layer inserts a provider and enables it.

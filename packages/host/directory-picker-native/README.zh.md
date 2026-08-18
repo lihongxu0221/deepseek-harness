@@ -18,3 +18,4 @@
 
 - **Linux 依赖桌面工具**——Zenity 与 KDialog 均未安装时，`pick` 以包含解决建议的错误拒绝；它不会回退为手输路径提示（组合层面的回退是 browse 后端）。
 - **Windows 没有机制级回退**——通过打包依赖 koffi 运行的子进程选择器是唯一原生层级，因此 COM 拒绝或对话框崩溃会直接上报失败。组合层面的回退仍是 browse 后端。
+- **打包后的 Windows 宿主必须能执行 `lib/worker.cjs`**——构建产物会把该文件 spawn 给能跑脚本的 Node。只启动 GUI 的 SEA exe 会因 Commander 多余参数失败。打包 Web 启动器在额外参数是已存在的 `.js`/`.cjs`/`.mjs` 时导入该脚本而不是 GUI；宿主 exe 不能跑脚本时，可用 `$NODE_BINARY` / `$npm_node_execpath` 强制指定真正的 `node`。

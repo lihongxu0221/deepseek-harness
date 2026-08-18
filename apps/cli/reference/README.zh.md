@@ -71,6 +71,13 @@ dsh web --help
 
 `DSH_TOOLS_MODE` 为进程选择 `native`、`code` 或 `both`；其他值会导致启动失败。随附的 `minimal` agent preset 会保留该部署的呈现方式，将完整系统提示词固定为 `You are a helpful software engineer assistant.`，并且仅组合持久 `bash` 和 `str_replace_editor`。创建 Web 会话时请选择极简模式；该 agent 不包含任何其他提示词段落或面向模型的插件，而共享的浏览器、workspace、持久化、沙箱与权限宿主保持不变。
 
+
+## 打包桌面可执行文件
+
+`scripts/build-web-exe.ts` 把同一个 `web` profile 部署到 `dist-exe/dsh-web-<platform>-<arch>/`，并在其中放入薄启动器 `dsh-web`，由它导入磁盘上的 `lib/packaged-web-bin.js`；当辅助程序把 exe 当作 Node spawn、且额外参数是已存在的 `.js`/`.cjs`/`.mjs` 时，则导入该脚本。Web GUI 不能打成单个 pkg 快照，因为 profile 模块回退需要真实的包目录。双击启动器会打开 GUI，在 Edge 或 Chrome 的应用模式窗口中打开回环 URL，并把可执行文件所在目录当作调用目录，这样资源管理器的进程 cwd 就不会是 `System32`。请保持整个文件夹完整。目标机器不需要安装系统 Node.js 或 Python：启动器内嵌 Node，`node_modules/` 随文件夹一起分发。关闭应用窗口或控制台即可停止。JSON-RPC 的 `dsh-jsonrpc-agent-pkg` 可执行文件是另一个产品，仍然走标准输入输出。
+
+Windows：`build-exe.bat` 或 `pnpm run build:web-exe -- --targets=node24-win-x64`。
+
 ## 共享部署行为
 
 基础组合包挂载原生 DeepSeek 适配器、settings 与凭据提供方、稳定的 `web_search` 和已禁用的会话遥测。提供方凭据依次从继承环境、`$DSH_HOME/.credentials.yaml`、调用目录的 `.env` 和 `$DSH_HOME/.env` 解析；受管文档从不物化进 `process.env`，而两个 `.env` 文件都是普通启动环境层。搜索使用 `DEEPSEEK_API_KEY` 并接受 `DEEPSEEK_SEARCH_BASE_URL`；只有 patch 层插入提供方并启用 `web_fetch` 后，该工具才可用。

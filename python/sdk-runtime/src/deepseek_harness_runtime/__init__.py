@@ -14,9 +14,9 @@ Two runtime carriers coexist under ``runtime/``, both injected by the repo's
   selected automatically, and excluded from wheel/sdist distributions.
 
 ``runtime/cordis.yml`` IS checked in: it is the default agent configuration
-the client SDK injects via ``$DSH_CORDIS_CONFIG`` for zero-config runs — the
-runtime itself always requires an explicit config and has no built-in
-fallback.
+the client SDK injects via ``$DSH_CORDIS_CONFIG`` for zero-config runs.
+Unpackaged launches still require that explicit path. A packaged executable
+with no env or argv path writes the same default plugin list next to itself.
 """
 
 from __future__ import annotations
@@ -56,8 +56,9 @@ def bundled_default_config_path() -> Path:
     """Path of the checked-in default runtime configuration (``runtime/cordis.yml``).
 
     The client SDK injects this path via ``$DSH_CORDIS_CONFIG`` when the caller
-    supplies no config and the launch resolves to the bundled runtime — the
-    runtime binary itself always demands an explicit config.
+    supplies no config and the launch resolves to the bundled runtime.
+    A packaged executable launched with no env or argv path writes the same
+    default plugin list next to the executable instead of reading this file.
     """
     path = bundled_package_dir() / "runtime" / "cordis.yml"
     if not path.is_file():
