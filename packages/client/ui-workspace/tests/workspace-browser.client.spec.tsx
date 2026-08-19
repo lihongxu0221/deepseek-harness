@@ -81,6 +81,7 @@ function mount(overrides: Partial<WorkspaceBrowserProps> = {}) {
     createWorkspace: vi.fn(async () => workspace('created', [])),
     addFolder: vi.fn(async () => workspace('created', [])),
     removeFolder: vi.fn(async () => workspace('created', [])),
+    setPrimaryFolder: vi.fn(async () => workspace('created', [])),
     useDirectoryFlow: bindSnapshotSelector({ getSnapshot: () => true, subscribe: () => () => {} }),
     renderSlot: ((_name: string, owner: { open: boolean }) => (owner.open ? <div data-testid="directory-flow" /> : null)) as never,
     t,
@@ -1051,6 +1052,50 @@ describe('WorkspaceBrowser', () => {
     await waitFor(() => { expect(removeFolder).toHaveBeenCalledWith(wid('alpha'), '/projects/extra') })
     expect(addFolder).not.toHaveBeenCalled()
     expect(screen.queryByRole('dialog', { name: '编辑项目' })).toBeNull()
+  })
+
+  it('promotes an extra folder through the project editor without adding or removing it', async () => {
+    const setPrimaryFolder = vi.fn(async () => workspace('alpha', [], 'Alpha'))
+    const addFolder = vi.fn(async () => workspace('alpha', [], 'Alpha'))
+    const removeFolder = vi.fn(async () => workspace('alpha', [], 'Alpha'))
+    mount({
+      useWorkspaces: hook(workspaceState([
+        { ...workspace('alpha', [], 'Alpha'), folders: ['/projects/extra'] },
+      ])),
+      setPrimaryFolder,
+      addFolder,
+      removeFolder,
+    })
+    fireEvent.click(screen.getByRole('button', { name: '工作区“Alpha”的操作' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '编辑项目' }))
+    fireEvent.click(screen.getByRole('button', { name: '设为主要' }))
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    await waitFor(() => {
+      expect(setPrimaryFolder).toHaveBeenCalledWith(wid('alpha'), '/projects/extra')
+    })
+    expect(addFolder).not.toHaveBeenCalled()
+    expect(removeFolder).not.toHaveBeenCalled()
+  })
+
+  it('pins a workspace to the front of the durable display order from the hover card', async () => {
+    vi.useFakeTimers()
+    const insertWorkspaceBefore = vi.fn(async () => {})
+    try {
+      mount({
+        useWorkspaces: hook(workspaceState([
+          workspace('alpha', [], 'Alpha'),
+          workspace('beta', [], 'Beta'),
+        ])),
+        insertWorkspaceBefore,
+      })
+      const rows = screen.getAllByRole('treeitem')
+      fireEvent.pointerEnter(rows[1]!.parentElement as HTMLElement)
+      act(() => { vi.advanceTimersByTime(500) })
+      fireEvent.click(screen.getByRole('button', { name: '置顶' }))
+      expect(insertWorkspaceBefore).toHaveBeenCalledWith(wid('beta'), wid('alpha'))
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('save via Enter, failure surfaces the error, Cancel closes', async () => {

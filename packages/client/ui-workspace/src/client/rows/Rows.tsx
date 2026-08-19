@@ -8,9 +8,10 @@
 import { useState } from 'react'
 import clsx from 'clsx'
 import {
-  HoverCard, IconArchiveOutline20, IconBranchOutline16, IconEditOutline16,
-  IconEllipsisOutline16, IconFolderClose16, IconFolderOpen16, IconPlusOutline16,
-  IconTrashOutline16, IconTriangleRightFill14, Menu, StateDot,
+  HoverCard, IconArchiveOutline20, IconBranchOutline16, IconChecklistOutline14,
+  IconEditOutline16, IconEllipsisOutline16, IconFolderClose16, IconFolderOpen16,
+  IconGoalOutline16, IconPlusOutline16, IconSettingsOutline16, IconTrashOutline16,
+  IconTriangleRightFill14, Menu, StateDot,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { StateDotState } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { WorkspaceBrowserProps } from '../contract/slots.ts'
@@ -38,34 +39,42 @@ function hoverTimeLabel(updatedAt: number, now: number, t: RowTranslate): string
   return unit === 'now' ? t('time.now') : t('time.ago', { t: t(`time.${unit}`, { n }) })
 }
 
-/**
- * Absolute creation time through the dictionary's date template (the message
- * clock pattern): `toLocaleString` would follow the browser language, not the
- * app locale, and produce mixed-language text after a switch.
- */
-function createdLabel(createdAt: number, t: RowTranslate): string {
-  const d = new Date(createdAt)
-  const pad2 = (v: number): string => String(v).padStart(2, '0')
-  const date = t('date.ymd', { y: d.getFullYear(), m: d.getMonth() + 1, d: d.getDate() })
-  return t('hover.created', { time: `${date} ${pad2(d.getHours())}:${pad2(d.getMinutes())}` })
-}
-
-/** Hover-card body: workspace title, full directory path, absolute creation time. */
-function WorkspaceHoverContent({ label, cwd, folders, createdAt, t }: {
+/** Hover-card body: title + pin, session count, owned paths, Edit project. */
+function WorkspaceHoverContent({ label, cwd, folders, sessionCount, onPin, onEdit, t }: {
   label: string
   cwd: string | undefined
   folders: readonly string[]
-  createdAt: number
+  sessionCount: number
+  onPin: () => void
+  onEdit: () => void
   t: RowTranslate
 }) {
+  const paths = cwd === undefined ? folders : [cwd, ...folders]
   return (
     <div className={css.hoverContent}>
-      <div className={css.hoverTitle}>{label}</div>
-      <div className={css.hoverPath}>{cwd}</div>
-      {folders.map(folder => (
-        <div key={folder} className={css.hoverPath}>{folder}</div>
+      <div className={css.hoverHead}>
+        <IconFolderClose16 />
+        <span className={css.hoverTitle}>{label}</span>
+        <button type="button" className={css.hoverPin} aria-label={t('hover.pin')} onClick={onPin}>
+          <IconGoalOutline16 size={14} />
+        </button>
+      </div>
+      <div className={css.hoverMeta}>
+        <IconChecklistOutline14 />
+        <span>{t(sessionCount === 1 ? 'hover.sessions.one' : 'hover.sessions.other', { n: sessionCount })}</span>
+      </div>
+      <div className={css.hoverRule} />
+      {paths.map(folder => (
+        <div key={folder} className={css.hoverPath}>
+          <IconFolderClose16 />
+          <span>{folder}</span>
+        </div>
       ))}
-      <div className={css.hoverTime}>{createdLabel(createdAt, t)}</div>
+      <div className={css.hoverRule} />
+      <button type="button" className={css.hoverEdit} onClick={onEdit}>
+        <IconSettingsOutline16 size={14} />
+        {t('menu.editProject')}
+      </button>
     </div>
   )
 }
@@ -122,6 +131,7 @@ export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, t }: 
     delete: () => void
     addFolder?: () => void
     removeFolder?: (path: string) => void
+    pin: () => void
   } | undefined
   /** Present only for real Workspace rows in the grouped view. */
   drag?: WorkspaceRowDragProps | undefined
@@ -230,11 +240,17 @@ export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, t }: 
   return (
     <HoverCard
       anchor={ownRow}
-      content={<WorkspaceHoverContent label={row.label} cwd={row.cwd} folders={row.folders} createdAt={row.createdAt} t={t} />}
+      content={<WorkspaceHoverContent
+        label={row.label}
+        cwd={row.cwd}
+        folders={row.folders}
+        sessionCount={row.sessionCount}
+        onPin={() => { actions?.pin() }}
+        onEdit={() => { actions?.edit() }}
+        t={t}
+      />}
       disabled={menuOpen}
-      copyText={row.cwd}
-      copyLabel={t('copy')}
-      copiedLabel={t('hover.copied')}
+      {...(css.hoverCard === undefined ? {} : { className: css.hoverCard })}
     />
   )
 }

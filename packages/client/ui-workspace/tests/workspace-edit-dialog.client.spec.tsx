@@ -26,6 +26,7 @@ function mount(overrides: Partial<Parameters<typeof WorkspaceEditDialog>[0]> = {
     onRemoveProject: vi.fn(),
     onAddFolder: vi.fn(),
     onRemoveFolder: vi.fn(),
+    onSetPrimary: vi.fn(),
     t,
     ...overrides,
   }
@@ -50,6 +51,9 @@ describe('WorkspaceEditDialog', () => {
     expect(screen.getByText('主要')).toBeTruthy()
     expect(screen.getByTitle('/projects/alpha').textContent).toBe('alpha')
     expect(screen.getByTitle('/projects/extra').textContent).toBe('extra')
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: '移除文件夹“alpha”' }).disabled).toBe(true)
+    fireEvent.click(screen.getByRole('button', { name: '设为主要' }))
+    expect(props.onSetPrimary).toHaveBeenCalledWith('/projects/extra')
     fireEvent.click(screen.getByRole('button', { name: '移除文件夹“extra”' }))
     expect(props.onRemoveFolder).toHaveBeenCalledWith('/projects/extra')
     fireEvent.click(screen.getByRole('button', { name: '添加文件夹' }))

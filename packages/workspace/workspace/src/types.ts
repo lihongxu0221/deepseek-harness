@@ -28,8 +28,10 @@ export interface Workspace {
   /**
    * Canonical primary directory: the `fs.realpath` of the path given at
    * create time (trailing slashes, `..`, and symlinks all resolved). New
-   * sessions use this as cwd. Never rewritten afterwards, even when the
-   * directory disappears (see {@link status}).
+   * sessions use this as cwd, so agent instructions (`AGENTS.md` and the
+   * rest of the instruction walk) start here. {@link setPrimaryFolder}
+   * rewrites it among owned directories; a missing directory never rewrites
+   * it (see {@link status}).
    */
   readonly path: string
 
@@ -70,7 +72,9 @@ export interface Workspace {
    * through `fs.realpath`; a nonexistent or non-directory path rejects. A
    * path this workspace already owns resolves without writing. A path owned
    * by another workspace rejects. Extra folders expand session membership
-   * and workspace-write roots; they do not change {@link path}.
+   * and workspace-write roots; they do not change {@link path}. The first
+   * folder added to a workspace is the primary from create; later extras stay
+   * extras until {@link setPrimaryFolder}.
    * @param path - Existing directory to own, in any path spelling.
    * @returns resolution after durability.
    */
@@ -84,6 +88,16 @@ export interface Workspace {
    * @returns resolution after durability.
    */
   removeFolder(path: string): Promise<void>
+
+  /**
+   * Make an owned extra folder the primary directory (new-session cwd).
+   * The previous primary becomes an extra folder. Naming {@link path} is a
+   * no-op success. An unknown path rejects. Existing session header cwds
+   * stay unchanged.
+   * @param path - Owned extra folder to promote, in any path spelling.
+   * @returns resolution after durability.
+   */
+  setPrimaryFolder(path: string): Promise<void>
 
   /**
    * Prepend a session to this workspace's candidate account. An already

@@ -37,6 +37,15 @@
   color: var(--dsw-alias-label-primary);
 }
 
+.folderRow .setPrimary {
+  opacity: 0;
+}
+
+.folderRow:hover .setPrimary,
+.folderRow:focus-within .setPrimary {
+  opacity: 1;
+}
+
 .folderName {
   flex: 1;
   min-width: 0;
@@ -47,7 +56,8 @@
   line-height: 22px;
 }
 
-.primary {
+.primary,
+.setPrimary {
   flex: none;
   padding: 0 8px;
   border-radius: 8px;
@@ -55,6 +65,21 @@
   font-size: 12px;
   line-height: 22px;
   color: var(--dsw-alias-label-secondary);
+}
+
+.setPrimary {
+  border: none;
+  cursor: pointer;
+}
+
+.setPrimary:hover:not(:disabled),
+.setPrimary:focus-visible:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.setPrimary:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
 }
 
 .removeFolder {

@@ -28,6 +28,17 @@ export class WorkspaceFolderConflictError extends Error {
   }
 }
 
+/** setPrimaryFolder named a path this workspace does not own. */
+export class WorkspaceFolderUnknownError extends Error {
+  /**
+   * @param path - Canonical (or stored) directory the caller tried to promote.
+   */
+  constructor(readonly path: string) {
+    super(`cannot set primary folder '${path}': it is not owned by this workspace`)
+    this.name = 'WorkspaceFolderUnknownError'
+  }
+}
+
 /** removeFolder named the workspace primary directory. */
 export class WorkspaceFolderPrimaryError extends Error {
   /**
@@ -186,6 +197,34 @@ export class WorkspaceEntity implements Workspace {
         return {
           ...record,
           folders: folders.filter(folder => folder !== canonical && folder !== path),
+        }
+      })
+    })
+  }
+
+  async setPrimaryFolder(path: string): Promise<void> {
+    let canonical: string
+    try {
+      canonical = await realpathNormalize(path)
+    } catch {
+      // The extra folder may already be missing; match the stored spelling.
+      canonical = path
+    }
+    await this.host.enqueue(async () => {
+      if (canonical === this.record.path || path === this.record.path) return
+      const folders = extraFolders(this.record)
+      if (!folders.includes(canonical) && !folders.includes(path)) {
+        throw new WorkspaceFolderUnknownError(canonical)
+      }
+      await this.mutate((record) => {
+        if (canonical === record.path || path === record.path) return record
+        const extras = extraFolders(record)
+        const match = extras.includes(canonical) ? canonical : extras.includes(path) ? path : undefined
+        if (match === undefined) throw new WorkspaceFolderUnknownError(canonical)
+        return {
+          ...record,
+          path: match,
+          folders: [record.path, ...extras.filter(folder => folder !== match)],
         }
       })
     })

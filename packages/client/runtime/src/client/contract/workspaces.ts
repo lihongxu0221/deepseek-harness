@@ -80,6 +80,13 @@ export interface IWorkspaces {
    */
   removeFolder(workspaceId: WorkspaceId, path: string): Promise<WorkspaceView>
   /**
+   * Make an owned extra folder the primary directory (new-session cwd).
+   * @param workspaceId - target workspace.
+   * @param path - extra folder to promote.
+   * @returns the updated Workspace view.
+   */
+  setPrimaryFolder(workspaceId: WorkspaceId, path: string): Promise<WorkspaceView>
+  /**
    * Delete a Workspace (its sessions fall back to the unaccounted group).
    * @param workspaceId - target workspace.
    */

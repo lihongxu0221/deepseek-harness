@@ -22,6 +22,7 @@ import { ownedPaths, ownsPath } from './folders.ts'
 export {
   WorkspaceFolderConflictError,
   WorkspaceFolderPrimaryError,
+  WorkspaceFolderUnknownError,
   WorkspaceMoveInvalidError,
 } from './entity.ts'
 import { realpathNormalize } from './paths.ts'

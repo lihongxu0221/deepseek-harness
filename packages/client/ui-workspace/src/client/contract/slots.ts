@@ -139,6 +139,8 @@ export type WorkspaceBrowserInjected = DirectoryPickingInjected & {
   addFolder: (workspaceId: WorkspaceId, path: string) => Promise<WorkspaceView>
   /** Remove an extra folder from a Workspace. The directory is kept. */
   removeFolder: (workspaceId: WorkspaceId, path: string) => Promise<WorkspaceView>
+  /** Make an owned extra folder the primary directory (new-session cwd). */
+  setPrimaryFolder: (workspaceId: WorkspaceId, path: string) => Promise<WorkspaceView>
 }
 
 /** Full browser props: shell owner share + viewing store + injected actions + the locale seat. */

@@ -86,6 +86,7 @@ function scriptedApi(overrides: {
       rename: r => ok(r, { workspace: { workspaceId: 'w1' as never, path: '/t', title: 't', sessionIds: [], createdAt: '0', updatedAt: '0' } }),
       addFolder: r => ok(r, { workspace: { workspaceId: 'w1' as never, path: '/t', folders: [r.payload.path], title: 't', sessionIds: [], createdAt: '0', updatedAt: '0' } }),
       removeFolder: r => ok(r, { workspace: { workspaceId: 'w1' as never, path: '/t', folders: [], title: 't', sessionIds: [], createdAt: '0', updatedAt: '0' } }),
+      setPrimaryFolder: r => ok(r, { workspace: { workspaceId: 'w1' as never, path: r.payload.path, folders: ['/t'], title: 't', sessionIds: [], createdAt: '0', updatedAt: '0' } }),
       delete: r => ok(r, { deleted: true as const }),
       insertBefore: r => ok(r, { workspaceIds: [r.payload.workspaceId] }),
       insertSessionBefore: r => ok(r, { workspace: { workspaceId: 'w1' as never, path: '/t', title: 't', sessionIds: [], createdAt: '0', updatedAt: '0' } }),
@@ -248,6 +249,11 @@ describe('unary round trip', () => {
     expect(removed.result).toEqual({
       ok: true,
       value: { workspace: { workspaceId: 'w1', path: '/t', folders: [], title: 't', sessionIds: [], createdAt: '0', updatedAt: '0' } },
+    })
+    const promoted = await c.workspace.setPrimaryFolder({ workspaceId: 'w1' as never, path: '/extra' })
+    expect(promoted.result).toEqual({
+      ok: true,
+      value: { workspace: { workspaceId: 'w1', path: '/extra', folders: ['/t'], title: 't', sessionIds: [], createdAt: '0', updatedAt: '0' } },
     })
   })
 

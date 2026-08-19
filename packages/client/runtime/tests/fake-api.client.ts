@@ -198,6 +198,9 @@ export class FakeApiClient implements IApiClient {
   onWorkspaceRemoveFolder: (payload: unknown) => Promise<RpcResponse<{ workspace: WorkspaceView }>> =
     () => Promise.resolve(ok({ workspace: fakeWorkspace('fk-ws', { folders: [] }) }))
 
+  onWorkspaceSetPrimaryFolder: (payload: unknown) => Promise<RpcResponse<{ workspace: WorkspaceView }>> =
+    payload => Promise.resolve(ok({ workspace: fakeWorkspace('fk-ws', { path: (payload as { path: string }).path }) }))
+
   onWorkspaceDelete: (payload: unknown) => Promise<RpcResponse<{ deleted: true }>> =
     () => Promise.resolve(ok({ deleted: true }))
 
@@ -220,6 +223,7 @@ export class FakeApiClient implements IApiClient {
     rename: (payload: unknown) => this.record('workspace.rename', payload, this.onWorkspaceRename(payload)),
     addFolder: (payload: unknown) => this.record('workspace.addFolder', payload, this.onWorkspaceAddFolder(payload)),
     removeFolder: (payload: unknown) => this.record('workspace.removeFolder', payload, this.onWorkspaceRemoveFolder(payload)),
+    setPrimaryFolder: (payload: unknown) => this.record('workspace.setPrimaryFolder', payload, this.onWorkspaceSetPrimaryFolder(payload)),
     delete: (payload: unknown) => this.record('workspace.delete', payload, this.onWorkspaceDelete(payload)),
     insertBefore: (payload: unknown) =>
       this.record('workspace.insertBefore', payload, this.onWorkspaceInsertBefore(payload)),

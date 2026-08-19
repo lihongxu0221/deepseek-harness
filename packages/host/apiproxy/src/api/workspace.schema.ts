@@ -79,6 +79,17 @@ export const workspaceRemoveFolderValueSchema = z.object({
   workspace: workspaceViewSchema,
 }) satisfies z.ZodType<Wire<ResponseValue<'workspace.removeFolder'>>>
 
+/** workspace.setPrimaryFolder request payload. */
+export const workspaceSetPrimaryFolderRequestSchema = z.object({
+  workspaceId: workspaceIdSchema,
+  path: z.string(),
+}) satisfies z.ZodType<Wire<RequestPayload<'workspace.setPrimaryFolder'>>>
+
+/** workspace.setPrimaryFolder response value. */
+export const workspaceSetPrimaryFolderValueSchema = z.object({
+  workspace: workspaceViewSchema,
+}) satisfies z.ZodType<Wire<ResponseValue<'workspace.setPrimaryFolder'>>>
+
 /** workspace.delete request payload. */
 export const workspaceDeleteRequestSchema = z.object({
   workspaceId: workspaceIdSchema,

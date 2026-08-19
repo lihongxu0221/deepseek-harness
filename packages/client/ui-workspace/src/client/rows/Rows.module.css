@@ -275,24 +275,86 @@
 }
 
 /* Hover-card body (figma 169:16903): dark surface, fixed colors both themes. */
+.hoverCard {
+  width: min(320px, calc(100vw - 24px));
+}
+
 .hoverContent {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
-.hoverTitle {
-  font-size: 14px;
-  line-height: 20px;
+.hoverHead,
+.hoverMeta,
+.hoverPath,
+.hoverEdit {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
   color: #FFFFFF;
-  overflow-wrap: break-word;
 }
 
-.hoverPath {
+.hoverTitle {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  line-height: 20px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hoverPin,
+.hoverEdit {
+  flex: none;
+  border: none;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+  color: #FFFFFF;
+}
+
+.hoverPin {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+}
+
+.hoverPin:hover,
+.hoverEdit:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.hoverMeta,
+.hoverPath,
+.hoverEdit {
   font-size: 12px;
   line-height: 16px;
   color: #CFD3D6;
-  word-break: break-all;
+}
+
+.hoverPath span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hoverRule {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.hoverEdit {
+  width: 100%;
+  min-height: 24px;
+  border-radius: 6px;
+  text-align: left;
 }
 
 .hoverTime {

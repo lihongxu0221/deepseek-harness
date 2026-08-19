@@ -33,19 +33,6 @@ function dragProps(overrides: Partial<RowDragProps> = {}): RowDragProps {
   }
 }
 
-/** Install the async browser clipboard and restore its prior host shape. */
-function installClipboard(writeText: (text: string) => Promise<void>): () => void {
-  const prior = Object.getOwnPropertyDescriptor(navigator, 'clipboard')
-  Object.defineProperty(navigator, 'clipboard', {
-    configurable: true,
-    value: { writeText },
-  })
-  return () => {
-    if (prior === undefined) Reflect.deleteProperty(navigator, 'clipboard')
-    else Object.defineProperty(navigator, 'clipboard', prior)
-  }
-}
-
 const dataTransfer = { effectAllowed: '', dropEffect: '', setData: vi.fn() }
 
 /** jsdom lacks DragEvent — the fireEvent fallback drops clientY, so pin it on the built event. */
@@ -263,7 +250,10 @@ describe('workspace browser rows', () => {
     }
     render(<ProjectRowItem
       group={group} onToggle={onToggle} onCreate={vi.fn()}
-      actions={{ edit: onEdit, rename: onRename, delete: onDelete, addFolder: onAddFolder, removeFolder: onRemoveFolder }} t={t}
+      actions={{
+        edit: onEdit, rename: onRename, delete: onDelete,
+        addFolder: onAddFolder, removeFolder: onRemoveFolder, pin: vi.fn(),
+      }} t={t}
     />)
     fireEvent.click(screen.getByRole('button', { name: '工作区“Project”的操作' }))
     expect(onToggle).not.toHaveBeenCalled()
@@ -291,29 +281,31 @@ describe('workspace browser rows', () => {
     expect(screen.queryByRole('menu')).toBeNull()
   })
 
-  it('workspace hover card shows its details and copies the full directory path', async () => {
+  it('workspace hover card shows pin, session count, paths, and Edit project', async () => {
     vi.useFakeTimers()
-    const writeText = vi.fn(async () => {})
-    const restoreClipboard = installClipboard(writeText)
     try {
+      const onPin = vi.fn()
+      const onEdit = vi.fn()
       const group: GroupNode = {
         key: 'project', workspaceId: wid('project'), cwd: '/projects/project',
         folders: ['/projects/extra'], createdAt: 0, label: 'Project',
-        sessionCount: 0, expanded: false, containsCurrent: false, sessions: [],
+        sessionCount: 2, expanded: false, containsCurrent: false, sessions: [],
       }
-      render(<ProjectRowItem group={group} onToggle={vi.fn()} onCreate={vi.fn()} t={t} />)
+      render(<ProjectRowItem
+        group={group} onToggle={vi.fn()} onCreate={vi.fn()}
+        actions={{ edit: onEdit, rename: vi.fn(), delete: vi.fn(), pin: onPin }} t={t}
+      />)
       fireEvent.pointerEnter(screen.getByRole('treeitem').parentElement as HTMLElement)
       act(() => { vi.advanceTimersByTime(500) })
-      // Card body: full title + cwd + extra folders + absolute creation time.
       expect(screen.getAllByText('Project')).toHaveLength(2)
+      expect(screen.getByText('2 个任务')).toBeTruthy()
       expect(screen.getByText('/projects/project')).toBeTruthy()
       expect(screen.getByText('/projects/extra')).toBeTruthy()
-      expect(screen.getByText(/^创建于 \d+年\d+月\d+日 /)).toBeTruthy()
-      await act(async () => { fireEvent.click(screen.getByRole('button', { name: '复制: /projects/project' })) })
-      expect(writeText).toHaveBeenCalledWith('/projects/project')
-      expect(screen.getByRole('status').textContent).toBe('已复制')
+      fireEvent.click(screen.getByRole('button', { name: '置顶' }))
+      expect(onPin).toHaveBeenCalledOnce()
+      fireEvent.click(screen.getByRole('button', { name: '编辑项目' }))
+      expect(onEdit).toHaveBeenCalledOnce()
     } finally {
-      restoreClipboard()
       vi.useRealTimers()
     }
   })

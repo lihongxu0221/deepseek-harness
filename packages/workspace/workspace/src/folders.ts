@@ -7,7 +7,7 @@
 
 /** The durable fields that identify a workspace's directories. */
 export interface WorkspaceFolderRecord {
-  /** Primary directory (new-session cwd). */
+  /** Primary directory (new-session cwd; first owned folder at create). */
   readonly path: string
   /** Extra directories besides {@link path}. */
   readonly folders?: readonly string[]

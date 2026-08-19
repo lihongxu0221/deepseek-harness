@@ -175,6 +175,19 @@ export class WorkspaceManager {
   }
 
   /**
+   * Promote an extra folder to primary, then publish the returned snapshot
+   * without waiting for the changed frame.
+   * @param workspaceId - target workspace.
+   * @param path - extra folder to promote.
+   * @returns the wire result.
+   */
+  async setPrimaryFolder(workspaceId: WorkspaceId, path: string): Promise<RpcResult<{ workspace: WorkspaceView }>> {
+    const { result } = await this.api.workspace.setPrimaryFolder({ workspaceId, path })
+    if (result.ok) this.upsert(result.value.workspace)
+    return result
+  }
+
+  /**
    * Delete a Workspace registration and remove its local projection from the
    * unary response without waiting for the Host frame.
    * @param workspaceId - target workspace.

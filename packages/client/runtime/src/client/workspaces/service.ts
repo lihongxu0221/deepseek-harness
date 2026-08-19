@@ -286,6 +286,18 @@ export class WorkspaceRuntime implements IWorkspaces {
   }
 
   /**
+   * Make an owned extra folder the primary directory (new-session cwd).
+   * @param workspaceId - target workspace.
+   * @param path - extra folder to promote.
+   * @returns the updated Workspace view.
+   */
+  async setPrimaryFolder(workspaceId: WorkspaceId, path: string): Promise<WorkspaceView> {
+    const result = await this.manager.setPrimaryFolder(workspaceId, path)
+    if (!result.ok) throw new Error(`workspace set primary folder failed: ${result.error.code}: ${result.error.message}`)
+    return result.value.workspace
+  }
+
+  /**
    * Delete one Workspace registration. Sessions, session logs, and the
    * directory remain Host-owned outside this operation.
    * @param workspaceId - target workspace.

@@ -24,6 +24,7 @@ async function bench() {
   const rename = vi.fn(async () => ({}))
   const addFolder = vi.fn(async () => ({}))
   const removeFolder = vi.fn(async () => ({}))
+  const setPrimaryFolder = vi.fn(async () => ({}))
   const insertSessionBefore = vi.fn(async () => ({}))
   const open = vi.fn()
   const clear = vi.fn()
@@ -35,14 +36,14 @@ async function bench() {
   const binding = vi.fn(() => ({ session: { rename: renameSession } }))
   const fork = vi.fn(async () => 'forked' as never)
   ctx.provide('workspaces', {
-    create, startSession, rename, addFolder, removeFolder, insertSessionBefore,
+    create, startSession, rename, addFolder, removeFolder, setPrimaryFolder, insertSessionBefore,
   } as never)
   ctx.provide('sessions', { open, clear, search, searchResultLimit: 20, binding, fork } as never)
   const locale = new LocaleRuntime(ctx)
   ctx.provide('locale', locale)
   return {
     ctx, slots: ctx.get('slots') as SlotRegistry, locale, create, startSession, rename,
-    addFolder, removeFolder, insertSessionBefore, open, clear, search, renameSession, binding, fork,
+    addFolder, removeFolder, setPrimaryFolder, insertSessionBefore, open, clear, search, renameSession, binding, fork,
   }
 }
 
@@ -115,6 +116,8 @@ describe('ui-workspace apply', () => {
     expect(b.addFolder).toHaveBeenCalledWith('ws', '/tmp/extra')
     await browser.removeFolder('ws' as never, '/tmp/extra')
     expect(b.removeFolder).toHaveBeenCalledWith('ws', '/tmp/extra')
+    await browser.setPrimaryFolder('ws' as never, '/tmp/extra')
+    expect(b.setPrimaryFolder).toHaveBeenCalledWith('ws', '/tmp/extra')
 
     const picker = (b.slots.entries('conversation.hero.workspace')[0]!.inject as () => WorkspacePickerInjected)()
     await picker.createWorkspace({ path: '/tmp/project' })

@@ -48,6 +48,7 @@ export interface RpcMethodMap {
   'workspace.rename': WorkspaceApi['rename']
   'workspace.addFolder': WorkspaceApi['addFolder']
   'workspace.removeFolder': WorkspaceApi['removeFolder']
+  'workspace.setPrimaryFolder': WorkspaceApi['setPrimaryFolder']
   'workspace.delete': WorkspaceApi['delete']
   'workspace.insertBefore': WorkspaceApi['insertBefore']
   'workspace.insertSessionBefore': WorkspaceApi['insertSessionBefore']

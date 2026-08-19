@@ -902,6 +902,23 @@ describe('workspace extra folders', () => {
     await workspace.removeFolder(extra)
     expect(workspace.folders).toEqual([])
   })
+
+  it('promotes an extra folder to primary and demotes the previous primary', async () => {
+    const primary = await makeDir('promote-primary')
+    const extra = await makeDir('promote-extra')
+    const { registry } = await harness()
+    const workspace = await registry.create(primary)
+    await workspace.addFolder(extra)
+    await workspace.setPrimaryFolder(extra)
+    expect(workspace.path).toBe(extra)
+    expect(workspace.folders).toEqual([primary])
+    await workspace.setPrimaryFolder(extra)
+    expect(workspace.path).toBe(extra)
+    expect(workspace.folders).toEqual([primary])
+    await expect(workspace.setPrimaryFolder(await makeDir('promote-foreign')))
+      .rejects.toMatchObject({ name: 'WorkspaceFolderUnknownError' })
+    await expect(workspace.removeFolder(extra)).rejects.toMatchObject({ name: 'WorkspaceFolderPrimaryError' })
+  })
 })
 
 describe('registry-global session archive', () => {

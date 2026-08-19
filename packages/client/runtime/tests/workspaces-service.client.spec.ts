@@ -379,6 +379,12 @@ describe('WorkspaceRuntime', () => {
       code: 'workspace-folder-primary', message: 'primary', details: { path: '/w/alpha' },
     }))
     await expect(workspaces.removeFolder(wid('alpha'), '/w/alpha')).rejects.toThrow(/workspace-folder-primary: primary/)
+    await expect(workspaces.setPrimaryFolder(wid('alpha'), '/w/extra')).resolves.toMatchObject({ path: '/w/extra' })
+    expect(api.callsOf('workspace.setPrimaryFolder')).toEqual([{ workspaceId: 'alpha', path: '/w/extra' }])
+    api.onWorkspaceSetPrimaryFolder = () => Promise.resolve(err({
+      code: 'workspace-folder-unknown', message: 'unknown', details: { path: '/w/missing' },
+    }))
+    await expect(workspaces.setPrimaryFolder(wid('alpha'), '/w/missing')).rejects.toThrow(/workspace-folder-unknown: unknown/)
   })
 
   it('deletes a Workspace or preserves it when the Host rejects deletion', async () => {

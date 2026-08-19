@@ -245,6 +245,8 @@ type SessionTreeProps = Pick<
   onAddFolderRequest: (workspaceId: WorkspaceId) => void
   /** Drop one extra folder from this Workspace. */
   onRemoveFolderRequest: (workspaceId: WorkspaceId, path: string) => void
+  /** Pin this Workspace to the front of the durable display order. */
+  onPinRequest: (workspaceId: WorkspaceId) => void
   /** Open the browser-owned session rename dialog. */
   onSessionRename: (sessionId: SessionNode['id'], currentTitle: string) => void
   /** Archive a session (row menu action; the row disappears on the state echo). */
@@ -257,7 +259,7 @@ type SessionTreeProps = Pick<
 function SessionTree({
   useSessions, startSession, open, forkSession, workspaces, archivedSessionIds,
   onEditRequest, onRenameRequest, onDeleteRequest, onAddFolderRequest, onRemoveFolderRequest,
-  onSessionRename, onSessionArchive, useDirectoryFlow,
+  onPinRequest, onSessionRename, onSessionArchive, useDirectoryFlow,
   insertWorkspaceBefore, insertSessionBefore, orderBy,
   groupExpansion, setGroupExpanded,
   sessionOrderByAccount, sessionUpdatedAtByAccount, syncSessionOrderAccount, setSessionOrder, t,
@@ -500,6 +502,10 @@ function SessionTree({
                     removeFolder: (path) => {
                     /* v8 ignore next -- narrowing guard: the actions object exists only for real-workspace groups. */
                       if (group.workspaceId !== undefined) onRemoveFolderRequest(group.workspaceId, path)
+                    },
+                    pin: () => {
+                    /* v8 ignore next -- narrowing guard: the actions object exists only for real-workspace groups. */
+                      if (group.workspaceId !== undefined) onPinRequest(group.workspaceId)
                     },
                   }}
               />
@@ -783,6 +789,7 @@ export function WorkspaceBrowser({
   createWorkspace,
   addFolder,
   removeFolder,
+  setPrimaryFolder,
   searchSessions,
   searchResultLimit,
   useDirectoryFlow,
@@ -936,6 +943,7 @@ export function WorkspaceBrowser({
     originalFolders: readonly string[]
   } | null>(null)
   const [editTitle, setEditTitle] = useState('')
+  const [editPath, setEditPath] = useState('')
   const [editFolders, setEditFolders] = useState<string[]>([])
   const [editSaving, setEditSaving] = useState(false)
   const [editError, setEditError] = useState<string | null>(null)
@@ -955,12 +963,13 @@ export function WorkspaceBrowser({
   const confirmEdit = () => {
     if (editTarget === null || editSaving || editorPickingFolder || editTrimmed === '' || editDuplicate) return
     const workspaceId = editTarget.workspaceId
-    const original = new Set(editTarget.originalFolders)
-    const next = new Set(editFolders)
-    const toAdd = editFolders.filter(folder => !original.has(folder))
-    const toRemove = editTarget.originalFolders.filter(folder => !next.has(folder))
+    const originalOwned = [editTarget.path, ...editTarget.originalFolders]
+    const nextOwned = [editPath, ...editFolders]
+    const toAdd = nextOwned.filter(folder => !originalOwned.includes(folder))
+    const toRemove = originalOwned.filter(folder => !nextOwned.includes(folder))
     const renameNeeded = editTrimmed !== editTarget.currentTitle
-    if (!renameNeeded && toAdd.length === 0 && toRemove.length === 0) {
+    const primaryNeeded = editPath !== editTarget.path
+    if (!renameNeeded && !primaryNeeded && toAdd.length === 0 && toRemove.length === 0) {
       setEditTarget(null)
       addFolderTargetRef.current = null
       setAddFolderTarget(null)
@@ -972,6 +981,7 @@ export function WorkspaceBrowser({
       try {
         if (renameNeeded) await renameWorkspace(workspaceId, editTrimmed)
         for (const folder of toAdd) await addFolder(workspaceId, folder)
+        if (primaryNeeded) await setPrimaryFolder(workspaceId, editPath)
         for (const folder of toRemove) await removeFolder(workspaceId, folder)
         setEditSaving(false)
         setEditTarget(null)
@@ -1169,7 +1179,7 @@ export function WorkspaceBrowser({
             if (target !== null) {
               if (editTarget !== null && !addFolderImmediateRef.current) {
                 setEditFolders((folders) => {
-                  if (path === editTarget.path || folders.includes(path)) return folders
+                  if (path === editPath || folders.includes(path)) return folders
                   return [...folders, path]
                 })
                 const existing = workspaces.find(workspace => workspace.workspaceId === target)
@@ -1286,6 +1296,7 @@ export function WorkspaceBrowser({
                     originalFolders: workspace.folders ?? [],
                   })
                   setEditTitle(workspace.title)
+                  setEditPath(workspace.path)
                   setEditFolders([...(workspace.folders ?? [])])
                   setEditError(null)
                 }}
@@ -1306,6 +1317,9 @@ export function WorkspaceBrowser({
                 }}
                 onRemoveFolderRequest={(workspaceId, path) => {
                   void removeFolder(workspaceId, path)
+                }}
+                onPinRequest={(workspaceId) => {
+                  void insertWorkspaceBefore(workspaceId, workspaces[0]?.workspaceId)
                 }}
                 useDirectoryFlow={useDirectoryFlow}
               />
@@ -1350,7 +1364,7 @@ export function WorkspaceBrowser({
       <WorkspaceEditDialog
         open={editTarget !== null}
         title={editTitle}
-        path={editTarget?.path ?? ''}
+        path={editPath}
         folders={editFolders}
         busy={editSaving || addFolderTarget !== null}
         error={editError}
@@ -1377,6 +1391,14 @@ export function WorkspaceBrowser({
         }}
         onRemoveFolder={(folder) => {
           setEditFolders(folders => folders.filter(item => item !== folder))
+          setEditError(null)
+        }}
+        onSetPrimary={(folder) => {
+          setEditFolders((folders) => {
+            const without = folders.filter(item => item !== folder)
+            return editPath === '' ? without : [editPath, ...without]
+          })
+          setEditPath(folder)
           setEditError(null)
         }}
         t={t}

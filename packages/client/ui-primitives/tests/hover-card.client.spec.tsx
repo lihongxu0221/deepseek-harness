@@ -59,6 +59,13 @@ describe('HoverCard', () => {
     expect(card.style.top).toBe('40px')
   })
 
+  it('appends className to the portaled card', () => {
+    const { wrapper } = mount({ className: 'wide-card' })
+    fireEvent.pointerEnter(wrapper)
+    act(() => { vi.advanceTimersByTime(500) })
+    expect((screen.getByText('card body').parentElement as HTMLElement).className).toMatch(/wide-card/)
+  })
+
   it('honors a custom openDelayMs', () => {
     const { wrapper } = mount({ openDelayMs: 50 })
     fireEvent.pointerEnter(wrapper)

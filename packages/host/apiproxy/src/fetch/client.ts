@@ -37,6 +37,7 @@ import {
   workspaceCreateValueSchema,
   workspaceDeleteValueSchema,
   workspaceRemoveFolderValueSchema,
+  workspaceSetPrimaryFolderValueSchema,
   workspaceInsertBeforeValueSchema,
   workspaceInsertSessionBeforeValueSchema,
   workspaceListValueSchema,
@@ -120,6 +121,7 @@ export interface IApiClient {
     rename(payload: RequestPayload<'workspace.rename'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'workspace.rename'>>>
     addFolder(payload: RequestPayload<'workspace.addFolder'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'workspace.addFolder'>>>
     removeFolder(payload: RequestPayload<'workspace.removeFolder'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'workspace.removeFolder'>>>
+    setPrimaryFolder(payload: RequestPayload<'workspace.setPrimaryFolder'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'workspace.setPrimaryFolder'>>>
     delete(payload: RequestPayload<'workspace.delete'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'workspace.delete'>>>
     insertBefore(payload: RequestPayload<'workspace.insertBefore'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'workspace.insertBefore'>>>
     insertSessionBefore(payload: RequestPayload<'workspace.insertSessionBefore'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'workspace.insertSessionBefore'>>>
@@ -200,6 +202,7 @@ const UNARY_VALUE_SCHEMAS: { [K in keyof RpcMethodMap]: z.ZodType<Wire<ResponseV
   'workspace.rename': workspaceRenameValueSchema,
   'workspace.addFolder': workspaceAddFolderValueSchema,
   'workspace.removeFolder': workspaceRemoveFolderValueSchema,
+  'workspace.setPrimaryFolder': workspaceSetPrimaryFolderValueSchema,
   'workspace.delete': workspaceDeleteValueSchema,
   'workspace.insertBefore': workspaceInsertBeforeValueSchema,
   'workspace.insertSessionBefore': workspaceInsertSessionBeforeValueSchema,
@@ -455,6 +458,7 @@ export abstract class AbstractApiClient implements IApiClient {
     rename: (payload, signal) => this.callUnary('workspace.rename', payload, signal),
     addFolder: (payload, signal) => this.callUnary('workspace.addFolder', payload, signal),
     removeFolder: (payload, signal) => this.callUnary('workspace.removeFolder', payload, signal),
+    setPrimaryFolder: (payload, signal) => this.callUnary('workspace.setPrimaryFolder', payload, signal),
     delete: (payload, signal) => this.callUnary('workspace.delete', payload, signal),
     insertBefore: (payload, signal) => this.callUnary('workspace.insertBefore', payload, signal),
     insertSessionBefore: (payload, signal) => this.callUnary('workspace.insertSessionBefore', payload, signal),

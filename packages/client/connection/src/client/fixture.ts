@@ -2664,6 +2664,34 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
         }
         return ok(request, { workspace: { ...workspace } })
       },
+      setPrimaryFolder: (request) => {
+        const { workspaceId, path } = request.payload
+        const workspace = workspaces.find(w => w.workspaceId === workspaceId)
+        if (workspace === undefined) {
+          return err(request, {
+            code: 'workspace-not-found',
+            message: `no workspace ${workspaceId}`,
+            details: { workspaceId },
+          })
+        }
+        if (path === workspace.path) {
+          return ok(request, { workspace: { ...workspace } })
+        }
+        const folders = workspace.folders ?? []
+        if (!folders.includes(path)) {
+          return err(request, {
+            code: 'workspace-folder-unknown',
+            message: `cannot set primary folder '${path}': it is not owned by this workspace`,
+            details: { path },
+          })
+        }
+        const previous = workspace.path
+        workspace.path = path
+        workspace.folders = [previous, ...folders.filter(folder => folder !== path)]
+        workspace.updatedAt = new Date().toISOString()
+        emitHost({ type: 'host/workspace-changed', workspace: { ...workspace } })
+        return ok(request, { workspace: { ...workspace } })
+      },
       delete: (request) => {
         const { workspaceId } = request.payload
         const index = workspaces.findIndex(workspace => workspace.workspaceId === workspaceId)

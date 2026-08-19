@@ -15,8 +15,9 @@ const workspaceId = z.string().transform(value => value as WorkspaceId)
 
 /**
  * Durable shape of one workspace record. `path` is the `fs.realpath` canon
- * stamped at create (new-session cwd); `folders` are extra canonical
- * directories the workspace also owns. Records written before `folders`
+ * of the primary directory (new-session cwd; create stamps the first folder).
+ * `folders` are extra canonical directories the workspace also owns.
+ * `setPrimaryFolder` swaps `path` with one extra. Records written before `folders`
  * existed parse as an empty extra list. `sessionIds` is the ordered
  * ownership account (array order is display order); timestamps are ISO-8601
  * strings.

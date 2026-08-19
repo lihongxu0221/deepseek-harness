@@ -356,6 +356,30 @@ describe('workspace.addFolder / removeFolder', () => {
   })
 })
 
+describe('workspace.setPrimaryFolder', () => {
+  it('promotes an extra folder and maps an unknown extra to workspace-folder-unknown', async () => {
+    const { api, root } = await harness()
+    const primary = stageDir(root, 'promote-primary')
+    const extra = stageDir(root, 'promote-extra')
+    const workspace = expectOk(await api.workspace.create(request({ path: primary }))).workspace
+    expectOk(await api.workspace.addFolder(request({ workspaceId: workspace.workspaceId, path: extra })))
+    const promoted = expectOk(await api.workspace.setPrimaryFolder(request({
+      workspaceId: workspace.workspaceId,
+      path: extra,
+    })))
+    expect(promoted.workspace.path).toBe(extra)
+    expect(promoted.workspace.folders).toEqual([primary])
+    const unknown = await api.workspace.setPrimaryFolder(request({
+      workspaceId: workspace.workspaceId,
+      path: stageDir(root, 'promote-foreign'),
+    }))
+    expect(unknown.result).toMatchObject({
+      ok: false,
+      error: { code: 'workspace-folder-unknown' },
+    })
+  })
+})
+
 describe('workspace.insertBefore', () => {
   it('commits the complete order, streams one order frame, and maps unknown ids', async () => {
     const { api, ctx, root } = await harness()

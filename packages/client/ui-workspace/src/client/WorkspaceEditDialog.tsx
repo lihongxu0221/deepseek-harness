@@ -1,7 +1,7 @@
 /**
- * Browser-owned project editor: display title, extra source folders, and
- * removal of the Workspace registration. Folder add/remove stay local until
- * Save; the primary directory is display-only.
+ * Browser-owned project editor: display title, source folders, and
+ * removal of the Workspace registration. Folder add/remove and primary
+ * stay local until Save.
  */
 import {
   Button, IconCloseOutline16, IconFolderClose16, IconProjectAddOutline16, Input, Modal,
@@ -23,7 +23,7 @@ export function folderLabel(path: string): string {
  * Render the Edit project dialog.
  * @param props.open - whether the dialog is showing.
  * @param props.title - current display-name draft.
- * @param props.path - immutable primary directory.
+ * @param props.path - current primary directory in the draft.
  * @param props.folders - extra directories in the draft (not including path).
  * @param props.busy - Save / directory pick in flight; inputs disable.
  * @param props.error - host or conflict message under the form.
@@ -31,16 +31,17 @@ export function folderLabel(path: string): string {
  * @param props.flowAvailable - directory-flow hole occupied; hides Add folder otherwise.
  * @param props.onTitleChange - display-name draft changed.
  * @param props.onClose - Cancel, Escape, or the header close control.
- * @param props.onSave - commit title and folder diffs.
+ * @param props.onSave - commit title, primary, and folder diffs.
  * @param props.onRemoveProject - leave the editor and confirm registration deletion.
  * @param props.onAddFolder - open the directory flow for one extra folder.
  * @param props.onRemoveFolder - drop one extra folder from the draft.
+ * @param props.onSetPrimary - promote an extra folder in the draft.
  * @param props.t - workspace locale seat.
  * @returns the modal, or null while closed.
  */
 export function WorkspaceEditDialog({
   open, title, path, folders, busy, error, duplicateName, flowAvailable,
-  onTitleChange, onClose, onSave, onRemoveProject, onAddFolder, onRemoveFolder, t,
+  onTitleChange, onClose, onSave, onRemoveProject, onAddFolder, onRemoveFolder, onSetPrimary, t,
 }: {
   open: boolean
   title: string
@@ -56,6 +57,7 @@ export function WorkspaceEditDialog({
   onRemoveProject: () => void
   onAddFolder: () => void
   onRemoveFolder: (path: string) => void
+  onSetPrimary: (path: string) => void
   t: EditTranslate
 }) {
   const trimmed = title.trim()
@@ -66,7 +68,7 @@ export function WorkspaceEditDialog({
       onClose={onClose}
       closeLabel={t('close')}
       title={t('edit.project.title')}
-      className={css.card}
+      {...(css.card === undefined ? {} : { className: css.card })}
       footer={(
         <div className={css.footer}>
           <Button
@@ -86,7 +88,7 @@ export function WorkspaceEditDialog({
     >
       <Input
         icon={<IconFolderClose16 />}
-        className={css.name}
+        {...(css.name === undefined ? {} : { className: css.name })}
         value={title}
         aria-label={t('field.projectName')}
         autoFocus
@@ -106,11 +108,27 @@ export function WorkspaceEditDialog({
           <IconFolderClose16 />
           <span className={css.folderName} title={path}>{folderLabel(path)}</span>
           <span className={css.primary}>{t('edit.project.primary')}</span>
+          <button
+            type="button"
+            className={css.removeFolder}
+            aria-label={t('edit.project.removeFolder.aria', { name: folderLabel(path) })}
+            disabled
+          >
+            <IconCloseOutline16 size={14} />
+          </button>
         </li>
         {folders.map(folder => (
           <li className={css.folderRow} key={folder}>
             <IconFolderClose16 />
             <span className={css.folderName} title={folder}>{folderLabel(folder)}</span>
+            <button
+              type="button"
+              className={css.setPrimary}
+              disabled={busy}
+              onClick={() => { onSetPrimary(folder) }}
+            >
+              {t('edit.project.setPrimary')}
+            </button>
             <button
               type="button"
               className={css.removeFolder}

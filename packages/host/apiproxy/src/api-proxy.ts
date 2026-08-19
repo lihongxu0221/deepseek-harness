@@ -25,7 +25,7 @@ import { isUserInvocable } from '@deepseek-ai/dsh-skill'
 import type { Workspace, WorkspaceRecord } from '@deepseek-ai/dsh-workspace'
 import {
   workspaceDomainState, workspaceRecord, WorkspaceId as brandWorkspaceId,
-  WorkspaceFolderConflictError, WorkspaceFolderPrimaryError,
+  WorkspaceFolderConflictError, WorkspaceFolderPrimaryError, WorkspaceFolderUnknownError,
   WorkspaceMoveInvalidError, WorkspaceOrderInvalidError, WorkspaceUnknownSessionError,
 } from '@deepseek-ai/dsh-workspace'
 // Type-only: brings the `ctx.tools` Context merge into this program (viewFor reads presenters).
@@ -2832,6 +2832,25 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           if (error instanceof WorkspaceFolderPrimaryError) {
             return err(request, {
               code: 'workspace-folder-primary',
+              message: error.message,
+              details: { path: error.path },
+            })
+          }
+          throw error
+        }
+        return ok(request, { workspace: workspaceView(workspace) })
+      },
+
+      async setPrimaryFolder(request) {
+        const { workspaceId, path } = request.payload
+        const workspace = ctx.workspaceRegistry.get(brandWorkspaceId(workspaceId))
+        if (workspace === undefined) return workspaceNotFound(request, workspaceId)
+        try {
+          await workspace.setPrimaryFolder(path)
+        } catch (error: unknown) {
+          if (error instanceof WorkspaceFolderUnknownError) {
+            return err(request, {
+              code: 'workspace-folder-unknown',
               message: error.message,
               details: { path: error.path },
             })

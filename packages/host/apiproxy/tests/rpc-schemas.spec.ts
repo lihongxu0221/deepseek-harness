@@ -69,6 +69,7 @@ describe('rpcErrorSchema', () => {
     expect(rpcErrorSchema.parse({ code: 'workspace-invalid-path', message: 'm', details: { path: '/x' } }).code).toBe('workspace-invalid-path')
     expect(rpcErrorSchema.parse({ code: 'workspace-folder-conflict', message: 'm', details: { path: '/x', workspaceId: 'w' } }).code).toBe('workspace-folder-conflict')
     expect(rpcErrorSchema.parse({ code: 'workspace-folder-primary', message: 'm', details: { path: '/x' } }).code).toBe('workspace-folder-primary')
+    expect(rpcErrorSchema.parse({ code: 'workspace-folder-unknown', message: 'm', details: { path: '/x' } }).code).toBe('workspace-folder-unknown')
     expect(rpcErrorSchema.parse({ code: 'workspace-name-conflict', message: 'm', details: { name: 'x' } }).code).toBe('workspace-name-conflict')
     expect(rpcErrorSchema.parse({ code: 'workspace-move-invalid', message: 'm', details: { workspaceId: 'w', sessionId: 's' } }).code).toBe('workspace-move-invalid')
     expect(rpcErrorSchema.parse({

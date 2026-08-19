@@ -97,6 +97,15 @@ export interface WorkspaceApi {
   Promise<RpcResponse<{ workspace: WorkspaceView }>>
 
   /**
+   * Makes an owned extra folder the primary directory (new-session cwd).
+   * The previous primary becomes an extra folder. Naming the current primary
+   * is a no-op success. An unknown extra folder fails with
+   * `workspace-folder-unknown`. An unknown id fails with `workspace-not-found`.
+   */
+  setPrimaryFolder(request: RpcRequest<{ workspaceId: WorkspaceId; path: string }>):
+  Promise<RpcResponse<{ workspace: WorkspaceView }>>
+
+  /**
    * Moves one Workspace within the registry display order,
    * DOM-insertBefore-like. An omitted anchor appends to the end.
    */
