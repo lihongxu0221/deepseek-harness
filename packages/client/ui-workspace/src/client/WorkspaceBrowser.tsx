@@ -13,7 +13,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import clsx from 'clsx'
 import {
   Button, IconCloseFill14, IconPersonalizationOutline16,
-  IconProjectAddOutline16, IconSearchOutline16, Menu, Modal, Tooltip,
+  IconProjectAddOutline16, IconSearchOutline16, IconTriangleRightFill14,
+  Menu, Modal, Tooltip,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type {
   SessionId, SessionListState, SessionSearchResultItem, WorkspaceId, WorkspaceView,
@@ -218,9 +219,20 @@ type SessionTreeProps = Pick<
   WorkspaceBrowserProps,
   'useSessions' | 'startSession' | 'open' | 'forkSession'
   | 'insertWorkspaceBefore' | 'insertSessionBefore' | 't'
-  | 'useDirectoryFlow'
 > & {
   workspaces: readonly WorkspaceView[]
+  /** Workspace ids kept at the front of the grouped list, in pin order. */
+  pinnedWorkspaceIds: readonly string[]
+  /** Persist a Workspace in the browser-local pin prefix. */
+  pinWorkspace: (workspaceId: string) => void
+  /** Drop a Workspace from the browser-local pin prefix. */
+  unpinWorkspace: (workspaceId: string) => void
+  /** Whether the Workspaces section is expanded. */
+  workspacesOpen: boolean
+  /** Whether the Recents section is expanded. */
+  recentsOpen: boolean
+  /** Persist the Recents section open state. */
+  setRecentsOpen: (open: boolean) => void
   /** Explicit persisted zero-or-five-session state by Workspace group. */
   groupExpansion: Readonly<Record<string, boolean>>
   /** Persist one Workspace group's zero-or-five-session state. */
@@ -241,12 +253,8 @@ type SessionTreeProps = Pick<
   onRenameRequest: (workspaceId: WorkspaceId, currentTitle: string) => void
   /** Open the browser-owned delete-confirmation dialog for a real Workspace group. */
   onDeleteRequest: (workspaceId: WorkspaceId, currentTitle: string) => void
-  /** Start the directory flow to add an extra folder to this Workspace. */
-  onAddFolderRequest: (workspaceId: WorkspaceId) => void
   /** Drop one extra folder from this Workspace. */
   onRemoveFolderRequest: (workspaceId: WorkspaceId, path: string) => void
-  /** Pin this Workspace to the front of the durable display order. */
-  onPinRequest: (workspaceId: WorkspaceId) => void
   /** Open the browser-owned session rename dialog. */
   onSessionRename: (sessionId: SessionNode['id'], currentTitle: string) => void
   /** Archive a session (row menu action; the row disappears on the state echo). */
@@ -258,13 +266,14 @@ type SessionTreeProps = Pick<
 /** The scrolling session tree; unmounting drops the sessions subscription and expand-all state. */
 function SessionTree({
   useSessions, startSession, open, forkSession, workspaces, archivedSessionIds,
-  onEditRequest, onRenameRequest, onDeleteRequest, onAddFolderRequest, onRemoveFolderRequest,
-  onPinRequest, onSessionRename, onSessionArchive, useDirectoryFlow,
+  onEditRequest, onRenameRequest, onDeleteRequest, onRemoveFolderRequest,
+  onSessionRename, onSessionArchive,
   insertWorkspaceBefore, insertSessionBefore, orderBy,
+  pinnedWorkspaceIds, pinWorkspace, unpinWorkspace,
+  workspacesOpen, recentsOpen, setRecentsOpen,
   groupExpansion, setGroupExpanded,
   sessionOrderByAccount, sessionUpdatedAtByAccount, syncSessionOrderAccount, setSessionOrder, t,
 }: SessionTreeProps) {
-  const folderFlowAvailable = useDirectoryFlow(occupied => occupied)
   const list = useSessions(s => s)
   const current = list.current
   const [expandedSessionGroups, setExpandedSessionGroups] = useState<string[]>([])
@@ -333,12 +342,18 @@ function SessionTree({
   const groups = useMemo(
     () => deriveGroups(list, orderedWorkspaces, archivedSessionIds, {
       expandedGroups,
+      pinnedWorkspaceIds,
       ...(sessionOrderByAccount[UNGROUPED_KEY] === undefined
         ? {}
         : { ungroupedOrder: sessionOrderByAccount[UNGROUPED_KEY] }),
     }),
-    [list, orderedWorkspaces, archivedSessionIds, expandedGroups, sessionOrderByAccount],
+    [list, orderedWorkspaces, archivedSessionIds, expandedGroups, pinnedWorkspaceIds, sessionOrderByAccount],
   )
+  const recents = useMemo(
+    () => deriveFlat(list, archivedSessionIds),
+    [list, archivedSessionIds],
+  )
+  const [recentsExpanded, setRecentsExpanded] = useState(false)
   const now = Date.now()
   const commitSessionDrag = (activeDrag: DragState, over: NonNullable<DragState['over']>): void => {
     if (sessionDropCommitted.current) return
@@ -392,18 +407,25 @@ function SessionTree({
     && workspaceDrag?.over?.id === groups[0].workspaceId
     && workspaceDrag.over.half === 'before'
 
+  const visibleRecents = recentsExpanded
+    ? recents
+    : recents.slice(0, COLLAPSED_SESSION_LIMIT)
+
   return (
     <div className={clsx(css.treeBody, css.wide)}>
-      {workspaceDropAtListStart && <span className={css.listTopDropIndicator} aria-hidden="true" />}
+      {workspaceDropAtListStart && workspacesOpen && <span className={css.listTopDropIndicator} aria-hidden="true" />}
       <div
-        className={clsx(css.list, workspaceDropAtListStart && css.listTopDropActive)}
+        className={clsx(css.list, workspaceDropAtListStart && workspacesOpen && css.listTopDropActive)}
         role="tree"
         aria-label={t('section.sessions')}
       >
-        {groups.length === 0 && (
+        {workspacesOpen && groups.length === 0 && recents.length === 0 && (
           <div className={css.empty}>{t('empty.none')}</div>
         )}
-        {groups.map((group) => {
+        {workspacesOpen && groups.length === 0 && recents.length > 0 && (
+          <div className={css.empty}>{t('empty.workspaces')}</div>
+        )}
+        {workspacesOpen && groups.map((group) => {
           const workspaceId = group.workspaceId
           const workspaceMarker = workspaceId !== undefined && workspaceDrag?.over?.id === workspaceId
             ? workspaceDrag.over.half
@@ -491,21 +513,15 @@ function SessionTree({
                     /* v8 ignore next -- narrowing guard: the actions object exists only for real-workspace groups. */
                       if (group.workspaceId !== undefined) onDeleteRequest(group.workspaceId, group.label)
                     },
-                    ...folderFlowAvailable
-                      ? {
-                        addFolder: () => {
-                        /* v8 ignore next -- narrowing guard: the actions object exists only for real-workspace groups. */
-                          if (group.workspaceId !== undefined) onAddFolderRequest(group.workspaceId)
-                        },
-                      }
-                      : {},
                     removeFolder: (path) => {
                     /* v8 ignore next -- narrowing guard: the actions object exists only for real-workspace groups. */
                       if (group.workspaceId !== undefined) onRemoveFolderRequest(group.workspaceId, path)
                     },
                     pin: () => {
                     /* v8 ignore next -- narrowing guard: the actions object exists only for real-workspace groups. */
-                      if (group.workspaceId !== undefined) onPinRequest(group.workspaceId)
+                      if (group.workspaceId === undefined) return
+                      if (group.pinned) unpinWorkspace(group.workspaceId as string)
+                      else pinWorkspace(group.workspaceId as string)
                     },
                   }}
               />
@@ -568,6 +584,47 @@ function SessionTree({
             </div>
           )
         })}
+        <div className={css.treeSection}>
+          <button
+            type="button"
+            className={css.treeSectionHeader}
+            aria-expanded={recentsOpen}
+            aria-label={t('section.recents.toggle')}
+            onClick={() => { setRecentsOpen(!recentsOpen) }}
+          >
+            <IconTriangleRightFill14 className={clsx(css.treeSectionArrow, recentsOpen && css.treeSectionArrowOpen)} />
+            {t('section.recents')}
+          </button>
+          {recentsOpen && recents.length === 0 && (
+            <div className={css.empty}>{t('empty.recents')}</div>
+          )}
+          {recentsOpen && visibleRecents.map(node => (
+            <SessionNodeItem
+              key={node.id}
+              node={node}
+              currentId={current}
+              now={now}
+              onOpen={open}
+              onRename={onSessionRename}
+              onFork={forkSession}
+              onArchive={onSessionArchive}
+              flat
+              t={t}
+            />
+          ))}
+          {recentsOpen && recents.length > COLLAPSED_SESSION_LIMIT && (
+            <button
+              type="button"
+              className={css.sessionOverflowButton}
+              aria-expanded={recentsExpanded}
+              onClick={() => { setRecentsExpanded(open => !open) }}
+            >
+              {recentsExpanded
+                ? t('sessions.collapse')
+                : t('sessions.expand', { n: recents.length - COLLAPSED_SESSION_LIMIT })}
+            </button>
+          )}
+        </div>
       </div>
       <span className={css.fade} />
     </div>
@@ -807,6 +864,9 @@ export function WorkspaceBrowser({
   const groupExpansion = useStore(s => s.groupExpansion)
   const sessionOrderByAccount = useStore(s => s.sessionOrderByAccount)
   const sessionUpdatedAtByAccount = useStore(s => s.sessionUpdatedAtByAccount)
+  const pinnedWorkspaceIds = useStore(s => Array.isArray(s.pinnedWorkspaceIds) ? s.pinnedWorkspaceIds : [])
+  const workspacesOpen = useStore(s => s.workspacesOpen !== false)
+  const recentsOpen = useStore(s => s.recentsOpen !== false)
   useEffect(() => {
     if (workspacePhase !== 'ready') return
     actions.retainAccountKeys([
@@ -832,8 +892,6 @@ export function WorkspaceBrowser({
   // states; the menu anchors on this button).
   const [wsPickerOpen, setWsPickerOpen] = useState(false)
   const [addFolderTarget, setAddFolderTarget] = useState<WorkspaceId | null>(null)
-  /** Row-menu Add folder commits immediately; the project editor keeps the pick in its draft. */
-  const addFolderImmediateRef = useRef(false)
   // Survives `WorkspacePickFlow` calling `onClose` when it raises the directory
   // flow so adoption still targets the Workspace that requested the folder.
   const addFolderTargetRef = useRef<WorkspaceId | null>(null)
@@ -950,15 +1008,13 @@ export function WorkspaceBrowser({
   const editTrimmed = editTitle.trim()
   const editDuplicate = editTarget !== null && editTrimmed !== '' && editTrimmed !== editTarget.currentTitle
     && workspaces.some(workspace => workspace.title === editTrimmed)
-  const editorPickingFolder = addFolderTarget !== null && !addFolderImmediateRef.current
+  const editorPickingFolder = addFolderTarget !== null
   const closeEdit = () => {
     if (editSaving || editorPickingFolder) return
     setEditTarget(null)
     setEditError(null)
-    if (!addFolderImmediateRef.current) {
-      addFolderTargetRef.current = null
-      setAddFolderTarget(null)
-    }
+    addFolderTargetRef.current = null
+    setAddFolderTarget(null)
   }
   const confirmEdit = () => {
     if (editTarget === null || editSaving || editorPickingFolder || editTrimmed === '' || editDuplicate) return
@@ -1075,11 +1131,24 @@ export function WorkspaceBrowser({
   return (
     <div className={clsx(css.root, !wide && css.rail)}>
       <div className={css.sectionHeader}>
-        {wide && (
-          <span className={clsx(css.sectionLabel, css.wide, searchExpanded && css.sectionLabelHidden)}>
-            {groupBy === 'flat' ? t('section.sessions') : t('section.workspaces')}
-          </span>
-        )}
+        {wide && (groupBy === 'flat'
+          ? (
+            <span className={clsx(css.sectionLabel, css.wide, searchExpanded && css.sectionLabelHidden)}>
+              {t('section.sessions')}
+            </span>
+          )
+          : (
+            <button
+              type="button"
+              className={clsx(css.sectionLabel, css.sectionToggle, css.wide, searchExpanded && css.sectionLabelHidden)}
+              aria-expanded={workspacesOpen}
+              aria-label={t('section.workspaces.toggle')}
+              onClick={() => { actions.setWorkspacesOpen(!workspacesOpen) }}
+            >
+              <IconTriangleRightFill14 className={clsx(css.treeSectionArrow, workspacesOpen && css.treeSectionArrowOpen)} />
+              {t('section.workspaces')}
+            </button>
+          ))}
         {wide && (
           <div className={clsx(css.searchSlot, searchExpanded && css.searchSlotExpanded)}>
             <div
@@ -1177,7 +1246,7 @@ export function WorkspaceBrowser({
           createWorkspace={async ({ path }) => {
             const target = addFolderTargetRef.current
             if (target !== null) {
-              if (editTarget !== null && !addFolderImmediateRef.current) {
+              if (editTarget !== null) {
                 setEditFolders((folders) => {
                   if (path === editPath || folders.includes(path)) return folders
                   return [...folders, path]
@@ -1197,7 +1266,6 @@ export function WorkspaceBrowser({
             onCancel: () => {
               owner.onCancel()
               addFolderTargetRef.current = null
-              addFolderImmediateRef.current = false
               setAddFolderTarget(null)
             },
           })}
@@ -1206,7 +1274,6 @@ export function WorkspaceBrowser({
           onPick={(workspaceId) => {
             const addingFolder = addFolderTargetRef.current !== null
             addFolderTargetRef.current = null
-            addFolderImmediateRef.current = false
             setWsPickerOpen(false)
             setAddFolderTarget(null)
             if (!addingFolder && editTarget === null) startSession(workspaceId)
@@ -1273,6 +1340,12 @@ export function WorkspaceBrowser({
                 onSessionArchive={onSessionArchive}
                 forkSession={forkSession}
                 workspaces={workspaces}
+                pinnedWorkspaceIds={pinnedWorkspaceIds}
+                pinWorkspace={actions.pinWorkspace}
+                unpinWorkspace={actions.unpinWorkspace}
+                workspacesOpen={workspacesOpen}
+                recentsOpen={recentsOpen}
+                setRecentsOpen={actions.setRecentsOpen}
                 groupExpansion={groupExpansion}
                 setGroupExpanded={actions.setGroupExpanded}
                 sessionOrderByAccount={sessionOrderByAccount}
@@ -1309,19 +1382,9 @@ export function WorkspaceBrowser({
                   setDeleteTarget({ workspaceId, title })
                   setDeleteError(null)
                 }}
-                onAddFolderRequest={(workspaceId) => {
-                  addFolderImmediateRef.current = true
-                  addFolderTargetRef.current = workspaceId
-                  setWsPickerOpen(false)
-                  setAddFolderTarget(workspaceId)
-                }}
                 onRemoveFolderRequest={(workspaceId, path) => {
                   void removeFolder(workspaceId, path)
                 }}
-                onPinRequest={(workspaceId) => {
-                  void insertWorkspaceBefore(workspaceId, workspaces[0]?.workspaceId)
-                }}
-                useDirectoryFlow={useDirectoryFlow}
               />
             ))}
       </div>
@@ -1384,7 +1447,6 @@ export function WorkspaceBrowser({
         }}
         onAddFolder={() => {
           if (editTarget === null || editSaving) return
-          addFolderImmediateRef.current = false
           addFolderTargetRef.current = editTarget.workspaceId
           setWsPickerOpen(false)
           setAddFolderTarget(editTarget.workspaceId)

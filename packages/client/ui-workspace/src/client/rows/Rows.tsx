@@ -2,7 +2,7 @@
  * Workspace browser tree row components (figma Cell set 14:3080): pure presentational —
  * all data and callbacks arrive via props. Hover swaps (folder->chevron,
  * time->ellipsis, action buttons) are CSS-only. The workspace row menu keeps
- * Edit project, Add/Remove folder, Rename, and Delete; session Rename/Fork/Archive
+ * Edit project, Remove folder, Rename, and Delete; session Rename/Fork/Archive
  * stay on the row. Hover cards are suppressed while a menu is open.
  */
 import { useState } from 'react'
@@ -40,11 +40,12 @@ function hoverTimeLabel(updatedAt: number, now: number, t: RowTranslate): string
 }
 
 /** Hover-card body: title + pin, session count, owned paths, Edit project. */
-function WorkspaceHoverContent({ label, cwd, folders, sessionCount, onPin, onEdit, t }: {
+function WorkspaceHoverContent({ label, cwd, folders, sessionCount, pinned, onPin, onEdit, t }: {
   label: string
   cwd: string | undefined
   folders: readonly string[]
   sessionCount: number
+  pinned: boolean
   onPin: () => void
   onEdit: () => void
   t: RowTranslate
@@ -55,7 +56,13 @@ function WorkspaceHoverContent({ label, cwd, folders, sessionCount, onPin, onEdi
       <div className={css.hoverHead}>
         <IconFolderClose16 />
         <span className={css.hoverTitle}>{label}</span>
-        <button type="button" className={css.hoverPin} aria-label={t('hover.pin')} onClick={onPin}>
+        <button
+          type="button"
+          className={clsx(css.hoverPin, pinned && css.hoverPinActive)}
+          aria-label={pinned ? t('hover.unpin') : t('hover.pin')}
+          aria-pressed={pinned}
+          onClick={onPin}
+        >
           <IconGoalOutline16 size={14} />
         </button>
       </div>
@@ -129,7 +136,6 @@ export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, t }: 
     edit: () => void
     rename: () => void
     delete: () => void
-    addFolder?: () => void
     removeFolder?: (path: string) => void
     pin: () => void
   } | undefined
@@ -145,9 +151,6 @@ export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, t }: 
   const extraFolders = group.folders
   const workspaceMenuItems = [
     { id: 'edit', label: t('menu.editProject'), icon: <IconEditOutline16 /> },
-    ...actions?.addFolder === undefined
-      ? []
-      : [{ id: 'add-folder', label: t('menu.addFolder'), icon: <IconPlusOutline16 /> }],
     ...actions?.removeFolder === undefined || extraFolders.length === 0
       ? []
       : [{
@@ -197,10 +200,6 @@ export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, t }: 
                 actions.edit()
                 return
               }
-              if (id === 'add-folder') {
-                actions.addFolder?.()
-                return
-              }
               if (id.startsWith('remove:')) {
                 actions.removeFolder?.(id.slice('remove:'.length))
                 return
@@ -245,6 +244,7 @@ export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, t }: 
         cwd={row.cwd}
         folders={row.folders}
         sessionCount={row.sessionCount}
+        pinned={row.pinned}
         onPin={() => { actions?.pin() }}
         onEdit={() => { actions?.edit() }}
         t={t}

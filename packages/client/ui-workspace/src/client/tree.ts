@@ -52,6 +52,8 @@ export interface GroupNode {
   expanded: boolean
   /** The group contains the selected session (active folder tint; supplied here so the renderer never scans). */
   containsCurrent: boolean
+  /** True when this Workspace sits in the browser-local pinned prefix. */
+  pinned: boolean
   /** Visible session rows (empty while the group is folded). */
   sessions: readonly SessionNode[]
 }
@@ -82,6 +84,8 @@ export interface TreeView {
   expandedGroups: readonly string[]
   /** Browser-local order for Sessions without a backing Workspace account. */
   ungroupedOrder?: readonly string[]
+  /** Workspace ids kept at the front of the grouped list, in pin order. */
+  pinnedWorkspaceIds?: readonly string[]
 }
 
 interface Group {
@@ -259,8 +263,22 @@ export function deriveGroups(
     ? undefined
     : (workspaces.find(w => w.sessionIds.includes(list.current as SessionId))?.workspaceId as string | undefined)
         ?? UNGROUPED_KEY
+  const pinnedIds = view.pinnedWorkspaceIds ?? []
+  const pinnedSet = new Set(pinnedIds)
+  const grouped = groupByWorkspace(list, workspaces, archived, view.ungroupedOrder)
+  const byKey = new Map(grouped.map(group => [group.key, group]))
+  const ordered: Group[] = []
+  for (const id of pinnedIds) {
+    const group = byKey.get(id)
+    if (group === undefined) continue
+    ordered.push(group)
+    byKey.delete(id)
+  }
+  for (const group of grouped) {
+    if (byKey.has(group.key)) ordered.push(group)
+  }
   const groups: GroupNode[] = []
-  for (const g of groupByWorkspace(list, workspaces, archived, view.ungroupedOrder)) {
+  for (const g of ordered) {
     const expanded = expandedGroups.has(g.key)
     groups.push({
       key: g.key,
@@ -272,6 +290,7 @@ export function deriveGroups(
       sessionCount: g.sessions.length,
       expanded,
       containsCurrent: g.key === currentGroup,
+      pinned: g.workspaceId !== undefined && pinnedSet.has(g.workspaceId as string),
       sessions: expanded ? g.sessions.map(session => sessionNode(session, descendants)) : [],
     })
   }

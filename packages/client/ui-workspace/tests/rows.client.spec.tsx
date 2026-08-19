@@ -103,7 +103,7 @@ describe('workspace browser rows', () => {
     const onCreate = vi.fn()
     const group: GroupNode = {
       key: 'project', workspaceId: wid('project'), cwd: '/projects/project', folders: [], createdAt: 0, label: 'Project',
-      sessionCount: 1, expanded: true, containsCurrent: true, sessions: [],
+      sessionCount: 1, expanded: true, containsCurrent: true, pinned: false, sessions: [],
     }
     render(<ProjectRowItem group={group} onToggle={onToggle} onCreate={onCreate} t={t} />)
 
@@ -240,29 +240,26 @@ describe('workspace browser rows', () => {
     const onEdit = vi.fn()
     const onRename = vi.fn()
     const onDelete = vi.fn()
-    const onAddFolder = vi.fn()
     const onRemoveFolder = vi.fn()
     const onToggle = vi.fn()
     const group: GroupNode = {
       key: 'project', workspaceId: wid('project'), cwd: '/projects/project',
       folders: ['/projects/extra'], createdAt: 0, label: 'Project',
-      sessionCount: 0, expanded: false, containsCurrent: false, sessions: [],
+      sessionCount: 0, expanded: false, containsCurrent: false, pinned: false, sessions: [],
     }
     render(<ProjectRowItem
       group={group} onToggle={onToggle} onCreate={vi.fn()}
       actions={{
         edit: onEdit, rename: onRename, delete: onDelete,
-        addFolder: onAddFolder, removeFolder: onRemoveFolder, pin: vi.fn(),
+        removeFolder: onRemoveFolder, pin: vi.fn(),
       }} t={t}
     />)
     fireEvent.click(screen.getByRole('button', { name: '工作区“Project”的操作' }))
     expect(onToggle).not.toHaveBeenCalled()
+    expect(screen.queryByRole('menuitem', { name: '添加文件夹…' })).toBeNull()
     expect(screen.getByRole('menuitem', { name: '删除工作区' }).className).toMatch(/danger/)
     fireEvent.click(screen.getByRole('menuitem', { name: '编辑项目' }))
     expect(onEdit).toHaveBeenCalledOnce()
-    fireEvent.click(screen.getByRole('button', { name: '工作区“Project”的操作' }))
-    fireEvent.click(screen.getByRole('menuitem', { name: '添加文件夹…' }))
-    expect(onAddFolder).toHaveBeenCalledOnce()
     fireEvent.click(screen.getByRole('button', { name: '工作区“Project”的操作' }))
     const remove = screen.getByRole('menuitem', { name: '移除文件夹' })
     fireEvent.mouseEnter(remove.parentElement as HTMLElement)
@@ -289,7 +286,7 @@ describe('workspace browser rows', () => {
       const group: GroupNode = {
         key: 'project', workspaceId: wid('project'), cwd: '/projects/project',
         folders: ['/projects/extra'], createdAt: 0, label: 'Project',
-        sessionCount: 2, expanded: false, containsCurrent: false, sessions: [],
+        sessionCount: 2, expanded: false, containsCurrent: false, pinned: false, sessions: [],
       }
       render(<ProjectRowItem
         group={group} onToggle={vi.fn()} onCreate={vi.fn()}
@@ -303,6 +300,7 @@ describe('workspace browser rows', () => {
       expect(screen.getByText('/projects/extra')).toBeTruthy()
       fireEvent.click(screen.getByRole('button', { name: '置顶' }))
       expect(onPin).toHaveBeenCalledOnce()
+      expect(screen.getByRole('button', { name: '置顶' }).getAttribute('aria-pressed')).toBe('false')
       fireEvent.click(screen.getByRole('button', { name: '编辑项目' }))
       expect(onEdit).toHaveBeenCalledOnce()
     } finally {
@@ -313,7 +311,7 @@ describe('workspace browser rows', () => {
   it('ungrouped bucket renders no workspace menu', () => {
     const group: GroupNode = {
       key: '', workspaceId: undefined, cwd: undefined, folders: [], createdAt: undefined, label: 'Ungrouped',
-      sessionCount: 0, expanded: false, containsCurrent: false, sessions: [],
+      sessionCount: 0, expanded: false, containsCurrent: false, pinned: false, sessions: [],
     }
     render(<ProjectRowItem group={group} onToggle={vi.fn()} onCreate={vi.fn()} t={t} />)
     expect(screen.queryByRole('button', { name: /工作区/ })).toBeNull()
