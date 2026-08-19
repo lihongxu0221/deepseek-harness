@@ -45,7 +45,7 @@ profile 目录包含一个 `package.json`，其中记录树外插件依赖，以
 
 ## 打包桌面可执行文件
 
-`dist-exe/dsh-web-<platform>-<arch>/` 是双击即用的 Web GUI 文件夹。`dsh-web.exe` 只是薄启动器，必须与旁边的 `lib/`、`config/` 和 `node_modules/` 一起保留。整个文件夹可独立运行：exe 内嵌 Node，打开界面不需要安装系统 Node.js 或 Python。若第一个额外参数是已存在的 `.js`/`.cjs`/`.mjs` 文件，启动器会导入该脚本而不是 GUI，以便原生辅助程序把 exe 当作 Node 使用。双击会启动 `web` profile，在 Edge 或 Chrome 的应用模式窗口中打开本地 URL，并把该文件夹当作调用目录。若未设置 `$DSH_HOME`，用户数据写在 exe 旁边的 `.config/`，作用等同于 `~/.dsh`。再次构建会保留 `.config`。关闭应用窗口或控制台即可停止。这不是 JSON-RPC 的 `dsh-jsonrpc-agent-pkg` 可执行文件。
+`dist-exe/dsh-web-<platform>-<arch>/` 是双击即用的 Web GUI 文件夹。`dsh-web.exe` 只是薄启动器，必须与旁边的 `lib/`、`config/` 和 `node_modules/` 一起保留。整个文件夹可独立运行：exe 内嵌 Node，打开界面不需要安装系统 Node.js 或 Python。若第一个额外参数是已存在的 `.js`/`.cjs`/`.mjs` 文件，启动器会导入该脚本而不是 GUI，以便原生辅助程序把 exe 当作 Node 使用。双击会启动 `web` profile，在 Edge 或 Chrome 的应用模式窗口中打开本地 URL，并把该文件夹当作调用目录。若未设置 `$DSH_HOME`，用户数据写在 exe 旁边的 `.config/`，作用等同于 `~/.dsh`。再次构建会保留 `.config`。Windows 上启动器是 GUI 进程：闪窗显示启动进度，随后打开主界面；关闭窗口后托盘图标仍保持服务。右键托盘图标可显示主界面、启动或停止服务、打开系统设置，或退出。macOS/Linux 关闭应用窗口或控制台即可停止。这不是 JSON-RPC 的 `dsh-jsonrpc-agent-pkg` 可执行文件。
 
 在仓库根目录运行 `build-exe.bat`（Windows）或 `pnpm run build:web-exe`。
 

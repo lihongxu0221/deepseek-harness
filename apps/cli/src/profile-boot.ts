@@ -182,6 +182,26 @@ export interface RunProfileOptions {
   args: readonly string[]
 }
 
+/** Options for {@link bootProfile}: compose, boot, and watch, without process exit. */
+export interface BootProfileOptions extends RunProfileOptions {
+  /**
+   * Plugin-requested exit through `ctx.appExit`. The CLI maps this to process
+   * shutdown; the packaged Windows desktop maps it to stopping the web service
+   * without exiting the tray host.
+   */
+  exit: (code: number) => void
+  /**
+   * When aborted, watcher-setup failures are treated as shutdown, not a broken
+   * watch. The CLI aborts this on SIGINT/SIGTERM.
+   */
+  signal?: AbortSignal
+  /**
+   * Receives the host context as soon as boot creates it, before entries mount,
+   * so a signal during boot can still dispose the tree.
+   */
+  onHost?: (ctx: Context) => void
+}
+
 /**
  * Re-throw a watcher-setup failure unless a shutdown already owns the tree:
  * a signal aborted this invocation, or an app requested exit (`ctx.appExit`
@@ -189,41 +209,25 @@ export interface RunProfileOptions {
  * await. Either way the failure describes a tree that is exiting as asked,
  * not a broken watch.
  * @param ctx - the booted root context.
- * @param signal - this invocation's signal-shutdown fact.
+ * @param signal - this invocation's signal-shutdown fact, if any.
  * @param error - the setup failure.
  */
-function suppressShutdownError(ctx: Context, signal: AbortSignal, error: unknown): void {
-  if (signal.aborted) return
+function suppressShutdownError(ctx: Context, signal: AbortSignal | undefined, error: unknown): void {
+  if (signal?.aborted) return
   if (ctx.fiber.state !== FiberState.ACTIVE || ctx.get('loader') === undefined) return
   throw error
 }
 
 /**
- * Boot one profile invocation end to end and leave process lifetime to the
- * mounted plugins (or to a one-shot runner the composition mounts).
- * @param options - environment snapshot, profile name, overlays, and the booted app's own arguments.
- * @returns the settled root context and the shutdown controller.
+ * Compose, boot, and attach user-patch watchers for one profile. Does not
+ * install fail-loud, signal handlers, or process exit — those stay on
+ * {@link runProfile} so CLI surfaces keep their shutdown semantics.
+ * @param options - environment snapshot, profile, overlays, arguments, and the
+ *   plugin exit hook.
+ * @returns the settled root context. The caller owns `fiber.dispose()`.
  */
-export async function runProfile(options: RunProfileOptions): Promise<{ ctx: Context; shutdown: ProcessShutdown }> {
+export async function bootProfile(options: BootProfileOptions): Promise<Context> {
   const composed = composeProfile(options.profile, options.patchFiles)
-  const app: { current?: Context } = {}
-  const shutdown = createProcessShutdown(async () => { await app.current?.fiber.dispose() })
-  const signalShutdown = new AbortController()
-  const interrupt = (code: number): void => {
-    signalShutdown.abort()
-    shutdown.interrupt(code)
-  }
-  // Signals own teardown throughout the startup window, not only after boot()
-  // settles: an inserted provider can publish before sibling rows finish mounting.
-  // SIGTERM is a supervisor's ordinary stop request and exits 0 on every
-  // surface — the launcher does not know whether the app considered its work
-  // complete; SIGINT is a user interrupt and reports 130.
-  process.on('SIGTERM', () => { interrupt(0) })
-  process.on('SIGINT', () => { interrupt(130) })
-  installFailLoud(NAME, process, async () => {
-    await app.current?.fiber.dispose()
-  })
-
   const rootConfig = join(composed.profile.dir, PROFILE_ROOT_FILENAME)
   // Recomposition for the live user layers: bundle layers below, overlays
   // above, so a user edit can never displace them. Parsed app arguments are
@@ -246,7 +250,7 @@ export async function runProfile(options: RunProfileOptions): Promise<{ ctx: Con
   // Cloned for the same insert-aliasing reason as composeLive: the boot
   // application must not mutate the objects later reloads recompose from.
   const ctx = await boot(NAME, rootConfig, structuredClone(allPatches(composed)), (hostCtx) => {
-    app.current = hostCtx
+    options.onHost?.(hostCtx)
     // Before any config-tree entry mounts, so plugins resolve all launch-time
     // environment values from the same immutable provenance snapshot.
     hostCtx.provide(DSH_LAUNCH_ENVIRONMENT_KEY, options.environment)
@@ -254,10 +258,9 @@ export async function runProfile(options: RunProfileOptions): Promise<{ ctx: Con
     // to every app plugin that injects the argument snapshot.
     provideCmdline(hostCtx, {
       args: options.args,
-      exit: code => void shutdown.shutdown(code),
+      exit: options.exit,
     })
   })
-  app.current = ctx
   // A surface can dispose the whole tree while boot or this post-boot watcher
   // setup is still in flight — a signal, or a fast one-shot's appExit. Loader
   // presence and fiber state own liveness; the initial check skips a tree
@@ -265,7 +268,7 @@ export async function runProfile(options: RunProfileOptions): Promise<{ ctx: Con
   // landed mid-setup. Watching is unconditional: a one-shot surface exits
   // through its bounded shutdown, which disposes the watchers before the
   // loop drains.
-  if (!signalShutdown.signal.aborted
+  if (!options.signal?.aborted
     && ctx.fiber.state === FiberState.ACTIVE
     && ctx.get('loader') !== undefined) {
     try {
@@ -293,8 +296,42 @@ export async function runProfile(options: RunProfileOptions): Promise<{ ctx: Con
         compose: composeLive,
       })
     } catch (error) {
-      suppressShutdownError(ctx, signalShutdown.signal, error)
+      suppressShutdownError(ctx, options.signal, error)
     }
   }
+  return ctx
+}
+
+/**
+ * Boot one profile invocation end to end and leave process lifetime to the
+ * mounted plugins (or to a one-shot runner the composition mounts).
+ * @param options - environment snapshot, profile name, overlays, and the booted app's own arguments.
+ * @returns the settled root context and the shutdown controller.
+ */
+export async function runProfile(options: RunProfileOptions): Promise<{ ctx: Context; shutdown: ProcessShutdown }> {
+  const app: { current?: Context } = {}
+  const shutdown = createProcessShutdown(async () => { await app.current?.fiber.dispose() })
+  const signalShutdown = new AbortController()
+  const interrupt = (code: number): void => {
+    signalShutdown.abort()
+    shutdown.interrupt(code)
+  }
+  // Signals own teardown throughout the startup window, not only after boot()
+  // settles: an inserted provider can publish before sibling rows finish mounting.
+  // SIGTERM is a supervisor's ordinary stop request and exits 0 on every
+  // surface — the launcher does not know whether the app considered its work
+  // complete; SIGINT is a user interrupt and reports 130.
+  process.on('SIGTERM', () => { interrupt(0) })
+  process.on('SIGINT', () => { interrupt(130) })
+  installFailLoud(NAME, process, async () => {
+    await app.current?.fiber.dispose()
+  })
+  const ctx = await bootProfile({
+    ...options,
+    exit: code => void shutdown.shutdown(code),
+    signal: signalShutdown.signal,
+    onHost: (hostCtx) => { app.current = hostCtx },
+  })
+  app.current = ctx
   return { ctx, shutdown }
 }

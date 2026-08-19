@@ -42,5 +42,7 @@ describe('applyPackagedWebHome', () => {
     const source = readFileSync(fileURLToPath(new URL('../src/packaged-web-bin.ts', import.meta.url)), 'utf8')
     expect(source).toContain('applyPackagedWebHome(process.execPath)')
     expect(source).toContain("loadLayeredEnv('dsh')")
+    expect(source).toContain("process.platform === 'win32'")
+    expect(source).toContain('runPackagedWebDesktop(defaultPackagedWebDesktopIo())')
   })
 })

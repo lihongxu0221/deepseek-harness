@@ -85,5 +85,7 @@ describe('withPreservedPackagedWebHome', () => {
     expect(source).toContain("import { withPreservedPackagedWebHome } from './preserve-packaged-web-home.ts'")
     expect(source).toContain('withPreservedPackagedWebHome(this.staging, deploy)')
     expect(source).toContain('withPreservedPackagedWebHome(product, async () => {')
+    expect(source).toContain("import { setWindowsPeSubsystem } from './windows-pe-subsystem.ts'")
+    expect(source).toContain("setWindowsPeSubsystem(launcher, 'gui')")
   })
 })

@@ -14,7 +14,7 @@ Status: implemented
 
 另外发布 `dist-exe/dsh-web-<platform>-<arch>/` 作为第二个产品。`dsh-web` 是薄的 `@yao-pkg/pkg --sea` 启动器。Node 的 SEA 嵌入器按 CommonJS 运行该入口（`embedderRunCjs`），因此提交的是 `apps/cli/packaged-web-launcher.cjs`。它再动态导入同一文件夹里磁盘上的 `lib/packaged-web-bin.js`。若第一个额外参数是已存在的 `.js`/`.cjs`/`.mjs` 文件，启动器和该磁盘入口会导入该脚本而不是启动 GUI，这样 Win32 文件夹选择器的 `spawn(process.execPath, [worker.cjs])` 就会像 node 一样运行，并留在打包 ABI 上。pkg SEA 会把 exe 路径同时放进 `argv[0]` 和 `argv[1]`；选择脚本前会跳过这两个位置。文件夹的其余部分是 `@deepseek-ai/dsh` 的 `pnpm deploy` 结果（`lib/`、`config/`、`node_modules/`）。部署之后，构建会补上 legacy hoister 和 `link:` override 漏掉的 workspace / vendor 包，包括 `dsh-fs` 这类 peer Service Definition。整个文件夹才是产品；只复制 exe 会大声失败。
 
-双击会启动随附的 `web` profile，再把回环 URL 在 Edge 或 Chrome 的 `--app` 窗口中打开，并使用独立的 `$DSH_HOME/desktop-chromium` 配置目录，让该窗口成为自己的进程。浏览器在 2 秒内退出视为启动器交接，服务器继续运行。关闭存活更久的应用窗口或控制台都会停止服务器。找不到 Chromium 浏览器时，改走操作系统打开方式，控制台仍是服务器。
+双击会启动随附的 `web` profile，再把回环 URL 在 Edge 或 Chrome 的 `--app` 窗口中打开，并使用独立的 `$DSH_HOME/desktop-chromium` 配置目录，让该窗口成为自己的进程。Windows 上由闪窗和托盘宿主接管生命周期（[Windows 闪窗与托盘](2026-08-19-windows-packaged-desktop-tray.md)）：关闭应用窗口只隐藏界面，托盘退出才停止服务器。macOS 和 Linux 上，浏览器在 2 秒内退出视为启动器交接，服务器继续运行；关闭存活更久的应用窗口或控制台都会停止服务器。这些平台找不到 Chromium 浏览器时，改走操作系统打开方式，控制台仍是服务器。
 
 打包入口在加载 `.env` 并启动之前，会把进程 cwd 改成可执行文件所在目录，因为资源管理器的 cwd 常常不是那个目录。若尚未设置 `$DSH_HOME`，接着会把它指向 `<exeDir>/.config` 并创建该目录。这个文件夹就是完整的 harness 主目录：`settings.yaml`、`.credentials.yaml`、会话和 `desktop-chromium`。源码启动的 `pnpm dsh` 不变，仍使用 `~/.dsh`。
 
@@ -34,7 +34,7 @@ JSON-RPC 旁边的 `cordis.yml` 约定保持不变。[单文件 JSON-RPC exe](..
 
 **一个运行 `pnpm dsh web` 的批处理。** 否决，因为用户要求点击构建好的 exe，而不是继续依赖源码目录和 PATH。
 
-**隐藏控制台。** 否决，因为找不到 Chromium 浏览器时，控制台就是可见的服务器进程；静默失败会让双击看起来什么都没发生。
+**在所有平台隐藏控制台。** 否决用于 macOS 和 Linux：没有一直存在的 Chromium 窗口时，控制台仍是可见的服务器。Windows 隐藏控制台，并使用[闪窗与托盘宿主](2026-08-19-windows-packaged-desktop-tray.md)。
 
 **让 web Commander 接受多余的 worker 路径。** 否决，因为那仍会再启动一套 Web GUI，对话框 worker 根本不会运行。
 
@@ -44,4 +44,4 @@ JSON-RPC 旁边的 `cordis.yml` 约定保持不变。[单文件 JSON-RPC exe](..
 
 ## Consequences
 
-Windows 用户运行 `build-exe.bat`，然后双击 `dist-exe/dsh-web-win-x64/dsh-web.exe`。目标机器打开 GUI、对话、添加工作区或写入 API key 时不需要安装系统 Node.js 或 Python：启动器内嵌 Node，`node_modules/` 随文件夹分发，窗口使用 Edge 或 Chrome。Agent 调用的 `python` 或 `node` 命令以及 `dsh plugin` 仍需要这些宿主工具。API key 来自「设置 → 模型」，会写入 `.config/.credentials.yaml`。再次构建会保留 `.config`。exe 旁边的 `.env` 仍可作为项目层使用。`apps/cli/tests/open-desktop-window.spec.ts`、`apps/cli/tests/packaged-web-entry.spec.ts`、`apps/cli/tests/packaged-web-home.spec.ts` 和 `scripts/preserve-packaged-web-home.spec.ts` 中的单元测试固定了 URL 拒绝规则、浏览器优先级、应用模式参数、`start`/`open`/`xdg-open` 回退、缺少文件夹时的错误、SEA 启动器必须保持为 CommonJS，worker 脚本额外参数会导入而不是启动 GUI，未设置、仅空白和显式 `$DSH_HOME` 的情况，以及重建删除后会恢复 `.config`。
+Windows 用户运行 `build-exe.bat`，然后双击 `dist-exe/dsh-web-win-x64/dsh-web.exe`。目标机器打开 GUI、对话、添加工作区或写入 API key 时不需要安装系统 Node.js 或 Python：启动器内嵌 Node，`node_modules/` 随文件夹分发，窗口使用 Edge 或 Chrome。Agent 调用的 `python` 或 `node` 命令以及 `dsh plugin` 仍需要这些宿主工具。API key 来自「设置 → 模型」，会写入 `.config/.credentials.yaml`。再次构建会保留 `.config`。exe 旁边的 `.env` 仍可作为项目层使用。`apps/cli/tests/open-desktop-window.spec.ts`、`apps/cli/tests/packaged-web-entry.spec.ts`、`apps/cli/tests/packaged-web-home.spec.ts` 和 `scripts/preserve-packaged-web-home.spec.ts` 中的单元测试固定了 URL 拒绝规则、浏览器优先级、应用模式参数、`start`/`open`/`xdg-open` 回退、缺少文件夹时的错误、SEA 启动器必须保持为 CommonJS，worker 脚本额外参数会导入而不是启动 GUI，未设置、仅空白和显式 `$DSH_HOME` 的情况，重建删除后会恢复 `.config`，以及 Windows 打包会把 PE 子系统设为 GUI。

@@ -10,12 +10,20 @@ import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 
-/** A spawned window process the launcher can wait on. */
+/** A spawned window process the launcher can wait on or close. */
 export interface SpawnedDesktopWindow {
+  /** Browser process id when the spawn produced one. */
+  readonly pid?: number | undefined
   /** Register a spawn-failure listener. */
   on(event: 'error', listener: (error: Error) => void): void
   /** Register an exit listener. `code` is null when the process is signaled. */
   on(event: 'exit', listener: (code: number | null) => void): void
+  /**
+   * Kill the browser process.
+   * @param signal - optional OS signal; production omits it.
+   * @returns whether a signal was sent.
+   */
+  kill?(signal?: NodeJS.Signals): boolean
 }
 
 /** Replaceable filesystem and process effects for {@link openDesktopWindow}. */
@@ -41,10 +49,17 @@ export interface DesktopWindowIo {
   spawn(command: string, args: readonly string[]): SpawnedDesktopWindow
 }
 
-/** A waitable desktop window. Closing it should stop the packaged server. */
+/**
+ * A waitable desktop window. Closing the window does not stop the packaged
+ * Windows tray host; the host may kill this process to dismiss the GUI.
+ */
 export interface OpenedDesktopWindow {
   /** Resolves with the process exit code, or 0 when the OS reported a signal. */
   wait: Promise<number>
+  /** Browser process id used to focus the window from the tray host. */
+  pid?: number | undefined
+  /** Kill the browser process if it is still running. */
+  close(): void
 }
 
 const LOOPBACK_HOST = '127.0.0.1'
@@ -129,7 +144,13 @@ export function openDesktopWindow(url: string, io: DesktopWindowIo = defaultDesk
         '--no-first-run',
         '--no-default-browser-check',
       ])
-      return { wait: waitForWindow(child) }
+      return {
+        wait: waitForWindow(child),
+        pid: child.pid,
+        close() {
+          child.kill?.()
+        },
+      }
     }
     io.spawn('cmd.exe', ['/c', 'start', '', url])
     return undefined

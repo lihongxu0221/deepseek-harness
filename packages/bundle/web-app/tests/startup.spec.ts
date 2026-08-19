@@ -136,4 +136,14 @@ describe('web command-line provider', () => {
     expect(observed.readerConfig).toBeUndefined()
     expect(observed.exits).toEqual([1])
   })
+
+  it('publishes all-interfaces when the packaged desktop allow-list is set', async () => {
+    process.env.DSH_WEB_ALLOW_ALL_INTERFACES = '1'
+    try {
+      const { values } = await bootProvider(['--host', '0.0.0.0', '--port', '8080'])
+      expect(values).toEqual({ host: '0.0.0.0', port: 8080, trustedHosts: [] })
+    } finally {
+      delete process.env.DSH_WEB_ALLOW_ALL_INTERFACES
+    }
+  })
 })

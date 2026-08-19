@@ -12,6 +12,7 @@ import { copyFile, cp, lstat, mkdir, readFile, readdir, realpath, rm, writeFile 
 import { dirname, join, resolve, sep } from 'node:path'
 import { parseArgs } from 'node:util'
 import { withPreservedPackagedWebHome } from './preserve-packaged-web-home.ts'
+import { setWindowsPeSubsystem } from './windows-pe-subsystem.ts'
 
 const root = resolve(import.meta.dirname, '..')
 
@@ -477,6 +478,13 @@ class WebExeBuild {
     if (!this.cli.dryRun && !existsSync(launcher)) {
       throw new Error(`build-web-exe: launcher ${launcher} is missing after the pkg run; inspect ${product}.`)
     }
+    if (target.platform === 'win') {
+      if (this.cli.dryRun) console.log(`build-web-exe: [dry-run] set Windows PE subsystem GUI ${launcher}`)
+      else {
+        setWindowsPeSubsystem(launcher, 'gui')
+        console.log(`build-web-exe: Windows PE subsystem GUI: ${launcher}`)
+      }
+    }
     await this.writeReadme(product)
     return [product, launcher]
   }
@@ -521,7 +529,8 @@ class WebExeBuild {
       'Keep this whole folder together; the exe is only a launcher.',
       'No system Node.js or Python install is required; the exe embeds Node, and node_modules/ is shipped.',
       'A Chromium browser (Edge or Chrome) is used for the window; Windows already includes Edge.',
-      'Close the app window or the console to stop the server.',
+      'On Windows a splash window shows progress, then the GUI opens. The tray icon keeps the server running after you close the window. Right-click it to show the GUI, start or stop the service, open Settings, or exit.',
+      'On macOS/Linux, close the app window or the console to stop the server.',
       'User data lives in the .config folder beside this exe (same role as ~/.dsh).',
       'Rebuilding this folder keeps .config.',
       'Set the API key in Settings → Models; that writes .config/.credentials.yaml.',
@@ -531,7 +540,8 @@ class WebExeBuild {
       '请保持整个文件夹完整，不要只复制 exe。',
       '不需要安装 Node.js 或 Python；exe 内嵌 Node，node_modules/ 是随包运行时。',
       '界面用 Edge 或 Chrome 打开；Windows 自带 Edge。',
-      '关闭应用窗口或控制台即可停止服务。',
+      'Windows 启动时会显示进度闪窗，加载完成后打开主界面。关闭窗口后托盘图标仍保持服务运行。右键可显示主界面、启动或停止服务、打开系统设置，或退出。',
+      'macOS/Linux 关闭应用窗口或控制台即可停止服务。',
       '用户数据在本目录的 .config 文件夹中，作用等同于 ~/.dsh。',
       '再次构建会保留 .config。',
       '在「设置 → 模型」中填写 API key，会写入 .config/.credentials.yaml。',
