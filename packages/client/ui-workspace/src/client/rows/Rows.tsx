@@ -1,7 +1,7 @@
 /**
  * Workspace browser tree row components (figma Cell set 14:3080): pure presentational —
- * all data and callbacks arrive via props. Hover swaps (folder stays with the
- * chevron, time->ellipsis, action buttons) are CSS-only. The workspace row menu keeps
+ * all data and callbacks arrive via props. Hover swaps (chevron to the left of
+ * the folder, time->ellipsis, action buttons) are CSS-only. The workspace row menu keeps
  * Edit project, Remove folder, Rename, and Delete; session Rename/Fork/Archive
  * stay on the row. Hover cards are suppressed while a menu is open.
  */
@@ -177,11 +177,11 @@ export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, t }: 
         }}
       onDragEnd={drag?.end}
     >
-      <span className={clsx(css.slot, css.folder, active && css.folderActive)}>
-        {row.expanded ? <IconFolderOpen16 /> : <IconFolderClose16 />}
-      </span>
       <span className={clsx(css.slot, css.chevron)}>
         <IconTriangleRightFill14 className={clsx(css.arrow, row.expanded && css.arrowOpen)} />
+      </span>
+      <span className={clsx(css.slot, css.folder, active && css.folderActive)}>
+        {row.expanded ? <IconFolderOpen16 /> : <IconFolderClose16 />}
       </span>
       <span className={css.projectText}>
         <span className={css.title}>{label}</span>
