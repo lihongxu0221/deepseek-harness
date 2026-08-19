@@ -411,6 +411,20 @@
   transform: rotate(90deg);
 }
 
+/* Nested rows sit one indent step (16px slot + 6px gap) past the section title. */
+.treeSection > :not(.treeSectionHeader) {
+  padding-left: 22px;
+  box-sizing: border-box;
+}
+
+.treeSection > .empty {
+  padding-left: 30px;
+}
+
+.treeSection > .sessionOverflowButton {
+  padding-left: 50px;
+}
+
 /* One workspace section: header row + a compact expanded session run. */
 .groupSection {
   position: relative;
