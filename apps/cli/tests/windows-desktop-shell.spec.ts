@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest'
 import {
   formatHostToShell,
   parseShellToHost,
+  resolveDesktopIconPath,
   startWindowsDesktopShell,
   WINDOWS_DESKTOP_SHELL_SCRIPT,
   windowsPowerShellPath,
@@ -63,6 +64,9 @@ describe('windows desktop shell protocol', () => {
     expect(source).toContain('ShowListenDialog')
     expect(source).toContain('FocusListenForm')
     expect(source).toContain('$script:ListenForm.TopMost = $true')
+    expect(source).toContain('function LoadDesktopIcon')
+    expect(source).toContain('$env:DSH_WEB_ICON')
+    expect(source).toContain("'dsh-web.ico'")
     expect(source).toContain('$splash.ShowInTaskbar = $false')
     expect(source).toContain('$script:ListenForm.ShowInTaskbar = $false')
     expect(source).toContain('[System.Windows.Forms.Application]::Run($hidden)')
@@ -76,6 +80,14 @@ describe('windows desktop shell protocol', () => {
     expect(source).toContain('$chosenPort = [int]$script:ListenPortBox.Value')
     // A raw thread running a scriptblock has no runspace and kills the process.
     expect(source).not.toContain('New-Object System.Threading.Thread')
+  })
+})
+
+describe('desktop whale icon', () => {
+  it('ships an ICO with the Windows magic header', () => {
+    const ico = readFileSync(fileURLToPath(new URL('../assets/dsh-web.ico', import.meta.url)))
+    expect(ico.subarray(0, 4).equals(Buffer.from([0, 0, 1, 0]))).toBe(true)
+    expect(resolveDesktopIconPath('D:\\missing\\dsh-web.exe')).toMatch(/dsh-web\.ico$/i)
   })
 })
 
@@ -136,6 +148,7 @@ describe('startWindowsDesktopShell', () => {
     expect(spawned[0]?.args[7]).toBe(written[0]?.file)
     expect(spawned[0]?.env.DSH_WEB_PARENT_PID).toBe('4242')
     expect(spawned[0]?.env.DSH_WEB_EXE).toBe('D:\\dist\\dsh-web.exe')
+    expect(spawned[0]?.env.DSH_WEB_ICON).toMatch(/dsh-web\.ico$/i)
 
     const commands: ShellToHost[] = []
     shell.onCommand((command) => { commands.push(command) })

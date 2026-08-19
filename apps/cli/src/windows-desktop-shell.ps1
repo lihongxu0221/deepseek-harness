@@ -91,15 +91,33 @@ function FocusPid([int]$ProcessId) {
   }
 }
 
-$icon = [System.Drawing.SystemIcons]::Application
-try {
+function LoadDesktopIcon {
+  $candidates = @()
+  if ($env:DSH_WEB_ICON) { $candidates += [string]$env:DSH_WEB_ICON }
   if ($env:DSH_WEB_EXE) {
-    $extracted = [System.Drawing.Icon]::ExtractAssociatedIcon($env:DSH_WEB_EXE)
-    if ($extracted) { $icon = $extracted }
+    $exeDir = [System.IO.Path]::GetDirectoryName([string]$env:DSH_WEB_EXE)
+    if ($exeDir) { $candidates += (Join-Path $exeDir 'dsh-web.ico') }
   }
-} catch {
-  # ExtractAssociatedIcon fails on some paths; keep SystemIcons.Application.
+  $small = [System.Windows.Forms.SystemInformation]::SmallIconSize
+  foreach ($path in $candidates) {
+    if (-not $path -or -not (Test-Path -LiteralPath $path)) { continue }
+    try {
+      return New-Object System.Drawing.Icon($path, $small.Width, $small.Height)
+    } catch {
+      # Unreadable ico files fall through to the exe associated icon.
+    }
+  }
+  if ($env:DSH_WEB_EXE) {
+    try {
+      $extracted = [System.Drawing.Icon]::ExtractAssociatedIcon($env:DSH_WEB_EXE)
+      if ($extracted) { return $extracted }
+    } catch {
+      # ExtractAssociatedIcon fails on some paths; keep SystemIcons.Application.
+    }
+  }
+  return [System.Drawing.SystemIcons]::Application
 }
+$icon = LoadDesktopIcon
 
 $splash = New-Object System.Windows.Forms.Form
 $splash.Text = 'DeepSeek Harness'
