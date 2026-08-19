@@ -1,6 +1,6 @@
 /* Tree rows: project 34px, session 32px, radius 8, indent step 22px
-   (16px slot + 6px gap). Hover swaps
-   are pure CSS: project folder -> chevron + action buttons; session time ->
+   (16px slot + 6px gap). Hover swaps are pure CSS: project rows keep the
+   folder and reveal the chevron plus action buttons; session time ->
    ellipsis button. */
 
 .projectRow,
@@ -149,10 +149,10 @@
 }
 
 
-/* Project leading slot: folder by default, expand arrow on row hover. */
+/* Project leading slots: folder always, expand arrow on row hover. */
 .projectRow .chevron { display: none; }
-.projectRow:hover .chevron { display: inline-flex; }
-.projectRow:hover .folder { display: none; }
+.projectRow:hover .chevron,
+.projectRow.menuOpen .chevron { display: inline-flex; }
 
 /* Expand arrow (filled triangle): points right closed, rotates to point down open. */
 .arrow {

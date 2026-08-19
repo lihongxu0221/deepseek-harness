@@ -1,7 +1,7 @@
 /**
  * Workspace browser tree row components (figma Cell set 14:3080): pure presentational —
- * all data and callbacks arrive via props. Hover swaps (folder->chevron,
- * time->ellipsis, action buttons) are CSS-only. The workspace row menu keeps
+ * all data and callbacks arrive via props. Hover swaps (folder stays with the
+ * chevron, time->ellipsis, action buttons) are CSS-only. The workspace row menu keeps
  * Edit project, Remove folder, Rename, and Delete; session Rename/Fork/Archive
  * stay on the row. Hover cards are suppressed while a menu is open.
  */
