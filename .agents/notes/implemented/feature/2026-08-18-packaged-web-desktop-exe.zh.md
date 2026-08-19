@@ -18,7 +18,7 @@ Status: implemented
 
 打包入口在加载 `.env` 并启动之前，会把进程 cwd 改成可执行文件所在目录，因为资源管理器的 cwd 常常不是那个目录。若尚未设置 `$DSH_HOME`，接着会把它指向 `<exeDir>/.config` 并创建该目录。这个文件夹就是完整的 harness 主目录：`settings.yaml`、`.credentials.yaml`、会话和 `desktop-chromium`。源码启动的 `pnpm dsh` 不变，仍使用 `~/.dsh`。
 
-`scripts/build-web-exe.ts` 和仓库根目录的 `build-exe.bat` 只生成这个 Web 文件夹。它们用 `@yao-pkg/pkg --sea` 打包薄启动器，用 `pnpm deploy --filter @deepseek-ai/dsh` 部署闭包，不会同步进 Python runtime，也不会跑 `verify-runtime-closure`。在 `rm` 掉 staging 或产品文件夹之前，构建会先把已有的 `.config` 拷到一边，完成后再拷回去，即使 deploy 或 pack 失败也会这样做。
+`scripts/build-web-exe.ts` 和仓库根目录的 `build-exe.bat` 只生成这个 Web 文件夹。它们用 `@yao-pkg/pkg --sea` 打包薄启动器，用 `pnpm deploy --filter @deepseek-ai/dsh` 部署闭包，不会同步进 Python runtime，也不会跑 `verify-runtime-closure`。制品构建的子进程设置 `LEFTHOOK=0`，而不是 `CI=true`，因为 pnpm 10 会把 `CI=true` 当成运行 `pnpm install --production` 的信号，随后 lefthook 的 postinstall 就无法导入 lefthook。在 `rm` 掉 staging 或产品文件夹之前，构建会先把已有的 `.config` 拷到一边，完成后再拷回去，即使 deploy 或 pack 失败也会这样做。
 
 JSON-RPC 旁边的 `cordis.yml` 约定保持不变。[单文件 JSON-RPC exe](../architecture/2026-07-10-single-file-executable-sdk-runtime-distribution.md) 仍是 Python SDK 载体。
 

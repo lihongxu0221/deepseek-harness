@@ -511,7 +511,9 @@ class SingleExeBuild {
         cwd: root,
         stdio: 'inherit',
         // Artifact builds must not mutate or validate a developer's Git hooks.
-        env: { ...process.env, CI: 'true' },
+        // Do not set CI=true: pnpm 10 then runs `pnpm install --production`,
+        // which removes lefthook and then fails the lefthook postinstall.
+        env: { ...process.env, LEFTHOOK: '0' },
         // Node 20+ refuses to spawn .cmd/.bat without a shell (EINVAL).
         shell: process.platform === 'win32',
       })

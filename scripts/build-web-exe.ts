@@ -589,7 +589,10 @@ class WebExeBuild {
       const child = spawn(command, args, {
         cwd: root,
         stdio: 'inherit',
-        env: { ...process.env, CI: 'true' },
+        // Artifact builds must not mutate or validate a developer's Git hooks.
+        // Do not set CI=true: pnpm 10 then runs `pnpm install --production`,
+        // which removes lefthook and then fails the lefthook postinstall.
+        env: { ...process.env, LEFTHOOK: '0' },
         shell: process.platform === 'win32',
       })
       child.once('error', (error) => {

@@ -18,7 +18,7 @@ Double-click boots the shipped `web` profile, then opens the loopback URL in an 
 
 The packaged entry changes the process cwd to the executable directory before loading `.env` and booting, because Explorer's cwd is often not that directory. Unless `$DSH_HOME` is already set, it then points `$DSH_HOME` at `<exeDir>/.config` and creates that directory. That folder is the full harness home: `settings.yaml`, `.credentials.yaml`, sessions, and `desktop-chromium`. Source `pnpm dsh` is unchanged and still uses `~/.dsh`.
 
-`scripts/build-web-exe.ts` and root `build-exe.bat` produce only this Web folder. They reuse `@yao-pkg/pkg --sea` for the thin launcher and `pnpm deploy --filter @deepseek-ai/dsh` for the closure. They do not sync into the Python runtime or run `verify-runtime-closure`. Before `rm` of a staging or product folder, the build copies an existing `.config` aside and copies it back afterward, including when deploy or pack fails.
+`scripts/build-web-exe.ts` and root `build-exe.bat` produce only this Web folder. They reuse `@yao-pkg/pkg --sea` for the thin launcher and `pnpm deploy --filter @deepseek-ai/dsh` for the closure. They do not sync into the Python runtime or run `verify-runtime-closure`. Artifact subprocesses set `LEFTHOOK=0` instead of `CI=true`, because pnpm 10 treats `CI=true` as a signal to run `pnpm install --production` and then lefthook's postinstall cannot import lefthook. Before `rm` of a staging or product folder, the build copies an existing `.config` aside and copies it back afterward, including when deploy or pack fails.
 
 The JSON-RPC sidecar `cordis.yml` contract is unchanged. The [single-file JSON-RPC exe](../architecture/2026-07-10-single-file-executable-sdk-runtime-distribution.md) remains the Python SDK carrier.
 

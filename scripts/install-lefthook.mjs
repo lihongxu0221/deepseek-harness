@@ -14,8 +14,6 @@ import {
 } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
-import lefthookPackage from 'lefthook/package.json' with { type: 'json' }
-
 const MINIMUM_GIT = [2, 26, 0]
 const HOOKS_DIRECTORY = 'dsh-hooks'
 const OWNERSHIP_MARKER = '.dsh-lefthook-owned'
@@ -40,6 +38,12 @@ const PAIRING_MERGE_DRIVER_PROBE = [
   'scripts/merge-translation-pairing.ts',
   '--probe',
 ]
+
+function loadLefthookPackage(root) {
+  const manifestPath = join(root, 'node_modules', 'lefthook', 'package.json')
+  if (!existsSync(manifestPath)) return undefined
+  return JSON.parse(readFileSync(manifestPath, 'utf8'))
+}
 
 function errorCode(error) {
   return typeof error === 'object' && error !== null && 'code' in error
@@ -690,10 +694,12 @@ function probePairingMergeDriver(root) {
 
 async function main() {
   if (process.env.CI === 'true' || process.env.GITHUB_ACTIONS === 'true') return
-  if (typeof lefthookPackage.bin?.lefthook !== 'string') return
+  if (process.env.LEFTHOOK === '0') return
   const probe = spawnSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' })
   if (probe.status !== 0) return
   const root = stripGitLineTerminator(probe.stdout)
+  const lefthookPackage = loadLefthookPackage(root)
+  if (lefthookPackage === undefined || typeof lefthookPackage.bin?.lefthook !== 'string') return
   const isWindows = process.platform === 'win32'
   const lefthook = join(root, 'node_modules', '.bin', isWindows ? 'lefthook.cmd' : 'lefthook')
   if (!existsSync(lefthook)) return
