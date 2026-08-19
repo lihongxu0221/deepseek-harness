@@ -35,9 +35,11 @@ import {
   hostPickDirectoryRequestSchema,
 } from '../api/host.schema.ts'
 import {
+  workspaceAddFolderRequestSchema,
   workspaceArchiveSessionRequestSchema,
   workspaceCreateRequestSchema,
   workspaceDeleteRequestSchema,
+  workspaceRemoveFolderRequestSchema,
   workspaceInsertBeforeRequestSchema,
   workspaceInsertSessionBeforeRequestSchema,
   workspaceListRequestSchema,
@@ -112,6 +114,8 @@ const UNARY_ROUTES: UnaryRoutes = {
   'workspace.list': { schema: workspaceListRequestSchema, invoke: (api, r) => api.workspace.list(r) },
   'workspace.create': { schema: workspaceCreateRequestSchema, invoke: (api, r) => api.workspace.create(r) },
   'workspace.rename': { schema: workspaceRenameRequestSchema, invoke: (api, r) => api.workspace.rename(r) },
+  'workspace.addFolder': { schema: workspaceAddFolderRequestSchema, invoke: (api, r) => api.workspace.addFolder(r) },
+  'workspace.removeFolder': { schema: workspaceRemoveFolderRequestSchema, invoke: (api, r) => api.workspace.removeFolder(r) },
   'workspace.delete': { schema: workspaceDeleteRequestSchema, invoke: (api, r) => api.workspace.delete(r) },
   'workspace.insertBefore': { schema: workspaceInsertBeforeRequestSchema, invoke: (api, r) => api.workspace.insertBefore(r) },
   'workspace.insertSessionBefore': { schema: workspaceInsertSessionBeforeRequestSchema, invoke: (api, r) => api.workspace.insertSessionBefore(r) },

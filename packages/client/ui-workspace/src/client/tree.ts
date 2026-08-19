@@ -42,6 +42,8 @@ export interface GroupNode {
   /** Backing Workspace id; absent only for the ungrouped bucket. */
   workspaceId: WorkspaceId | undefined
   cwd: string | undefined
+  /** Extra folders besides {@link cwd}; empty for the ungrouped bucket. */
+  folders: readonly string[]
   /** Workspace creation time (epoch ms); absent only for the ungrouped bucket. */
   createdAt: number | undefined
   label: string
@@ -86,6 +88,7 @@ interface Group {
   key: string
   workspaceId: WorkspaceId | undefined
   cwd: string | undefined
+  folders: readonly string[]
   createdAt: number | undefined
   label: string
   sessions: SessionSummary[]
@@ -135,6 +138,7 @@ function buildGroup(
   key: string,
   workspaceId: WorkspaceId | undefined,
   cwd: string | undefined,
+  folders: readonly string[],
   createdAt: number | undefined,
   label: string,
   members: readonly SessionSummary[],
@@ -144,7 +148,7 @@ function buildGroup(
   // Real Workspace order comes from sessionIds. Ungrouped falls back to
   // recency until the browser supplies its persisted local order.
   if (order === 'recency') sessions.sort(byRecency)
-  return { key, workspaceId, cwd, createdAt, label, sessions }
+  return { key, workspaceId, cwd, folders, createdAt, label, sessions }
 }
 
 /** Apply a stored Ungrouped order and append newly loose Sessions by recency. */
@@ -189,7 +193,7 @@ function groupByWorkspace(
       members.push(summary)
     }
     groups.push(buildGroup(
-      workspace.workspaceId, workspace.workspaceId, workspace.path,
+      workspace.workspaceId, workspace.workspaceId, workspace.path, workspace.folders ?? [],
       Date.parse(workspace.createdAt), workspace.title, members, 'account',
     ))
   }
@@ -202,6 +206,7 @@ function groupByWorkspace(
       UNGROUPED_KEY,
       undefined,
       undefined,
+      [],
       undefined,
       UNGROUPED_LABEL,
       ungroupedOrder === undefined ? stray : orderedUngrouped(stray, ungroupedOrder),
@@ -261,6 +266,7 @@ export function deriveGroups(
       key: g.key,
       workspaceId: g.workspaceId,
       cwd: g.cwd,
+      folders: g.folders,
       createdAt: g.createdAt,
       label: g.label,
       sessionCount: g.sessions.length,

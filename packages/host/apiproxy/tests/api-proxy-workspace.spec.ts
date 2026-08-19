@@ -319,6 +319,43 @@ describe('workspace.create', () => {
   })
 })
 
+describe('workspace.addFolder / removeFolder', () => {
+  it('adds an extra folder, rejects a foreign claim, and refuses to drop the primary', async () => {
+    const { api, root } = await harness()
+    const primary = stageDir(root, 'multi-primary')
+    const extra = stageDir(root, 'multi-extra')
+    const other = stageDir(root, 'multi-other')
+    const workspace = expectOk(await api.workspace.create(request({ path: primary }))).workspace
+    const added = expectOk(await api.workspace.addFolder(request({
+      workspaceId: workspace.workspaceId,
+      path: extra,
+    })))
+    expect(added.workspace.folders).toEqual([extra])
+    const foreign = expectOk(await api.workspace.create(request({ path: other }))).workspace
+    const conflict = await api.workspace.addFolder(request({
+      workspaceId: foreign.workspaceId,
+      path: extra,
+    }))
+    expect(conflict.result).toMatchObject({
+      ok: false,
+      error: { code: 'workspace-folder-conflict', details: { path: extra } },
+    })
+    const primaryRemove = await api.workspace.removeFolder(request({
+      workspaceId: workspace.workspaceId,
+      path: primary,
+    }))
+    expect(primaryRemove.result).toMatchObject({
+      ok: false,
+      error: { code: 'workspace-folder-primary', details: { path: primary } },
+    })
+    const removed = expectOk(await api.workspace.removeFolder(request({
+      workspaceId: workspace.workspaceId,
+      path: extra,
+    })))
+    expect(removed.workspace.folders).toEqual([])
+  })
+})
+
 describe('workspace.insertBefore', () => {
   it('commits the complete order, streams one order frame, and maps unknown ids', async () => {
     const { api, ctx, root } = await harness()

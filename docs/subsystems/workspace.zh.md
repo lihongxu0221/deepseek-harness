@@ -24,21 +24,29 @@ type WorkspaceId = Branded<'WorkspaceId'>
 
 ```ts type-equiv
 /**
- * One workspace: a stable id over an existing directory, a display title, and
- * an ordered candidate account of sessions. Membership requires both an id in
- * that account and a session header whose canonical cwd equals the workspace
- * path. Consumers only see this interface; the implementation stays private.
+ * One workspace: a stable id over an existing primary directory, optional
+ * extra folders, a display title, and an ordered candidate account of
+ * sessions. Membership requires both an id in that account and a session
+ * header whose canonical cwd equals the primary path or one extra folder.
+ * Consumers only see this interface; the implementation stays private.
  */
 interface Workspace {
   /** Stable record id (generated uuid). */
   readonly id: WorkspaceId
 
   /**
-   * Canonical directory path: the `fs.realpath` of the path given at create
-   * time (trailing slashes, `..`, and symlinks all resolved). Never rewritten
-   * afterwards, even when the directory disappears (see {@link status}).
+   * Canonical primary directory: the `fs.realpath` of the path given at
+   * create time (trailing slashes, `..`, and symlinks all resolved). New
+   * sessions use this as cwd. Never rewritten afterwards, even when the
+   * directory disappears (see {@link status}).
    */
   readonly path: string
+
+  /**
+   * Extra canonical directories this workspace also owns. A path appears in
+   * at most one workspace (as primary or extra). Does not include {@link path}.
+   */
+  readonly folders: readonly string[]
 
   /** Display title. Defaults to `basename(path)` at create; duplicates are allowed. */
   readonly title: string
@@ -67,13 +75,33 @@ interface Workspace {
   setTitle(title: string): Promise<void>
 
   /**
+   * Add an extra directory to this workspace. The path is canonicalized
+   * through `fs.realpath`; a nonexistent or non-directory path rejects. A
+   * path this workspace already owns resolves without writing. A path owned
+   * by another workspace rejects. Extra folders expand session membership
+   * and workspace-write roots; they do not change {@link path}.
+   * @param path - Existing directory to own, in any path spelling.
+   * @returns resolution after durability.
+   */
+  addFolder(path: string): Promise<void>
+
+  /**
+   * Remove an extra directory from this workspace. Removing {@link path}
+   * rejects. An unknown extra folder resolves without writing. The directory
+   * itself is never deleted.
+   * @param path - Extra folder to drop, in any path spelling.
+   * @returns resolution after durability.
+   */
+  removeFolder(path: string): Promise<void>
+
+  /**
    * Prepend a session to this workspace's candidate account. An already
    * accounted id resolves without writing, aside from the durable
    * filtered-candidate prune every accepted mutation performs. A new id's
    * live or persisted
-   * header cwd must resolve to an existing directory equal to {@link path};
-   * unknown ids, missing or invalid cwd values, and mismatches reject without
-   * writing.
+   * header cwd must resolve to an existing directory equal to {@link path}
+   * or one extra folder; unknown ids, missing or invalid cwd values, and
+   * mismatches reject without writing.
    * @param sessionId - The session to record.
    * @returns resolution after durability.
    */
@@ -113,7 +141,7 @@ interface Workspace {
 }
 ```
 
-所有权的真源是记录中有序的 `sessionIds`，绝不从会话 cwd 派生——但成员资格要求两者同时成立：账本上有其 id，且 header 的规范 cwd 等于工作区路径，因此一个会话在结构上至多属于一个工作区。失败的写入会拒绝（`insertSessionBefore` 的账本错误以 `WorkspaceMoveInvalidError` 拒绝，存储失败以普通错误拒绝）；每次被接受的变更都盖上 `updatedAt` 时间戳，并持久修剪不再通过成员资格检查的候选项。
+所有权的真源是记录中有序的 `sessionIds`，绝不从会话 cwd 派生——但成员资格要求两者同时成立：账本上有其 id，且 header 的规范 cwd 等于工作区主路径或任一额外文件夹，因此一个会话在结构上至多属于一个工作区。失败的写入会拒绝（`insertSessionBefore` 的账本错误以 `WorkspaceMoveInvalidError` 拒绝，存储失败以普通错误拒绝）；每次被接受的变更都盖上 `updatedAt` 时间戳，并持久修剪不再通过成员资格检查的候选项。额外文件夹的归属见 [Workspace extra folders](../../.agents/notes/implemented/feature/2026-08-19-workspace-extra-folders.md)。
 
 ## 注册表：`ctx.workspaceRegistry`
 

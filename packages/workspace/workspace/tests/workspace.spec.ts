@@ -132,6 +132,7 @@ function selectiveFailureBackend(
 function record(path: string, sessionIds: string[], createdAt = '2026-07-24T00:00:00.000Z'): WorkspaceRecord {
   return {
     path,
+    folders: [],
     title: basename(path),
     sessionIds: sessionIds.map(SessionId),
     createdAt,
@@ -869,6 +870,37 @@ describe('workspace mutation and status', () => {
     await writeFile(dir, 'now a file')
     expect(await workspace.status()).toBe('missing-dir')
     expect(registry.get(workspace.id)).toBe(workspace)
+  })
+})
+
+describe('workspace extra folders', () => {
+  it('adds extra folders, matches attach by extra cwd, and rejects a foreign or primary remove', async () => {
+    const primary = await makeDir('multi-primary')
+    const extra = await makeDir('multi-extra')
+    const other = await makeDir('multi-other')
+    const { registry } = await harness({
+      sessions: [header('in-primary', primary, 200)],
+      liveSessions: [header('in-extra', extra, 100), header('in-primary', primary, 200)],
+    })
+    const workspace = await registry.create(primary)
+    expect(workspace.folders).toEqual([])
+    await workspace.addFolder(extra)
+    expect(workspace.folders).toEqual([extra])
+    await workspace.addFolder(extra)
+    expect(workspace.folders).toEqual([extra])
+    expect(await registry.resolveByPath(extra)).toBe(workspace)
+    expect((await registry.create(extra)).id).toBe(workspace.id)
+    await workspace.attachSession(SessionId('in-extra'))
+    expect(workspace.sessionIds).toEqual(['in-extra', 'in-primary'])
+
+    const foreign = await registry.create(other)
+    await expect(foreign.addFolder(extra)).rejects.toMatchObject({ name: 'WorkspaceFolderConflictError' })
+    await expect(workspace.removeFolder(primary)).rejects.toMatchObject({ name: 'WorkspaceFolderPrimaryError' })
+    await workspace.removeFolder(extra)
+    expect(workspace.folders).toEqual([])
+    expect(workspace.sessionIds).toEqual(['in-primary'])
+    await workspace.removeFolder(extra)
+    expect(workspace.folders).toEqual([])
   })
 })
 

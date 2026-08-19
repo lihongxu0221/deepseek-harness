@@ -15,11 +15,15 @@ const workspaceId = z.string().transform(value => value as WorkspaceId)
 
 /**
  * Durable shape of one workspace record. `path` is the `fs.realpath` canon
- * stamped at create; `sessionIds` is the ordered ownership account (array
- * order is display order); timestamps are ISO-8601 strings.
+ * stamped at create (new-session cwd); `folders` are extra canonical
+ * directories the workspace also owns. Records written before `folders`
+ * existed parse as an empty extra list. `sessionIds` is the ordered
+ * ownership account (array order is display order); timestamps are ISO-8601
+ * strings.
  */
 export const workspaceRecord = z.object({
   path: z.string(),
+  folders: z.array(z.string()).default([]),
   title: z.string(),
   sessionIds: z.array(z.string().transform(SessionId)),
   createdAt: z.string(),

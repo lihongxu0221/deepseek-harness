@@ -84,6 +84,42 @@ describe('SandboxPolicyService', () => {
     })
   })
 
+  it('adds extra workspace folders as write roots for a matching session cwd', async () => {
+    const ctx = await mounted({ mode: 'workspace-write', workspaceRoot: '/fallback' })
+    ctx.provide('workspaceRegistry', {
+      list: () => [{ path: resolve('/projects/first'), folders: [resolve('/projects/extra')] }],
+    })
+    expect(ctx.sandboxPolicy.resolve({ session: session('sess-multi', '/projects/first') })).toEqual({
+      mode: 'workspace-write',
+      workspaceRoot: resolve('/projects/first'),
+      extraRoots: [resolve('/projects/extra')],
+      sessionId: 'sess-multi',
+    })
+    const prompt = new Context()
+    await prompt.plugin(SystemPrompt)
+    await prompt.plugin(SandboxPolicyService, { mode: 'workspace-write', workspaceRoot: '/fallback' })
+    prompt.provide('workspaceRegistry', {
+      list: () => [{ path: resolve('/projects/first'), folders: [resolve('/projects/extra')] }],
+    })
+    const listed = `${JSON.stringify(resolve('/projects/first'))}, ${JSON.stringify(resolve('/projects/extra'))}`
+    expect(await policyContext(prompt, session('sess-multi-prompt', '/projects/first'))).toBe(
+      `Current DSH file policy: workspace-write. Any available operation enforced by the DSH file sandbox may modify files under the session workspace: ${listed}. Some platform temporary areas may also be writable.`,
+    )
+  })
+
+  it('adds the primary path as a write root when the session cwd is an extra folder', async () => {
+    const ctx = await mounted({ mode: 'workspace-write', workspaceRoot: '/fallback' })
+    ctx.provide('workspaceRegistry', {
+      list: () => [{ path: resolve('/projects/first'), folders: [resolve('/projects/extra')] }],
+    })
+    expect(ctx.sandboxPolicy.resolve({ session: session('sess-extra-cwd', '/projects/extra') })).toEqual({
+      mode: 'workspace-write',
+      workspaceRoot: resolve('/projects/extra'),
+      extraRoots: [resolve('/projects/first')],
+      sessionId: 'sess-extra-cwd',
+    })
+  })
+
   it.skipIf(process.platform === 'win32')('resolves a symlink-sensitive session cwd with POSIX component semantics', async () => {
     const root = mkdtempSync(join(tmpdir(), 'dsh-policy-cwd-'))
     try {

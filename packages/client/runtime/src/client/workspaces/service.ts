@@ -262,6 +262,30 @@ export class WorkspaceRuntime implements IWorkspaces {
   }
 
   /**
+   * Add an extra folder to a Workspace.
+   * @param workspaceId - target workspace.
+   * @param path - existing host directory.
+   * @returns the updated Workspace view.
+   */
+  async addFolder(workspaceId: WorkspaceId, path: string): Promise<WorkspaceView> {
+    const result = await this.manager.addFolder(workspaceId, path)
+    if (!result.ok) throw new Error(`workspace add folder failed: ${result.error.code}: ${result.error.message}`)
+    return result.value.workspace
+  }
+
+  /**
+   * Remove an extra folder from a Workspace. The directory is kept.
+   * @param workspaceId - target workspace.
+   * @param path - extra folder to drop.
+   * @returns the updated Workspace view.
+   */
+  async removeFolder(workspaceId: WorkspaceId, path: string): Promise<WorkspaceView> {
+    const result = await this.manager.removeFolder(workspaceId, path)
+    if (!result.ok) throw new Error(`workspace remove folder failed: ${result.error.code}: ${result.error.message}`)
+    return result.value.workspace
+  }
+
+  /**
    * Delete one Workspace registration. Sessions, session logs, and the
    * directory remain Host-owned outside this operation.
    * @param workspaceId - target workspace.

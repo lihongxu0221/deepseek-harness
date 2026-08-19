@@ -32,9 +32,11 @@ import {
   sessionUpdateQueueValueSchema,
 } from '../api/sessions.schema.ts'
 import {
+  workspaceAddFolderValueSchema,
   workspaceArchiveSessionValueSchema,
   workspaceCreateValueSchema,
   workspaceDeleteValueSchema,
+  workspaceRemoveFolderValueSchema,
   workspaceInsertBeforeValueSchema,
   workspaceInsertSessionBeforeValueSchema,
   workspaceListValueSchema,
@@ -116,6 +118,8 @@ export interface IApiClient {
     list(payload: RequestPayload<'workspace.list'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'workspace.list'>>>
     create(payload: RequestPayload<'workspace.create'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'workspace.create'>>>
     rename(payload: RequestPayload<'workspace.rename'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'workspace.rename'>>>
+    addFolder(payload: RequestPayload<'workspace.addFolder'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'workspace.addFolder'>>>
+    removeFolder(payload: RequestPayload<'workspace.removeFolder'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'workspace.removeFolder'>>>
     delete(payload: RequestPayload<'workspace.delete'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'workspace.delete'>>>
     insertBefore(payload: RequestPayload<'workspace.insertBefore'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'workspace.insertBefore'>>>
     insertSessionBefore(payload: RequestPayload<'workspace.insertSessionBefore'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'workspace.insertSessionBefore'>>>
@@ -194,6 +198,8 @@ const UNARY_VALUE_SCHEMAS: { [K in keyof RpcMethodMap]: z.ZodType<Wire<ResponseV
   'workspace.list': workspaceListValueSchema,
   'workspace.create': workspaceCreateValueSchema,
   'workspace.rename': workspaceRenameValueSchema,
+  'workspace.addFolder': workspaceAddFolderValueSchema,
+  'workspace.removeFolder': workspaceRemoveFolderValueSchema,
   'workspace.delete': workspaceDeleteValueSchema,
   'workspace.insertBefore': workspaceInsertBeforeValueSchema,
   'workspace.insertSessionBefore': workspaceInsertSessionBeforeValueSchema,
@@ -447,6 +453,8 @@ export abstract class AbstractApiClient implements IApiClient {
     list: (payload, signal) => this.callUnary('workspace.list', payload, signal),
     create: (payload, signal) => this.callUnary('workspace.create', payload, signal),
     rename: (payload, signal) => this.callUnary('workspace.rename', payload, signal),
+    addFolder: (payload, signal) => this.callUnary('workspace.addFolder', payload, signal),
+    removeFolder: (payload, signal) => this.callUnary('workspace.removeFolder', payload, signal),
     delete: (payload, signal) => this.callUnary('workspace.delete', payload, signal),
     insertBefore: (payload, signal) => this.callUnary('workspace.insertBefore', payload, signal),
     insertSessionBefore: (payload, signal) => this.callUnary('workspace.insertSessionBefore', payload, signal),

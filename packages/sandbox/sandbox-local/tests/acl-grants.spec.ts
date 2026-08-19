@@ -44,6 +44,9 @@ vi.mock('@deepseek-ai/dsh-sandbox-windows-acl', () => {
         throw mockState.addFailure
       }
     }
+    get paths(): readonly string[] {
+      return this.added.map(entry => entry.path)
+    }
     dispose(): void {
       if (mockState.disposeFailure !== undefined) throw mockState.disposeFailure
       this.disposed = true
@@ -138,6 +141,39 @@ describe('windows-acl write grants (LocalSandboxProvider)', () => {
       await fiber.dispose()
       expect(mockState.grants.every(grant => grant.disposed)).toBe(true)
       expect(existsSync(tempDir ?? '')).toBe(false)
+    } finally {
+      cleanup()
+    }
+  })
+
+  it('workspace-write grants extra folder roots on first confine and on a later addFolder', async () => {
+    try {
+      const { sandbox, fiber } = await setup()
+      const ws = workspaceRoot()
+      const extra = workspaceRoot()
+      scratch.push(ws, extra)
+      const first: SandboxPolicy = { mode: 'workspace-write', workspaceRoot: ws, sessionId: SessionId('sess-extra') }
+      sandbox.confine(['true'], first)
+      expect(mockState.grants[0]?.added).toEqual([{ path: ws, standing: true }])
+
+      const withExtra: SandboxPolicy = {
+        mode: 'workspace-write',
+        workspaceRoot: ws,
+        extraRoots: [extra],
+        sessionId: SessionId('sess-extra'),
+      }
+      sandbox.confine(['true'], withExtra)
+      expect(mockState.grants[0]?.added).toEqual([
+        { path: ws, standing: true },
+        { path: extra, standing: true },
+      ])
+      sandbox.confine(['true'], withExtra)
+      expect(mockState.grants[0]?.added).toEqual([
+        { path: ws, standing: true },
+        { path: extra, standing: true },
+      ])
+
+      await fiber.dispose()
     } finally {
       cleanup()
     }

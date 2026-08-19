@@ -217,6 +217,7 @@ type SessionTreeProps = Pick<
   WorkspaceBrowserProps,
   'useSessions' | 'startSession' | 'open' | 'forkSession'
   | 'insertWorkspaceBefore' | 'insertSessionBefore' | 't'
+  | 'useDirectoryFlow'
 > & {
   workspaces: readonly WorkspaceView[]
   /** Explicit persisted zero-or-five-session state by Workspace group. */
@@ -237,6 +238,10 @@ type SessionTreeProps = Pick<
   onRenameRequest: (workspaceId: WorkspaceId, currentTitle: string) => void
   /** Open the browser-owned delete-confirmation dialog for a real Workspace group. */
   onDeleteRequest: (workspaceId: WorkspaceId, currentTitle: string) => void
+  /** Start the directory flow to add an extra folder to this Workspace. */
+  onAddFolderRequest: (workspaceId: WorkspaceId) => void
+  /** Drop one extra folder from this Workspace. */
+  onRemoveFolderRequest: (workspaceId: WorkspaceId, path: string) => void
   /** Open the browser-owned session rename dialog. */
   onSessionRename: (sessionId: SessionNode['id'], currentTitle: string) => void
   /** Archive a session (row menu action; the row disappears on the state echo). */
@@ -248,11 +253,13 @@ type SessionTreeProps = Pick<
 /** The scrolling session tree; unmounting drops the sessions subscription and expand-all state. */
 function SessionTree({
   useSessions, startSession, open, forkSession, workspaces, archivedSessionIds,
-  onRenameRequest, onDeleteRequest, onSessionRename, onSessionArchive,
+  onRenameRequest, onDeleteRequest, onAddFolderRequest, onRemoveFolderRequest,
+  onSessionRename, onSessionArchive, useDirectoryFlow,
   insertWorkspaceBefore, insertSessionBefore, orderBy,
   groupExpansion, setGroupExpanded,
   sessionOrderByAccount, sessionUpdatedAtByAccount, syncSessionOrderAccount, setSessionOrder, t,
 }: SessionTreeProps) {
+  const folderFlowAvailable = useDirectoryFlow(occupied => occupied)
   const list = useSessions(s => s)
   const current = list.current
   const [expandedSessionGroups, setExpandedSessionGroups] = useState<string[]>([])
@@ -474,6 +481,18 @@ function SessionTree({
                     delete: () => {
                     /* v8 ignore next -- narrowing guard: the actions object exists only for real-workspace groups. */
                       if (group.workspaceId !== undefined) onDeleteRequest(group.workspaceId, group.label)
+                    },
+                    ...folderFlowAvailable
+                      ? {
+                        addFolder: () => {
+                        /* v8 ignore next -- narrowing guard: the actions object exists only for real-workspace groups. */
+                          if (group.workspaceId !== undefined) onAddFolderRequest(group.workspaceId)
+                        },
+                      }
+                      : {},
+                    removeFolder: (path) => {
+                    /* v8 ignore next -- narrowing guard: the actions object exists only for real-workspace groups. */
+                      if (group.workspaceId !== undefined) onRemoveFolderRequest(group.workspaceId, path)
                     },
                   }}
               />
@@ -755,6 +774,8 @@ export function WorkspaceBrowser({
   archiveSession,
   insertSessionBefore,
   createWorkspace,
+  addFolder,
+  removeFolder,
   searchSessions,
   searchResultLimit,
   useDirectoryFlow,
@@ -796,6 +817,10 @@ export function WorkspaceBrowser({
   // Section-header ＋ opens the picker menu (same popover in wide and rail
   // states; the menu anchors on this button).
   const [wsPickerOpen, setWsPickerOpen] = useState(false)
+  const [addFolderTarget, setAddFolderTarget] = useState<WorkspaceId | null>(null)
+  // Survives `WorkspacePickFlow` calling `onClose` when it raises the directory
+  // flow so adoption still targets the Workspace that requested the folder.
+  const addFolderTargetRef = useRef<WorkspaceId | null>(null)
   const wsPlusRef = useRef<HTMLButtonElement>(null)
   const composingRef = useRef(false)
 
@@ -1058,6 +1083,8 @@ export function WorkspaceBrowser({
                 className={css.iconButton}
                 aria-label={t('workspace.add')}
                 onClick={() => {
+                  addFolderTargetRef.current = null
+                  setAddFolderTarget(null)
                   setWsPickerOpen(v => !v)
                 }}
               >
@@ -1069,19 +1096,29 @@ export function WorkspaceBrowser({
         {/* Add flow + its error dialog (same package — direct composition). */}
         <WorkspacePickFlow
           t={t}
-          open={wsPickerOpen}
+          open={wsPickerOpen || addFolderTarget !== null}
           anchorRef={wsPlusRef}
           useWorkspaces={useWorkspaces}
-          createWorkspace={createWorkspace}
+          createWorkspace={async ({ path }) => {
+            const target = addFolderTargetRef.current
+            if (target !== null) return addFolder(target, path)
+            return createWorkspace({ path })
+          }}
           useDirectoryFlow={useDirectoryFlow}
           renderDirectoryFlow={owner => renderSlot('sidebar.workspaces.directoryFlow', owner)}
           addOnly
           side="right"
           onPick={(workspaceId) => {
+            const addingFolder = addFolderTargetRef.current !== null
+            addFolderTargetRef.current = null
             setWsPickerOpen(false)
-            startSession(workspaceId)
+            setAddFolderTarget(null)
+            if (!addingFolder) startSession(workspaceId)
           }}
-          onClose={() => { setWsPickerOpen(false) }}
+          onClose={() => {
+            setWsPickerOpen(false)
+            setAddFolderTarget(null)
+          }}
         />
       </div>
 
@@ -1162,6 +1199,15 @@ export function WorkspaceBrowser({
                   setDeleteTarget({ workspaceId, title })
                   setDeleteError(null)
                 }}
+                onAddFolderRequest={(workspaceId) => {
+                  addFolderTargetRef.current = workspaceId
+                  setWsPickerOpen(false)
+                  setAddFolderTarget(workspaceId)
+                }}
+                onRemoveFolderRequest={(workspaceId, path) => {
+                  void removeFolder(workspaceId, path)
+                }}
+                useDirectoryFlow={useDirectoryFlow}
               />
             ))}
       </div>

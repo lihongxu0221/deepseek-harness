@@ -13,7 +13,31 @@ import type { SessionHeader, SessionId } from '@deepseek-ai/dsh-session'
 import type { KvTable } from '@deepseek-ai/dsh-storage-domain'
 import type { WorkspaceRecord } from './spec.ts'
 import type { Workspace, WorkspaceId } from './types.ts'
+import { extraFolders, ownsPath } from './folders.ts'
 import { realpathNormalize } from './paths.ts'
+
+/** addFolder named a directory already owned by another workspace. */
+export class WorkspaceFolderConflictError extends Error {
+  /**
+   * @param path - Canonical directory that is already owned.
+   * @param ownerId - Workspace that already owns the path.
+   */
+  constructor(readonly path: string, readonly ownerId: WorkspaceId) {
+    super(`cannot add folder '${path}': already owned by workspace '${ownerId}'`)
+    this.name = 'WorkspaceFolderConflictError'
+  }
+}
+
+/** removeFolder named the workspace primary directory. */
+export class WorkspaceFolderPrimaryError extends Error {
+  /**
+   * @param path - Canonical primary directory the caller tried to remove.
+   */
+  constructor(readonly path: string) {
+    super(`cannot remove folder '${path}': it is the workspace primary directory`)
+    this.name = 'WorkspaceFolderPrimaryError'
+  }
+}
 
 /** An insertSessionBefore request named a session or anchor not on the account (storage failures stay plain errors). */
 export class WorkspaceMoveInvalidError extends Error {
@@ -60,6 +84,23 @@ export interface WorkspaceEntityHost {
    * @param path - Canonical existing directory from the immutable header cwd.
    */
   rememberSessionPath(id: SessionId, path: string): void
+
+  /**
+   * Reject when another workspace already owns this canonical directory.
+   * @param owner - Workspace that wants to claim the path.
+   * @param canonical - Already-canonical directory path.
+   */
+  assertFolderAvailable(owner: WorkspaceId, canonical: string): void
+
+  /**
+   * Run `operation` on the registry write queue. Folder claims are
+   * cross-workspace uniqueness checks and must not interleave with
+   * create/delete or another addFolder. Must not be called from another
+   * queued registry operation: the queue is not reentrant.
+   * @param operation - Work that claims or drops a folder.
+   * @returns the operation result.
+   */
+  enqueue<T>(operation: () => Promise<T>): Promise<T>
 }
 
 /** Chain-slot abort sentinel thrown by the update fn when the record needs no change; only `mutate` observes it. */
@@ -86,6 +127,10 @@ export class WorkspaceEntity implements Workspace {
     return this.record.path
   }
 
+  get folders(): readonly string[] {
+    return extraFolders(this.record)
+  }
+
   get title(): string {
     return this.record.title
   }
@@ -99,11 +144,51 @@ export class WorkspaceEntity implements Workspace {
   }
 
   get sessionIds(): readonly SessionId[] {
-    return this.record.sessionIds.filter(id => this.host.sessionPath(id) === this.record.path)
+    return this.record.sessionIds.filter((id) => {
+      const path = this.host.sessionPath(id)
+      return path !== undefined && ownsPath(this.record, path)
+    })
   }
 
   async setTitle(title: string): Promise<void> {
     await this.mutate(record => ({ ...record, title }))
+  }
+
+  async addFolder(path: string): Promise<void> {
+    const canonical = await realpathNormalize(path)
+    if (!(await stat(canonical)).isDirectory()) {
+      throw new Error(`cannot add folder '${canonical}' to workspace '${this.record.path}': path is not a directory`)
+    }
+    await this.host.enqueue(async () => {
+      if (ownsPath(this.record, canonical)) return
+      this.host.assertFolderAvailable(this.id, canonical)
+      await this.mutate((record) => {
+        if (ownsPath(record, canonical)) return record
+        this.host.assertFolderAvailable(this.id, canonical)
+        return { ...record, folders: [...extraFolders(record), canonical] }
+      })
+    })
+  }
+
+  async removeFolder(path: string): Promise<void> {
+    let canonical: string
+    try {
+      canonical = await realpathNormalize(path)
+    } catch {
+      // The extra folder may already be missing; match the stored spelling.
+      canonical = path
+    }
+    await this.host.enqueue(async () => {
+      if (canonical === this.record.path) throw new WorkspaceFolderPrimaryError(canonical)
+      await this.mutate((record) => {
+        const folders = extraFolders(record)
+        if (!folders.includes(canonical) && !folders.includes(path)) return record
+        return {
+          ...record,
+          folders: folders.filter(folder => folder !== canonical && folder !== path),
+        }
+      })
+    })
   }
 
   async attachSession(sessionId: SessionId): Promise<void> {
@@ -135,7 +220,7 @@ export class WorkspaceEntity implements Workspace {
           + `its cwd '${header.cwd}' is not a directory`,
         )
       }
-      if (cwd !== this.record.path) {
+      if (!ownsPath(this.record, cwd)) {
         throw new Error(
           `cannot attach session '${sessionId}' to workspace '${this.record.path}': `
           + `its cwd resolves to '${cwd}'`,
@@ -204,9 +289,10 @@ export class WorkspaceEntity implements Workspace {
     try {
       next = await this.host.table().update(this.id, (current) => {
         const changed = fn(current)
-        const sessionIds = changed.sessionIds.filter(
-          id => this.host.sessionPath(id) === changed.path,
-        )
+        const sessionIds = changed.sessionIds.filter((id) => {
+          const path = this.host.sessionPath(id)
+          return path !== undefined && ownsPath(changed, path)
+        })
         if (changed === current && sessionIds.length === current.sessionIds.length) {
           throw unchangedSentinel
         }

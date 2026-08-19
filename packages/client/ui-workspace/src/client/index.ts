@@ -99,6 +99,8 @@ export function apply(ctx: ClientContext): void {
       await ctx.workspaces.insertSessionBefore(workspaceId, sessionId, beforeSessionId)
     },
     createWorkspace: input => ctx.workspaces.create(input),
+    addFolder: (workspaceId, path) => ctx.workspaces.addFolder(workspaceId, path),
+    removeFolder: (workspaceId, path) => ctx.workspaces.removeFolder(workspaceId, path),
     hooks: { directoryFlow: browserFlowSource },
   })
   const pickerInjected = (): WorkspacePickerInjected => ({

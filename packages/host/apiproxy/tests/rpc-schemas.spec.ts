@@ -20,9 +20,11 @@ import {
   hostListDirectoryRequestSchema, hostListDirectoryValueSchema,
 } from '../src/api/host.schema.ts'
 import {
+  workspaceAddFolderRequestSchema, workspaceAddFolderValueSchema,
   workspaceArchiveSessionRequestSchema, workspaceArchiveSessionValueSchema,
   workspaceCreateRequestSchema, workspaceCreateValueSchema, workspaceIdSchema,
   workspaceDeleteRequestSchema, workspaceDeleteValueSchema,
+  workspaceRemoveFolderRequestSchema, workspaceRemoveFolderValueSchema,
   workspaceInsertBeforeRequestSchema, workspaceInsertBeforeValueSchema,
   workspaceInsertSessionBeforeRequestSchema, workspaceInsertSessionBeforeValueSchema,
   workspaceListRequestSchema, workspaceListValueSchema,
@@ -65,6 +67,8 @@ describe('rpcErrorSchema', () => {
     expect(rpcErrorSchema.parse({ code: 'workspace-attach-failed', message: 'm', details: { sessionId: 's', workspaceId: 'w' } }).code).toBe('workspace-attach-failed')
     expect(rpcErrorSchema.parse({ code: 'workspace-not-found', message: 'm', details: { workspaceId: 'w' } }).code).toBe('workspace-not-found')
     expect(rpcErrorSchema.parse({ code: 'workspace-invalid-path', message: 'm', details: { path: '/x' } }).code).toBe('workspace-invalid-path')
+    expect(rpcErrorSchema.parse({ code: 'workspace-folder-conflict', message: 'm', details: { path: '/x', workspaceId: 'w' } }).code).toBe('workspace-folder-conflict')
+    expect(rpcErrorSchema.parse({ code: 'workspace-folder-primary', message: 'm', details: { path: '/x' } }).code).toBe('workspace-folder-primary')
     expect(rpcErrorSchema.parse({ code: 'workspace-name-conflict', message: 'm', details: { name: 'x' } }).code).toBe('workspace-name-conflict')
     expect(rpcErrorSchema.parse({ code: 'workspace-move-invalid', message: 'm', details: { workspaceId: 'w', sessionId: 's' } }).code).toBe('workspace-move-invalid')
     expect(rpcErrorSchema.parse({
@@ -373,6 +377,16 @@ describe('workspace domain schemas', () => {
     expect(workspaceInsertSessionBeforeRequestSchema.parse({ workspaceId: 'w1', sessionId: 's1' }).beforeSessionId).toBeUndefined()
     expect(() => workspaceInsertSessionBeforeRequestSchema.parse({ workspaceId: 'w1' })).toThrow()
     expect(workspaceInsertSessionBeforeValueSchema.parse({ workspace: view }).workspace.workspaceId).toBe('w1')
+  })
+
+  it('defaults missing folders on a view and validates add/remove folder payloads', () => {
+    expect(workspaceViewSchema.parse(view).folders).toEqual([])
+    expect(workspaceAddFolderRequestSchema.parse({ workspaceId: 'w1', path: '/extra' }).path).toBe('/extra')
+    expect(() => workspaceAddFolderRequestSchema.parse({ workspaceId: 'w1' })).toThrow()
+    expect(workspaceAddFolderValueSchema.parse({ workspace: { ...view, folders: ['/extra'] } }).workspace.folders)
+      .toEqual(['/extra'])
+    expect(workspaceRemoveFolderRequestSchema.parse({ workspaceId: 'w1', path: '/extra' }).path).toBe('/extra')
+    expect(workspaceRemoveFolderValueSchema.parse({ workspace: view }).workspace.folders).toEqual([])
   })
 
   it('create requires a path', () => {

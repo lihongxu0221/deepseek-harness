@@ -79,6 +79,8 @@ function mount(overrides: Partial<WorkspaceBrowserProps> = {}) {
     insertWorkspaceBefore: vi.fn(async () => {}),
     insertSessionBefore: vi.fn(async () => {}),
     createWorkspace: vi.fn(async () => workspace('created', [])),
+    addFolder: vi.fn(async () => workspace('created', [])),
+    removeFolder: vi.fn(async () => workspace('created', [])),
     useDirectoryFlow: bindSnapshotSelector({ getSnapshot: () => true, subscribe: () => () => {} }),
     renderSlot: ((_name: string, owner: { open: boolean }) => (owner.open ? <div data-testid="directory-flow" /> : null)) as never,
     t,
@@ -1119,6 +1121,51 @@ describe('WorkspaceBrowser', () => {
     fireEvent.click(screen.getByRole('button', { name: '关闭' }))
     expect(deleteWorkspace).not.toHaveBeenCalled()
     expect(screen.queryByRole('dialog', { name: '删除工作区' })).toBeNull()
+  })
+
+  it('adds an extra folder through the shared directory flow and removes it from the row menu', async () => {
+    let owner: { open: boolean; onPicked: (path: string) => void } | undefined
+    const addFolder = vi.fn(async () => workspace('alpha', []))
+    const removeFolder = vi.fn(async () => workspace('alpha', []))
+    const startSession = vi.fn()
+    const createWorkspace = vi.fn(async () => workspace('created', []))
+    const alpha: WorkspaceView = { ...workspace('alpha', [], 'Alpha'), folders: ['/projects/extra'] }
+    mount({
+      useWorkspaces: hook(workspaceState([alpha])),
+      addFolder,
+      removeFolder,
+      startSession,
+      createWorkspace,
+      renderSlot: ((_name: string, next: { open: boolean; onPicked: (path: string) => void }) => {
+        owner = next
+        return next.open ? <div data-testid="directory-flow" /> : null
+      }) as never,
+    })
+    fireEvent.click(screen.getByRole('button', { name: '工作区“Alpha”的操作' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '添加文件夹…' }))
+    await waitFor(() => { expect(screen.getByTestId('directory-flow')).toBeTruthy() })
+    await act(async () => { owner!.onPicked('/projects/extra') })
+    expect(addFolder).toHaveBeenCalledWith(wid('alpha'), '/projects/extra')
+    expect(createWorkspace).not.toHaveBeenCalled()
+    expect(startSession).not.toHaveBeenCalled()
+    expect(screen.queryByTestId('directory-flow')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: '工作区“Alpha”的操作' }))
+    const remove = screen.getByRole('menuitem', { name: '移除文件夹' })
+    fireEvent.mouseEnter(remove.parentElement as HTMLElement)
+    fireEvent.focus(remove)
+    fireEvent.click(screen.getByRole('menuitem', { name: '/projects/extra' }))
+    expect(removeFolder).toHaveBeenCalledWith(wid('alpha'), '/projects/extra')
+  })
+
+  it('omits add-folder from the row menu when no directory-flow occupant is composed', () => {
+    mount({
+      useWorkspaces: hook(workspaceState([workspace('alpha', [], 'Alpha')])),
+      useDirectoryFlow: bindSnapshotSelector({ getSnapshot: () => false, subscribe: () => () => {} }),
+    })
+    fireEvent.click(screen.getByRole('button', { name: '工作区“Alpha”的操作' }))
+    expect(screen.queryByRole('menuitem', { name: '添加文件夹…' })).toBeNull()
+    expect(screen.getByRole('menuitem', { name: '重命名' })).toBeTruthy()
   })
 
   it('search hides drag affordances (rows are not draggable during search)', () => {

@@ -66,6 +66,20 @@ export interface IWorkspaces {
    */
   rename(workspaceId: WorkspaceId, title: string): Promise<WorkspaceView>
   /**
+   * Add an extra folder to a Workspace.
+   * @param workspaceId - target workspace.
+   * @param path - existing host directory.
+   * @returns the updated Workspace view.
+   */
+  addFolder(workspaceId: WorkspaceId, path: string): Promise<WorkspaceView>
+  /**
+   * Remove an extra folder from a Workspace (the directory is kept).
+   * @param workspaceId - target workspace.
+   * @param path - extra folder to drop.
+   * @returns the updated Workspace view.
+   */
+  removeFolder(workspaceId: WorkspaceId, path: string): Promise<WorkspaceView>
+  /**
    * Delete a Workspace (its sessions fall back to the unaccounted group).
    * @param workspaceId - target workspace.
    */

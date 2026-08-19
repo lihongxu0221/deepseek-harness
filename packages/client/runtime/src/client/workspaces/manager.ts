@@ -149,6 +149,32 @@ export class WorkspaceManager {
   }
 
   /**
+   * Add an extra folder, then publish the returned snapshot without waiting
+   * for the changed frame.
+   * @param workspaceId - target workspace.
+   * @param path - existing host directory.
+   * @returns the wire result.
+   */
+  async addFolder(workspaceId: WorkspaceId, path: string): Promise<RpcResult<{ workspace: WorkspaceView }>> {
+    const { result } = await this.api.workspace.addFolder({ workspaceId, path })
+    if (result.ok) this.upsert(result.value.workspace)
+    return result
+  }
+
+  /**
+   * Remove an extra folder, then publish the returned snapshot without waiting
+   * for the changed frame.
+   * @param workspaceId - target workspace.
+   * @param path - extra folder to drop.
+   * @returns the wire result.
+   */
+  async removeFolder(workspaceId: WorkspaceId, path: string): Promise<RpcResult<{ workspace: WorkspaceView }>> {
+    const { result } = await this.api.workspace.removeFolder({ workspaceId, path })
+    if (result.ok) this.upsert(result.value.workspace)
+    return result
+  }
+
+  /**
    * Delete a Workspace registration and remove its local projection from the
    * unary response without waiting for the Host frame.
    * @param workspaceId - target workspace.

@@ -15,21 +15,29 @@ import type { SessionId } from '@deepseek-ai/dsh-session'
 export type WorkspaceId = Branded<'WorkspaceId'>
 
 /**
- * One workspace: a stable id over an existing directory, a display title, and
- * an ordered candidate account of sessions. Membership requires both an id in
- * that account and a session header whose canonical cwd equals the workspace
- * path. Consumers only see this interface; the implementation stays private.
+ * One workspace: a stable id over an existing primary directory, optional
+ * extra folders, a display title, and an ordered candidate account of
+ * sessions. Membership requires both an id in that account and a session
+ * header whose canonical cwd equals the primary path or one extra folder.
+ * Consumers only see this interface; the implementation stays private.
  */
 export interface Workspace {
   /** Stable record id (generated uuid). */
   readonly id: WorkspaceId
 
   /**
-   * Canonical directory path: the `fs.realpath` of the path given at create
-   * time (trailing slashes, `..`, and symlinks all resolved). Never rewritten
-   * afterwards, even when the directory disappears (see {@link status}).
+   * Canonical primary directory: the `fs.realpath` of the path given at
+   * create time (trailing slashes, `..`, and symlinks all resolved). New
+   * sessions use this as cwd. Never rewritten afterwards, even when the
+   * directory disappears (see {@link status}).
    */
   readonly path: string
+
+  /**
+   * Extra canonical directories this workspace also owns. A path appears in
+   * at most one workspace (as primary or extra). Does not include {@link path}.
+   */
+  readonly folders: readonly string[]
 
   /** Display title. Defaults to `basename(path)` at create; duplicates are allowed. */
   readonly title: string
@@ -58,13 +66,33 @@ export interface Workspace {
   setTitle(title: string): Promise<void>
 
   /**
+   * Add an extra directory to this workspace. The path is canonicalized
+   * through `fs.realpath`; a nonexistent or non-directory path rejects. A
+   * path this workspace already owns resolves without writing. A path owned
+   * by another workspace rejects. Extra folders expand session membership
+   * and workspace-write roots; they do not change {@link path}.
+   * @param path - Existing directory to own, in any path spelling.
+   * @returns resolution after durability.
+   */
+  addFolder(path: string): Promise<void>
+
+  /**
+   * Remove an extra directory from this workspace. Removing {@link path}
+   * rejects. An unknown extra folder resolves without writing. The directory
+   * itself is never deleted.
+   * @param path - Extra folder to drop, in any path spelling.
+   * @returns resolution after durability.
+   */
+  removeFolder(path: string): Promise<void>
+
+  /**
    * Prepend a session to this workspace's candidate account. An already
    * accounted id resolves without writing, aside from the durable
    * filtered-candidate prune every accepted mutation performs. A new id's
    * live or persisted
-   * header cwd must resolve to an existing directory equal to {@link path};
-   * unknown ids, missing or invalid cwd values, and mismatches reject without
-   * writing.
+   * header cwd must resolve to an existing directory equal to {@link path}
+   * or one extra folder; unknown ids, missing or invalid cwd values, and
+   * mismatches reject without writing.
    * @param sessionId - The session to record.
    * @returns resolution after durability.
    */

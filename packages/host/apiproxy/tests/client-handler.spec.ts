@@ -84,6 +84,8 @@ function scriptedApi(overrides: {
       list: r => ok(r, { items: [], archivedSessionIds: [] }),
       create: r => ok(r, { workspace: { workspaceId: 'w1' as never, path: '/t', title: 't', sessionIds: [], createdAt: '0', updatedAt: '0' }, created: true }),
       rename: r => ok(r, { workspace: { workspaceId: 'w1' as never, path: '/t', title: 't', sessionIds: [], createdAt: '0', updatedAt: '0' } }),
+      addFolder: r => ok(r, { workspace: { workspaceId: 'w1' as never, path: '/t', folders: [r.payload.path], title: 't', sessionIds: [], createdAt: '0', updatedAt: '0' } }),
+      removeFolder: r => ok(r, { workspace: { workspaceId: 'w1' as never, path: '/t', folders: [], title: 't', sessionIds: [], createdAt: '0', updatedAt: '0' } }),
       delete: r => ok(r, { deleted: true as const }),
       insertBefore: r => ok(r, { workspaceIds: [r.payload.workspaceId] }),
       insertSessionBefore: r => ok(r, { workspace: { workspaceId: 'w1' as never, path: '/t', title: 't', sessionIds: [], createdAt: '0', updatedAt: '0' } }),
@@ -237,6 +239,16 @@ describe('unary round trip', () => {
     expect(anchored.result.ok).toBe(true)
     const appended = await c.workspace.insertSessionBefore({ workspaceId: 'w1' as never, sessionId: sid('s1') })
     expect(appended.result.ok).toBe(true)
+    const added = await c.workspace.addFolder({ workspaceId: 'w1' as never, path: '/extra' })
+    expect(added.result).toEqual({
+      ok: true,
+      value: { workspace: { workspaceId: 'w1', path: '/t', folders: ['/extra'], title: 't', sessionIds: [], createdAt: '0', updatedAt: '0' } },
+    })
+    const removed = await c.workspace.removeFolder({ workspaceId: 'w1' as never, path: '/extra' })
+    expect(removed.result).toEqual({
+      ok: true,
+      value: { workspace: { workspaceId: 'w1', path: '/t', folders: [], title: 't', sessionIds: [], createdAt: '0', updatedAt: '0' } },
+    })
   })
 
   it('routes the agent-preset roster and switch through the wire', async () => {

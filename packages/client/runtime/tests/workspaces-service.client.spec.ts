@@ -360,6 +360,27 @@ describe('WorkspaceRuntime', () => {
     await expect(workspaces.openPath('/missing')).rejects.toThrow(/path open failed/)
   })
 
+  it('adds and removes extra folders and surfaces Host rejection', async () => {
+    const ctx = new Context()
+    const api = new FakeApiClient()
+    const sessions = new SessionRuntime(ctx, api, fakeRemote())
+    const workspaces = new WorkspaceRuntime(ctx, api, sessions)
+    api.onWorkspaceList = () => Promise.resolve(ok({ items: [workspace('alpha')] as never[] }))
+    await workspaces.refresh()
+    await expect(workspaces.addFolder(wid('alpha'), '/w/extra')).resolves.toMatchObject({ folders: ['/w/extra'] })
+    expect(api.callsOf('workspace.addFolder')).toEqual([{ workspaceId: 'alpha', path: '/w/extra' }])
+    await expect(workspaces.removeFolder(wid('alpha'), '/w/extra')).resolves.toMatchObject({ folders: [] })
+    expect(api.callsOf('workspace.removeFolder')).toEqual([{ workspaceId: 'alpha', path: '/w/extra' }])
+    api.onWorkspaceAddFolder = () => Promise.resolve(err({
+      code: 'workspace-folder-conflict', message: 'owned', details: { path: '/w/extra', workspaceId: 'other' },
+    }))
+    await expect(workspaces.addFolder(wid('alpha'), '/w/extra')).rejects.toThrow(/workspace-folder-conflict: owned/)
+    api.onWorkspaceRemoveFolder = () => Promise.resolve(err({
+      code: 'workspace-folder-primary', message: 'primary', details: { path: '/w/alpha' },
+    }))
+    await expect(workspaces.removeFolder(wid('alpha'), '/w/alpha')).rejects.toThrow(/workspace-folder-primary: primary/)
+  })
+
   it('deletes a Workspace or preserves it when the Host rejects deletion', async () => {
     const ctx = new Context()
     const api = new FakeApiClient()

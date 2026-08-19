@@ -25,6 +25,7 @@ import { isUserInvocable } from '@deepseek-ai/dsh-skill'
 import type { Workspace, WorkspaceRecord } from '@deepseek-ai/dsh-workspace'
 import {
   workspaceDomainState, workspaceRecord, WorkspaceId as brandWorkspaceId,
+  WorkspaceFolderConflictError, WorkspaceFolderPrimaryError,
   WorkspaceMoveInvalidError, WorkspaceOrderInvalidError, WorkspaceUnknownSessionError,
 } from '@deepseek-ai/dsh-workspace'
 // Type-only: brings the `ctx.tools` Context merge into this program (viewFor reads presenters).
@@ -1046,6 +1047,7 @@ function workspaceView(workspace: Workspace): WorkspaceView {
   return {
     workspaceId: workspace.id,
     path: workspace.path,
+    folders: [...workspace.folders],
     title: workspace.title,
     sessionIds: [...workspace.sessionIds],
     createdAt: workspace.createdAt,
@@ -1059,6 +1061,7 @@ function changedWorkspaceView(workspaceId: string, value: unknown): WorkspaceVie
   return {
     workspaceId: workspaceId as WorkspaceId,
     path: record.path,
+    folders: [...record.folders],
     title: record.title,
     sessionIds: [...record.sessionIds],
     createdAt: record.createdAt,
@@ -2789,6 +2792,48 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
               code: 'workspace-name-conflict',
               message: error.message,
               details: { name: error.workspaceName },
+            })
+          }
+          throw error
+        }
+        return ok(request, { workspace: workspaceView(workspace) })
+      },
+
+      async addFolder(request) {
+        const { workspaceId, path } = request.payload
+        const workspace = ctx.workspaceRegistry.get(brandWorkspaceId(workspaceId))
+        if (workspace === undefined) return workspaceNotFound(request, workspaceId)
+        try {
+          await workspace.addFolder(path)
+        } catch (error: unknown) {
+          if (error instanceof WorkspaceFolderConflictError) {
+            return err(request, {
+              code: 'workspace-folder-conflict',
+              message: error.message,
+              details: { path: error.path, workspaceId: error.ownerId },
+            })
+          }
+          return err(request, {
+            code: 'workspace-invalid-path',
+            message: `cannot add folder "${path}": ${error instanceof Error ? error.message : String(error)}`,
+            details: { path },
+          })
+        }
+        return ok(request, { workspace: workspaceView(workspace) })
+      },
+
+      async removeFolder(request) {
+        const { workspaceId, path } = request.payload
+        const workspace = ctx.workspaceRegistry.get(brandWorkspaceId(workspaceId))
+        if (workspace === undefined) return workspaceNotFound(request, workspaceId)
+        try {
+          await workspace.removeFolder(path)
+        } catch (error: unknown) {
+          if (error instanceof WorkspaceFolderPrimaryError) {
+            return err(request, {
+              code: 'workspace-folder-primary',
+              message: error.message,
+              details: { path: error.path },
             })
           }
           throw error

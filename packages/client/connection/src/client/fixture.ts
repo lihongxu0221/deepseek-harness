@@ -2610,6 +2610,60 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
         }
         return ok(request, { workspace: { ...workspace } })
       },
+      addFolder: (request) => {
+        const { workspaceId, path } = request.payload
+        const workspace = workspaces.find(w => w.workspaceId === workspaceId)
+        if (workspace === undefined) {
+          return err(request, {
+            code: 'workspace-not-found',
+            message: `no workspace ${workspaceId}`,
+            details: { workspaceId },
+          })
+        }
+        const folders = workspace.folders ?? []
+        if (path === workspace.path || folders.includes(path)) {
+          return ok(request, { workspace: { ...workspace, folders: [...folders] } })
+        }
+        const owner = workspaces.find(other =>
+          other.workspaceId !== workspaceId
+          && (other.path === path || (other.folders ?? []).includes(path)))
+        if (owner !== undefined) {
+          return err(request, {
+            code: 'workspace-folder-conflict',
+            message: `cannot add folder '${path}': already owned by workspace '${owner.workspaceId}'`,
+            details: { path, workspaceId: owner.workspaceId },
+          })
+        }
+        workspace.folders = [...folders, path]
+        workspace.updatedAt = new Date().toISOString()
+        emitHost({ type: 'host/workspace-changed', workspace: { ...workspace } })
+        return ok(request, { workspace: { ...workspace } })
+      },
+      removeFolder: (request) => {
+        const { workspaceId, path } = request.payload
+        const workspace = workspaces.find(w => w.workspaceId === workspaceId)
+        if (workspace === undefined) {
+          return err(request, {
+            code: 'workspace-not-found',
+            message: `no workspace ${workspaceId}`,
+            details: { workspaceId },
+          })
+        }
+        if (path === workspace.path) {
+          return err(request, {
+            code: 'workspace-folder-primary',
+            message: `cannot remove folder '${path}': it is the workspace primary directory`,
+            details: { path },
+          })
+        }
+        const folders = workspace.folders ?? []
+        if (folders.includes(path)) {
+          workspace.folders = folders.filter(folder => folder !== path)
+          workspace.updatedAt = new Date().toISOString()
+          emitHost({ type: 'host/workspace-changed', workspace: { ...workspace } })
+        }
+        return ok(request, { workspace: { ...workspace } })
+      },
       delete: (request) => {
         const { workspaceId } = request.payload
         const index = workspaces.findIndex(workspace => workspace.workspaceId === workspaceId)
@@ -3101,6 +3155,8 @@ export class FixtureApiClient extends AbstractApiClient {
       case 'workspace.list': return this.api.workspace.list(request)
       case 'workspace.create': return this.api.workspace.create(request)
       case 'workspace.rename': return this.api.workspace.rename(request)
+      case 'workspace.addFolder': return this.api.workspace.addFolder(request)
+      case 'workspace.removeFolder': return this.api.workspace.removeFolder(request)
       case 'workspace.delete': return this.api.workspace.delete(request)
       case 'workspace.insertBefore': return this.api.workspace.insertBefore(request)
       case 'workspace.insertSessionBefore': return this.api.workspace.insertSessionBefore(request)
