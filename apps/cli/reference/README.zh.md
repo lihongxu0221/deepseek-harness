@@ -74,7 +74,7 @@ dsh web --help
 
 ## 打包桌面可执行文件
 
-`scripts/build-web-exe.ts` 把同一个 `web` profile 部署到 `dist-exe/dsh-web-<platform>-<arch>/`，并在其中放入薄启动器 `dsh-web`，由它导入磁盘上的 `lib/packaged-web-bin.js`；当辅助程序把 exe 当作 Node spawn、且额外参数是已存在的 `.js`/`.cjs`/`.mjs` 时，则导入该脚本。Web GUI 不能打成单个 pkg 快照，因为 profile 模块回退需要真实的包目录。双击启动器会打开 GUI，在 Edge 或 Chrome 的应用模式窗口中打开回环 URL，并把可执行文件所在目录当作调用目录，这样资源管理器的进程 cwd 就不会是 `System32`。请保持整个文件夹完整。目标机器不需要安装系统 Node.js 或 Python：启动器内嵌 Node，`node_modules/` 随文件夹一起分发。Windows 构建会把启动器标成 GUI 子系统，资源管理器不会再打开控制台。闪窗报告启动进度，随后由托盘图标接管生命周期。关闭 Chromium 窗口只是隐藏界面。右键托盘图标可显示主窗口、启动或停止 Web 服务、打开系统设置（`#settings`），或退出。macOS/Linux 关闭应用窗口或控制台即可停止。JSON-RPC 的 `dsh-jsonrpc-agent-pkg` 可执行文件是另一个产品，仍然走标准输入输出。该宿主见 [Windows 闪窗与托盘 Agent Note](../../../.agents/notes/implemented/feature/2026-08-19-windows-packaged-desktop-tray.md)。
+`scripts/build-web-exe.ts` 把同一个 `web` profile 部署到 `dist-exe/dsh-web-<platform>-<arch>/`，并在其中放入薄启动器 `dsh-web`，由它导入磁盘上的 `lib/packaged-web-bin.js`；当辅助程序把 exe 当作 Node spawn、且额外参数是已存在的 `.js`/`.cjs`/`.mjs` 时，则导入该脚本。Web GUI 不能打成单个 pkg 快照，因为 profile 模块回退需要真实的包目录。双击启动器会打开 GUI，在 Edge 或 Chrome 的应用模式窗口中打开回环 URL，并把可执行文件所在目录当作调用目录，这样资源管理器的进程 cwd 就不会是 `System32`。请保持整个文件夹完整。目标机器不需要安装系统 Node.js 或 Python：启动器内嵌 Node，`node_modules/` 随文件夹一起分发。Windows 构建会把启动器标成 GUI 子系统，资源管理器不会再打开控制台。闪窗报告启动进度，随后由托盘图标接管生命周期。关闭 Chromium 窗口只是隐藏界面。右键托盘图标可显示主窗口、用默认浏览器打开监听 URL、启动或停止 Web 服务、打开系统设置（`#settings`），或退出。macOS/Linux 关闭应用窗口或控制台即可停止。JSON-RPC 的 `dsh-jsonrpc-agent-pkg` 可执行文件是另一个产品，仍然走标准输入输出。该宿主见 [Windows 闪窗与托盘 Agent Note](../../../.agents/notes/implemented/feature/2026-08-19-windows-packaged-desktop-tray.md)。
 
 Windows：`build-exe.bat` 或 `pnpm run build:web-exe -- --targets=node24-win-x64`。
 

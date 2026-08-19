@@ -137,8 +137,29 @@ $bar.Value = 8
 $bar.Style = [System.Windows.Forms.ProgressBarStyle]::Continuous
 $splash.Controls.Add($bar)
 
+function BrowseHost {
+  $bound = [string]$script:ListenHost
+  if ($bound -ne '0.0.0.0') { return $bound }
+  try {
+    foreach ($addr in [System.Net.Dns]::GetHostAddresses([System.Net.Dns]::GetHostName())) {
+      if ($addr.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetwork) {
+        $text = [string]$addr
+        if ($text -ne '127.0.0.1' -and $text -ne '0.0.0.0') { return $text }
+      }
+    }
+  } catch {
+    # No LAN address is available; open loopback instead of http://0.0.0.0.
+  }
+  return '127.0.0.1'
+}
+
+function ListenUrl {
+  return ('http://{0}:{1}' -f (BrowseHost), $script:ListenPort)
+}
+
 $menu = New-Object System.Windows.Forms.ContextMenuStrip
 $itemShow = $menu.Items.Add((T '显示主界面' 'Show main window'))
+$itemOpenUrl = $menu.Items.Add((T '打开 http://127.0.0.1:3080' 'Open http://127.0.0.1:3080'))
 $itemStart = $menu.Items.Add((T '启动服务' 'Start service'))
 $itemStop = $menu.Items.Add((T '停止服务' 'Stop service'))
 $itemRestart = $menu.Items.Add((T '重启服务' 'Restart service'))
@@ -149,6 +170,9 @@ $itemSettings = $menu.Items.Add((T '系统设置' 'Settings'))
 $itemExit = $menu.Items.Add((T '退出' 'Exit'))
 
 function SyncMenu {
+  $url = ListenUrl
+  $itemOpenUrl.Text = (T "打开 $url" "Open $url")
+  $itemOpenUrl.Enabled = [bool]$script:Running
   $itemStart.Enabled = -not $script:Running
   $itemStop.Enabled = [bool]$script:Running
   $itemRestart.Enabled = [bool]$script:Running
@@ -265,6 +289,14 @@ function ShowListenDialog {
 }
 
 $itemShow.add_Click({ Emit @{ type = 'show' } })
+$itemOpenUrl.add_Click({
+  try {
+    $url = ListenUrl
+    if ($url -match '^http://') { Start-Process $url }
+  } catch {
+    # Opening the default browser must not tear down the tray host.
+  }
+})
 $itemStart.add_Click({ Emit @{ type = 'start' } })
 $itemStop.add_Click({ Emit @{ type = 'stop' } })
 $itemRestart.add_Click({ Emit @{ type = 'restart' } })
@@ -322,6 +354,7 @@ function HandleLine([string]$line) {
       if ($null -ne $msg.host -and [string]$msg.host -ne '') { $script:ListenHost = [string]$msg.host }
       $nextPort = 0
       if ([int]::TryParse([string]$msg.port, [ref]$nextPort)) { $script:ListenPort = $nextPort }
+      SyncMenu
     }
     'error' {
       $text = PickText $msg
