@@ -23,8 +23,10 @@ const ENTRY_BIN = 'lib/packaged-web-bin.js'
 /** Thin pkg launcher built from the workspace CLI package, not from the deploy tree. */
 /** Thin pkg launcher. Must be CommonJS; Node SEA embeds it via embedderRunCjs. */
 const LAUNCHER_BIN = join(root, 'apps', 'cli', 'packaged-web-launcher.cjs')
-/** Whale `.ico` rasterized from `apps/web/public/favicon.svg`; copied beside the Windows launcher. */
+/** Stopped (black) whale `.ico`; copied beside the Windows launcher. */
 const DESKTOP_ICON = join(root, 'apps', 'cli', 'assets', 'dsh-web.ico')
+/** Running (DeepSeek 500 blue) whale `.ico`. */
+const DESKTOP_RUNNING_ICON = join(root, 'apps', 'cli', 'assets', 'dsh-web-running.ico')
 const OUTPUT_BASENAME = 'dsh-web'
 const LAUNCHER_NAME = 'dsh-web'
 /** Default Node major; SEA mode requires at least Node 22. */
@@ -481,15 +483,18 @@ class WebExeBuild {
       throw new Error(`build-web-exe: launcher ${launcher} is missing after the pkg run; inspect ${product}.`)
     }
     if (target.platform === 'win') {
-      if (!existsSync(DESKTOP_ICON)) {
-        throw new Error(`build-web-exe: missing Windows desktop icon ${DESKTOP_ICON}`)
+      if (!existsSync(DESKTOP_ICON) || !existsSync(DESKTOP_RUNNING_ICON)) {
+        throw new Error(`build-web-exe: missing Windows desktop icons ${DESKTOP_ICON} / ${DESKTOP_RUNNING_ICON}`)
       }
       const iconDest = join(product, 'dsh-web.ico')
+      const runningDest = join(product, 'dsh-web-running.ico')
       if (this.cli.dryRun) {
         console.log(`build-web-exe: [dry-run] copy ${DESKTOP_ICON} ${iconDest}`)
+        console.log(`build-web-exe: [dry-run] copy ${DESKTOP_RUNNING_ICON} ${runningDest}`)
         console.log(`build-web-exe: [dry-run] set Windows PE subsystem GUI ${launcher}`)
       } else {
         await copyFile(DESKTOP_ICON, iconDest)
+        await copyFile(DESKTOP_RUNNING_ICON, runningDest)
         setWindowsPeSubsystem(launcher, 'gui')
         console.log(`build-web-exe: Windows PE subsystem GUI: ${launcher}`)
       }

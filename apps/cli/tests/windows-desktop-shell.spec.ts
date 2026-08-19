@@ -66,7 +66,10 @@ describe('windows desktop shell protocol', () => {
     expect(source).toContain('$script:ListenForm.TopMost = $true')
     expect(source).toContain('function LoadDesktopIcon')
     expect(source).toContain('$env:DSH_WEB_ICON')
+    expect(source).toContain('$env:DSH_WEB_ICON_RUNNING')
     expect(source).toContain("'dsh-web.ico'")
+    expect(source).toContain("'dsh-web-running.ico'")
+    expect(source).toContain('$script:Notify.Icon = $(if ($script:Running) { $script:IconRunning } else { $script:IconStopped })')
     expect(source).toContain('$splash.ShowInTaskbar = $false')
     expect(source).toContain('$script:ListenForm.ShowInTaskbar = $false')
     expect(source).toContain('[System.Windows.Forms.Application]::Run($hidden)')
@@ -84,10 +87,15 @@ describe('windows desktop shell protocol', () => {
 })
 
 describe('desktop whale icon', () => {
-  it('ships an ICO with the Windows magic header', () => {
-    const ico = readFileSync(fileURLToPath(new URL('../assets/dsh-web.ico', import.meta.url)))
-    expect(ico.subarray(0, 4).equals(Buffer.from([0, 0, 1, 0]))).toBe(true)
+  it('ships stopped and running ICOs with the Windows magic header', () => {
+    const magic = Buffer.from([0, 0, 1, 0])
+    const stopped = readFileSync(fileURLToPath(new URL('../assets/dsh-web.ico', import.meta.url)))
+    const running = readFileSync(fileURLToPath(new URL('../assets/dsh-web-running.ico', import.meta.url)))
+    expect(stopped.subarray(0, 4).equals(magic)).toBe(true)
+    expect(running.subarray(0, 4).equals(magic)).toBe(true)
+    expect(stopped.equals(running)).toBe(false)
     expect(resolveDesktopIconPath('D:\\missing\\dsh-web.exe')).toMatch(/dsh-web\.ico$/i)
+    expect(resolveDesktopIconPath('D:\\missing\\dsh-web.exe', 'dsh-web-running.ico')).toMatch(/dsh-web-running\.ico$/i)
   })
 })
 
@@ -149,6 +157,7 @@ describe('startWindowsDesktopShell', () => {
     expect(spawned[0]?.env.DSH_WEB_PARENT_PID).toBe('4242')
     expect(spawned[0]?.env.DSH_WEB_EXE).toBe('D:\\dist\\dsh-web.exe')
     expect(spawned[0]?.env.DSH_WEB_ICON).toMatch(/dsh-web\.ico$/i)
+    expect(spawned[0]?.env.DSH_WEB_ICON_RUNNING).toMatch(/dsh-web-running\.ico$/i)
 
     const commands: ShellToHost[] = []
     shell.onCommand((command) => { commands.push(command) })

@@ -91,33 +91,45 @@ function FocusPid([int]$ProcessId) {
   }
 }
 
-function LoadDesktopIcon {
+function IconCandidates([string]$filename, [string]$explicit) {
   $candidates = @()
-  if ($env:DSH_WEB_ICON) { $candidates += [string]$env:DSH_WEB_ICON }
+  if ($explicit) { $candidates += $explicit }
   if ($env:DSH_WEB_EXE) {
     $exeDir = [System.IO.Path]::GetDirectoryName([string]$env:DSH_WEB_EXE)
-    if ($exeDir) { $candidates += (Join-Path $exeDir 'dsh-web.ico') }
+    if ($exeDir) { $candidates += (Join-Path $exeDir $filename) }
   }
+  return $candidates
+}
+
+function LoadDesktopIcon([string]$filename, [string]$explicit) {
   $small = [System.Windows.Forms.SystemInformation]::SmallIconSize
-  foreach ($path in $candidates) {
+  foreach ($path in (IconCandidates $filename $explicit)) {
     if (-not $path -or -not (Test-Path -LiteralPath $path)) { continue }
     try {
       return New-Object System.Drawing.Icon($path, $small.Width, $small.Height)
     } catch {
-      # Unreadable ico files fall through to the exe associated icon.
+      # Unreadable ico files fall through to the next candidate.
     }
   }
-  if ($env:DSH_WEB_EXE) {
-    try {
-      $extracted = [System.Drawing.Icon]::ExtractAssociatedIcon($env:DSH_WEB_EXE)
-      if ($extracted) { return $extracted }
-    } catch {
-      # ExtractAssociatedIcon fails on some paths; keep SystemIcons.Application.
-    }
-  }
-  return [System.Drawing.SystemIcons]::Application
+  return $null
 }
-$icon = LoadDesktopIcon
+
+$script:IconStopped = LoadDesktopIcon 'dsh-web.ico' ([string]$env:DSH_WEB_ICON)
+$script:IconRunning = LoadDesktopIcon 'dsh-web-running.ico' ([string]$env:DSH_WEB_ICON_RUNNING)
+if ($null -eq $script:IconStopped) {
+  try {
+    if ($env:DSH_WEB_EXE) {
+      $script:IconStopped = [System.Drawing.Icon]::ExtractAssociatedIcon($env:DSH_WEB_EXE)
+    }
+  } catch {
+    # ExtractAssociatedIcon fails on some paths; keep SystemIcons.Application.
+  }
+}
+if ($null -eq $script:IconStopped) {
+  $script:IconStopped = [System.Drawing.SystemIcons]::Application
+}
+if ($null -eq $script:IconRunning) { $script:IconRunning = $script:IconStopped }
+$icon = $script:IconStopped
 
 $splash = New-Object System.Windows.Forms.Form
 $splash.Text = 'DeepSeek Harness'
@@ -194,6 +206,9 @@ function SyncMenu {
   $itemStart.Enabled = -not $script:Running
   $itemStop.Enabled = [bool]$script:Running
   $itemRestart.Enabled = [bool]$script:Running
+  if ($null -ne $script:Notify) {
+    $script:Notify.Icon = $(if ($script:Running) { $script:IconRunning } else { $script:IconStopped })
+  }
 }
 
 function FocusListenForm {
@@ -326,12 +341,12 @@ $itemSettings.add_Click({ Emit @{ type = 'settings' } })
 $itemExit.add_Click({ Emit @{ type = 'quit' } })
 SyncMenu
 
-$notify = New-Object System.Windows.Forms.NotifyIcon
-$notify.Icon = $icon
-$notify.Text = 'DeepSeek Harness'
-$notify.ContextMenuStrip = $menu
-$notify.Visible = $true
-$notify.add_MouseUp({
+$script:Notify = New-Object System.Windows.Forms.NotifyIcon
+$script:Notify.Icon = $script:IconStopped
+$script:Notify.Text = 'DeepSeek Harness'
+$script:Notify.ContextMenuStrip = $menu
+$script:Notify.Visible = $true
+$script:Notify.add_MouseUp({
   param($sender, $e)
   try {
     if ($e.Button -eq [System.Windows.Forms.MouseButtons]::Left) {
@@ -362,7 +377,7 @@ function HandleLine([string]$line) {
     }
     'ready' {
       $splash.Hide()
-      $notify.Visible = $true
+      $script:Notify.Visible = $true
     }
     'state' {
       $script:Running = [bool]$msg.running
@@ -378,10 +393,10 @@ function HandleLine([string]$line) {
       $text = PickText $msg
       if ($text) { $label.Text = $text }
       $splash.Hide()
-      $notify.Visible = $true
-      $notify.BalloonTipTitle = 'DeepSeek Harness'
-      $notify.BalloonTipText = $text
-      $notify.ShowBalloonTip(4000)
+      $script:Notify.Visible = $true
+      $script:Notify.BalloonTipTitle = 'DeepSeek Harness'
+      $script:Notify.BalloonTipText = $text
+      $script:Notify.ShowBalloonTip(4000)
     }
     'focus' {
       $focusPid = 0
@@ -389,7 +404,7 @@ function HandleLine([string]$line) {
       FocusPid $focusPid
     }
     'quit' {
-      $notify.Visible = $false
+      $script:Notify.Visible = $false
       [System.Windows.Forms.Application]::Exit()
     }
   }
@@ -444,11 +459,11 @@ $hidden.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::FixedToolWindo
 $hidden.Size = New-Object System.Drawing.Size(0, 0)
 $hidden.add_Shown({ $hidden.Hide() })
 $hidden.add_FormClosed({
-  $notify.Visible = $false
-  $notify.Dispose()
+  $script:Notify.Visible = $false
+  $script:Notify.Dispose()
 })
 
 $splash.Show()
 [System.Windows.Forms.Application]::Run($hidden)
-$notify.Visible = $false
-$notify.Dispose()
+$script:Notify.Visible = $false
+$script:Notify.Dispose()
