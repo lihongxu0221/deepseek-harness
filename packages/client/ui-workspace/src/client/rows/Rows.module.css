@@ -149,11 +149,11 @@
 }
 
 
-/* Project leading slots: expand arrow, then folder. The arrow keeps its slot
-   while idle so the folder does not shift when hover reveals it. */
-.projectRow .chevron { visibility: hidden; }
+/* Project leading slots: expand arrow, then folder. The arrow is out of flow
+   while idle so it does not reserve space. */
+.projectRow .chevron { display: none; }
 .projectRow:hover .chevron,
-.projectRow.menuOpen .chevron { visibility: visible; }
+.projectRow.menuOpen .chevron { display: inline-flex; }
 
 /* Expand arrow (filled triangle): points right closed, rotates to point down open. */
 .arrow {
