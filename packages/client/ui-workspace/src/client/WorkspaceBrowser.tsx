@@ -218,6 +218,7 @@ type SessionTreeProps = Pick<
   WorkspaceBrowserProps,
   'useSessions' | 'startSession' | 'open' | 'forkSession'
   | 'insertWorkspaceBefore' | 'insertSessionBefore' | 't'
+  | 'useDirectoryFlow'
 > & {
   workspaces: readonly WorkspaceView[]
   /** Explicit persisted zero-or-five-session state by Workspace group. */
@@ -236,6 +237,14 @@ type SessionTreeProps = Pick<
   archivedSessionIds: readonly SessionNode['id'][]
   /** Open the browser-owned project editor for a real Workspace group. */
   onEditRequest: (workspaceId: WorkspaceId) => void
+  /** Open the browser-owned rename dialog for a real Workspace group. */
+  onRenameRequest: (workspaceId: WorkspaceId, currentTitle: string) => void
+  /** Open the browser-owned delete-confirmation dialog for a real Workspace group. */
+  onDeleteRequest: (workspaceId: WorkspaceId, currentTitle: string) => void
+  /** Start the directory flow to add an extra folder to this Workspace. */
+  onAddFolderRequest: (workspaceId: WorkspaceId) => void
+  /** Drop one extra folder from this Workspace. */
+  onRemoveFolderRequest: (workspaceId: WorkspaceId, path: string) => void
   /** Open the browser-owned session rename dialog. */
   onSessionRename: (sessionId: SessionNode['id'], currentTitle: string) => void
   /** Archive a session (row menu action; the row disappears on the state echo). */
@@ -247,12 +256,13 @@ type SessionTreeProps = Pick<
 /** The scrolling session tree; unmounting drops the sessions subscription and expand-all state. */
 function SessionTree({
   useSessions, startSession, open, forkSession, workspaces, archivedSessionIds,
-  onEditRequest,
-  onSessionRename, onSessionArchive,
+  onEditRequest, onRenameRequest, onDeleteRequest, onAddFolderRequest, onRemoveFolderRequest,
+  onSessionRename, onSessionArchive, useDirectoryFlow,
   insertWorkspaceBefore, insertSessionBefore, orderBy,
   groupExpansion, setGroupExpanded,
   sessionOrderByAccount, sessionUpdatedAtByAccount, syncSessionOrderAccount, setSessionOrder, t,
 }: SessionTreeProps) {
+  const folderFlowAvailable = useDirectoryFlow(occupied => occupied)
   const list = useSessions(s => s)
   const current = list.current
   const [expandedSessionGroups, setExpandedSessionGroups] = useState<string[]>([])
@@ -470,6 +480,26 @@ function SessionTree({
                     edit: () => {
                     /* v8 ignore next -- narrowing guard: the actions object exists only for real-workspace groups. */
                       if (group.workspaceId !== undefined) onEditRequest(group.workspaceId)
+                    },
+                    rename: () => {
+                    /* v8 ignore next -- narrowing guard: the actions object exists only for real-workspace groups. */
+                      if (group.workspaceId !== undefined) onRenameRequest(group.workspaceId, group.label)
+                    },
+                    delete: () => {
+                    /* v8 ignore next -- narrowing guard: the actions object exists only for real-workspace groups. */
+                      if (group.workspaceId !== undefined) onDeleteRequest(group.workspaceId, group.label)
+                    },
+                    ...folderFlowAvailable
+                      ? {
+                        addFolder: () => {
+                        /* v8 ignore next -- narrowing guard: the actions object exists only for real-workspace groups. */
+                          if (group.workspaceId !== undefined) onAddFolderRequest(group.workspaceId)
+                        },
+                      }
+                      : {},
+                    removeFolder: (path) => {
+                    /* v8 ignore next -- narrowing guard: the actions object exists only for real-workspace groups. */
+                      if (group.workspaceId !== undefined) onRemoveFolderRequest(group.workspaceId, path)
                     },
                   }}
               />
@@ -795,6 +825,8 @@ export function WorkspaceBrowser({
   // states; the menu anchors on this button).
   const [wsPickerOpen, setWsPickerOpen] = useState(false)
   const [addFolderTarget, setAddFolderTarget] = useState<WorkspaceId | null>(null)
+  /** Row-menu Add folder commits immediately; the project editor keeps the pick in its draft. */
+  const addFolderImmediateRef = useRef(false)
   // Survives `WorkspacePickFlow` calling `onClose` when it raises the directory
   // flow so adoption still targets the Workspace that requested the folder.
   const addFolderTargetRef = useRef<WorkspaceId | null>(null)
@@ -868,6 +900,34 @@ export function WorkspaceBrowser({
     }
   }, [normalizedQuery, searchSessions])
 
+  // Rename dialog (browser-owned so it outlives row unmounts during collapse).
+  const [renameTarget, setRenameTarget] = useState<{ workspaceId: WorkspaceId; currentTitle: string } | null>(null)
+  const [renameDraft, setRenameDraft] = useState('')
+  const [renaming, setRenaming] = useState(false)
+  const [renameError, setRenameError] = useState<string | null>(null)
+  const renameTrimmed = renameDraft.trim()
+  const renameDuplicate = renameTarget !== null && renameTrimmed !== '' && renameTrimmed !== renameTarget.currentTitle
+    && workspaces.some(w => w.title === renameTrimmed)
+  const renameBlocked = renaming || renameTrimmed === ''
+    || renameTarget === null || renameTrimmed === renameTarget.currentTitle || renameDuplicate
+  const closeRename = () => {
+    if (renaming) return
+    setRenameTarget(null)
+    setRenameError(null)
+  }
+  const confirmRename = () => {
+    if (renameBlocked) return
+    setRenaming(true)
+    setRenameError(null)
+    renameWorkspace(renameTarget.workspaceId, renameTrimmed).then(() => {
+      setRenaming(false)
+      setRenameTarget(null)
+    }).catch((reason: unknown) => {
+      setRenaming(false)
+      setRenameError(reason instanceof Error ? reason.message : String(reason))
+    })
+  }
+
   // Project editor (browser-owned so it outlives row unmounts during collapse).
   const [editTarget, setEditTarget] = useState<{
     workspaceId: WorkspaceId
@@ -882,15 +942,18 @@ export function WorkspaceBrowser({
   const editTrimmed = editTitle.trim()
   const editDuplicate = editTarget !== null && editTrimmed !== '' && editTrimmed !== editTarget.currentTitle
     && workspaces.some(workspace => workspace.title === editTrimmed)
+  const editorPickingFolder = addFolderTarget !== null && !addFolderImmediateRef.current
   const closeEdit = () => {
-    if (editSaving || addFolderTarget !== null) return
+    if (editSaving || editorPickingFolder) return
     setEditTarget(null)
     setEditError(null)
-    addFolderTargetRef.current = null
-    setAddFolderTarget(null)
+    if (!addFolderImmediateRef.current) {
+      addFolderTargetRef.current = null
+      setAddFolderTarget(null)
+    }
   }
   const confirmEdit = () => {
-    if (editTarget === null || editSaving || addFolderTarget !== null || editTrimmed === '' || editDuplicate) return
+    if (editTarget === null || editSaving || editorPickingFolder || editTrimmed === '' || editDuplicate) return
     const workspaceId = editTarget.workspaceId
     const original = new Set(editTarget.originalFolders)
     const next = new Set(editFolders)
@@ -1104,14 +1167,17 @@ export function WorkspaceBrowser({
           createWorkspace={async ({ path }) => {
             const target = addFolderTargetRef.current
             if (target !== null) {
-              setEditFolders((folders) => {
-                if (path === editTarget?.path || folders.includes(path)) return folders
-                return [...folders, path]
-              })
-              const existing = workspaces.find(workspace => workspace.workspaceId === target)
-              /* v8 ignore next -- the editor is only open for a listed Workspace. */
-              if (existing === undefined) throw new Error(`unknown workspace "${target}"`)
-              return existing
+              if (editTarget !== null && !addFolderImmediateRef.current) {
+                setEditFolders((folders) => {
+                  if (path === editTarget.path || folders.includes(path)) return folders
+                  return [...folders, path]
+                })
+                const existing = workspaces.find(workspace => workspace.workspaceId === target)
+                /* v8 ignore next -- the editor is only open for a listed Workspace. */
+                if (existing === undefined) throw new Error(`unknown workspace "${target}"`)
+                return existing
+              }
+              return addFolder(target, path)
             }
             return createWorkspace({ path })
           }}
@@ -1121,6 +1187,7 @@ export function WorkspaceBrowser({
             onCancel: () => {
               owner.onCancel()
               addFolderTargetRef.current = null
+              addFolderImmediateRef.current = false
               setAddFolderTarget(null)
             },
           })}
@@ -1129,6 +1196,7 @@ export function WorkspaceBrowser({
           onPick={(workspaceId) => {
             const addingFolder = addFolderTargetRef.current !== null
             addFolderTargetRef.current = null
+            addFolderImmediateRef.current = false
             setWsPickerOpen(false)
             setAddFolderTarget(null)
             if (!addingFolder && editTarget === null) startSession(workspaceId)
@@ -1221,9 +1289,63 @@ export function WorkspaceBrowser({
                   setEditFolders([...(workspace.folders ?? [])])
                   setEditError(null)
                 }}
+                onRenameRequest={(workspaceId, currentTitle) => {
+                  setRenameTarget({ workspaceId, currentTitle })
+                  setRenameDraft(currentTitle)
+                  setRenameError(null)
+                }}
+                onDeleteRequest={(workspaceId, title) => {
+                  setDeleteTarget({ workspaceId, title })
+                  setDeleteError(null)
+                }}
+                onAddFolderRequest={(workspaceId) => {
+                  addFolderImmediateRef.current = true
+                  addFolderTargetRef.current = workspaceId
+                  setWsPickerOpen(false)
+                  setAddFolderTarget(workspaceId)
+                }}
+                onRemoveFolderRequest={(workspaceId, path) => {
+                  void removeFolder(workspaceId, path)
+                }}
+                useDirectoryFlow={useDirectoryFlow}
               />
             ))}
       </div>
+
+      <Modal
+        open={renameTarget !== null}
+        onClose={closeRename}
+        closeLabel={t('close')}
+        title={t('rename.workspace.title')}
+        footer={(
+          <>
+            <Button variant="outline" disabled={renaming} onClick={closeRename}>{t('cancel')}</Button>
+            <Button variant="primary" disabled={renameBlocked} onClick={confirmRename}>{t('rename')}</Button>
+          </>
+        )}
+      >
+        <input
+          className={css.renameInput}
+          value={renameDraft}
+          aria-label={t('field.workspaceName')}
+          autoFocus
+          disabled={renaming}
+          onFocus={(e) => { e.target.select() }}
+          onChange={(e) => { setRenameDraft(e.target.value); setRenameError(null) }}
+          onCompositionStart={() => { composingRef.current = true }}
+          onCompositionEnd={() => { composingRef.current = false }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !composingRef.current) {
+              e.preventDefault()
+              confirmRename()
+            }
+          }}
+        />
+        {renameDuplicate && (
+          <div className={css.renameError} role="alert">{t('conflict.named', { name: renameTrimmed })}</div>
+        )}
+        {renameError !== null && <div className={css.renameError} role="alert">{renameError}</div>}
+      </Modal>
 
       <WorkspaceEditDialog
         open={editTarget !== null}
@@ -1248,6 +1370,7 @@ export function WorkspaceBrowser({
         }}
         onAddFolder={() => {
           if (editTarget === null || editSaving) return
+          addFolderImmediateRef.current = false
           addFolderTargetRef.current = editTarget.workspaceId
           setWsPickerOpen(false)
           setAddFolderTarget(editTarget.workspaceId)

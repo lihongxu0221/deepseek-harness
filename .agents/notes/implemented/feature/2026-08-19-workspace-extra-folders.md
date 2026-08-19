@@ -14,7 +14,7 @@ A Workspace keeps a primary `path` (new-session cwd) and an extra `folders` list
 
 Session membership matches a header cwd against the primary path or any extra folder. New sessions created from a Workspace still use the primary path as cwd. `workspace-write` policy resolution reads the mounted workspace registry and sets `SandboxExecutionPolicy.extraRoots` to every other owned directory, so a session whose cwd is an extra folder still writes the primary. `writableRoots`, Seatbelt, Landlock, bwrap, and Windows ACL standing grants all consume that list; a later `addFolder` receives an ACE on the next confine.
 
-The sidebar Workspace row menu **Edit project** opens a dialog for the display name, extra source folders, and registration removal. **Add folder** reuses the same directory-flow hole as adding a Workspace; extra folders stay in the draft until Save. The hover card lists every owned directory.
+The sidebar Workspace row menu keeps **Edit project**, **Add folder…**, **Remove folder**, **Rename**, and **Delete workspace**. **Edit project** opens a dialog for the display name, extra source folders, and registration removal; extra folders stay in that draft until Save. **Add folder…** on the row reuses the same directory-flow hole as adding a Workspace and commits immediately. The hover card lists every owned directory.
 
 ## Alternatives considered
 

@@ -983,6 +983,33 @@ describe('WorkspaceBrowser', () => {
     }
   })
 
+  it('renames a workspace through the row menu dialog', async () => {
+    let resolveRename!: () => void
+    const renameWorkspace = vi.fn(() => new Promise<void>((resolve) => { resolveRename = resolve }))
+    mount({
+      useWorkspaces: hook(workspaceState([workspace('alpha', [], 'Alpha'), workspace('beta', [], 'Beta')])),
+      renameWorkspace,
+    })
+    fireEvent.click(screen.getByRole('button', { name: '工作区“Alpha”的操作' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '重命名' }))
+    const input = screen.getByLabelText<HTMLInputElement>('工作区名称')
+    expect(input.value).toBe('Alpha')
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: '重命名' }).disabled).toBe(true)
+    fireEvent.change(input, { target: { value: '   ' } })
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: '重命名' }).disabled).toBe(true)
+    fireEvent.change(input, { target: { value: ' Beta ' } })
+    expect(screen.getByRole('alert').textContent).toBe('已存在名为“Beta”的工作区。')
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: '重命名' }).disabled).toBe(true)
+    fireEvent.change(input, { target: { value: 'Gamma' } })
+    fireEvent.click(screen.getByRole('button', { name: '重命名' }))
+    expect(renameWorkspace).toHaveBeenCalledWith(wid('alpha'), 'Gamma')
+    expect(input.disabled).toBe(true)
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.getByRole('dialog')).toBeTruthy()
+    await act(async () => { resolveRename() })
+    expect(screen.queryByRole('dialog', { name: '重命名工作区' })).toBeNull()
+  })
+
   it('edits a workspace through the project editor', async () => {
     let resolveRename!: () => void
     const renameWorkspace = vi.fn(() => new Promise<void>((resolve) => { resolveRename = resolve }))
@@ -1073,8 +1100,7 @@ describe('WorkspaceBrowser', () => {
       deleteWorkspace,
     })
     fireEvent.click(screen.getByRole('button', { name: '工作区“Alpha”的操作' }))
-    fireEvent.click(screen.getByRole('menuitem', { name: '编辑项目' }))
-    fireEvent.click(screen.getByRole('button', { name: '移除本地项目' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '删除工作区' }))
     const dialog = screen.getByRole('dialog', { name: '删除工作区' })
     expect(dialog.textContent).toContain('将把“Alpha”从工作区列表中移除')
     expect(dialog.textContent).toContain('文件夹与会话记录会保留')
@@ -1109,8 +1135,7 @@ describe('WorkspaceBrowser', () => {
       deleteWorkspace,
     })
     fireEvent.click(screen.getByRole('button', { name: '工作区“Alpha”的操作' }))
-    fireEvent.click(screen.getByRole('menuitem', { name: '编辑项目' }))
-    fireEvent.click(screen.getByRole('button', { name: '移除本地项目' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '删除工作区' }))
     fireEvent.click(screen.getByRole('button', { name: '删除工作区' }))
     await waitFor(() => { expect(screen.getByRole('alert').textContent).toBe('storage unavailable') })
     expect(screen.getByRole('dialog', { name: '删除工作区' })).toBeTruthy()
@@ -1128,8 +1153,7 @@ describe('WorkspaceBrowser', () => {
     })
     const open = () => {
       fireEvent.click(screen.getByRole('button', { name: '工作区“Alpha”的操作' }))
-      fireEvent.click(screen.getByRole('menuitem', { name: '编辑项目' }))
-      fireEvent.click(screen.getByRole('button', { name: '移除本地项目' }))
+      fireEvent.click(screen.getByRole('menuitem', { name: '删除工作区' }))
     }
     open()
     fireEvent.click(screen.getByRole('button', { name: '取消' }))
@@ -1172,6 +1196,52 @@ describe('WorkspaceBrowser', () => {
     fireEvent.click(screen.getByRole('button', { name: '保存' }))
     await waitFor(() => { expect(addFolder).toHaveBeenCalledWith(wid('alpha'), '/projects/other') })
     expect(removeFolder).not.toHaveBeenCalled()
+  })
+
+  it('adds an extra folder through the shared directory flow and removes it from the row menu', async () => {
+    let owner: { open: boolean; onPicked: (path: string) => void } | undefined
+    const addFolder = vi.fn(async () => workspace('alpha', []))
+    const removeFolder = vi.fn(async () => workspace('alpha', []))
+    const startSession = vi.fn()
+    const createWorkspace = vi.fn(async () => workspace('created', []))
+    const alpha: WorkspaceView = { ...workspace('alpha', [], 'Alpha'), folders: ['/projects/extra'] }
+    mount({
+      useWorkspaces: hook(workspaceState([alpha])),
+      addFolder,
+      removeFolder,
+      startSession,
+      createWorkspace,
+      renderSlot: ((_name: string, next: { open: boolean; onPicked: (path: string) => void }) => {
+        owner = next
+        return next.open ? <div data-testid="directory-flow" /> : null
+      }) as never,
+    })
+    fireEvent.click(screen.getByRole('button', { name: '工作区“Alpha”的操作' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '添加文件夹…' }))
+    await waitFor(() => { expect(screen.getByTestId('directory-flow')).toBeTruthy() })
+    await act(async () => { owner!.onPicked('/projects/more') })
+    expect(addFolder).toHaveBeenCalledWith(wid('alpha'), '/projects/more')
+    expect(createWorkspace).not.toHaveBeenCalled()
+    expect(startSession).not.toHaveBeenCalled()
+    expect(screen.queryByTestId('directory-flow')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: '工作区“Alpha”的操作' }))
+    const remove = screen.getByRole('menuitem', { name: '移除文件夹' })
+    fireEvent.mouseEnter(remove.parentElement as HTMLElement)
+    fireEvent.focus(remove)
+    fireEvent.click(screen.getByRole('menuitem', { name: '/projects/extra' }))
+    expect(removeFolder).toHaveBeenCalledWith(wid('alpha'), '/projects/extra')
+  })
+
+  it('omits add-folder from the row menu when no directory-flow occupant is composed', () => {
+    mount({
+      useWorkspaces: hook(workspaceState([workspace('alpha', [], 'Alpha')])),
+      useDirectoryFlow: bindSnapshotSelector({ getSnapshot: () => false, subscribe: () => () => {} }),
+    })
+    fireEvent.click(screen.getByRole('button', { name: '工作区“Alpha”的操作' }))
+    expect(screen.queryByRole('menuitem', { name: '添加文件夹…' })).toBeNull()
+    expect(screen.getByRole('menuitem', { name: '重命名' })).toBeTruthy()
+    expect(screen.getByRole('menuitem', { name: '编辑项目' })).toBeTruthy()
   })
 
   it('omits add-folder from the project editor when no directory-flow occupant is composed', () => {

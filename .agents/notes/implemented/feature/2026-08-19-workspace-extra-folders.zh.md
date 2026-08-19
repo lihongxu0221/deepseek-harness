@@ -14,7 +14,7 @@ Workspace 保留主路径 `path`（新建会话的 cwd）以及额外的 `folder
 
 会话归属会把 header cwd 对照主路径或任一额外文件夹。从 Workspace 新建的会话仍以主路径为 cwd。`workspace-write` 策略解析会读取已挂载的 workspace 注册表，并把 `SandboxExecutionPolicy.extraRoots` 设为其余每一个已拥有目录，因此 cwd 落在额外文件夹上的会话仍可写主路径。`writableRoots`、Seatbelt、Landlock、bwrap 以及 Windows ACL 常驻授权都消费该列表；之后的 `addFolder` 会在下一次 confine 时拿到 ACE。
 
-侧边栏 Workspace 行菜单的 **编辑项目** 打开对话框，用于改显示名称、管理额外源文件夹，以及移除该注册。**添加文件夹** 与添加 Workspace 共用同一目录流 slot；额外文件夹留在草稿中，直到保存。悬停卡片列出该 Workspace 拥有的全部目录。
+侧边栏 Workspace 行菜单保留 **编辑项目**、**添加文件夹…**、**移除文件夹**、**重命名** 和 **删除工作区**。**编辑项目** 打开对话框，用于改显示名称、管理额外源文件夹，以及移除该注册；额外文件夹留在该草稿中，直到保存。行菜单的 **添加文件夹…** 与添加 Workspace 共用同一目录流 slot，并立即提交。悬停卡片列出该 Workspace 拥有的全部目录。
 
 ## Alternatives considered
 
