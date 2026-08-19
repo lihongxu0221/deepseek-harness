@@ -139,7 +139,7 @@ describe('WorkspaceBrowser', () => {
       useWorkspaces: hook(workspaceState([workspace('alpha', ['alpha-s']), workspace('beta', ['beta-s'])])),
     })
     expect(screen.getByRole('button', { name: '折叠或展开工作区' })).toBeTruthy()
-    expect(screen.getByText('最近会话')).toBeTruthy()
+    expect(screen.getByRole('button', { name: '折叠或展开最近会话' })).toBeTruthy()
     expect(screen.getByText('alpha')).toBeTruthy()
     // Workspace-group Sessions stay hidden while their group is folded;
     // Recents still lists the same sessions as a flat tree.
@@ -167,6 +167,7 @@ describe('WorkspaceBrowser', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: '按工作区' }))
     expect(b.store.getSnapshot().groupBy).toBe('workspace')
     expect(screen.getByRole('button', { name: '折叠或展开工作区' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '折叠或展开最近会话' })).toBeTruthy()
 
     // Escape closes the menu without picking.
     fireEvent.click(screen.getByRole('button', { name: '视图选项' }))
@@ -693,7 +694,7 @@ describe('WorkspaceBrowser', () => {
     vi.useFakeTimers()
     try {
       const b = mount()
-      expect(screen.getByText('暂无会话')).toBeTruthy()
+      expect(screen.getByText('暂无工作区')).toBeTruthy()
       expect(screen.getByText('暂无最近会话')).toBeTruthy()
       b.store.actions.setGroupBy('flat')
       rerender(b, {})
@@ -793,8 +794,9 @@ describe('WorkspaceBrowser', () => {
     })
     fireEvent.dragStart(source, { dataTransfer: dragData() })
     fireDrag(firstSection, 'dragOver', 105)
-    expect(firstSection.parentElement?.className).toContain('listTopDropActive')
-    const marker = firstSection.parentElement?.previousElementSibling
+    const list = firstSection.closest('[role="tree"]') as HTMLElement
+    expect(list.className).toContain('listTopDropActive')
+    const marker = list.previousElementSibling
     expect(marker?.className).toContain('listTopDropIndicator')
   })
 

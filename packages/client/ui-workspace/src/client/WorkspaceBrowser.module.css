@@ -60,19 +60,6 @@
   margin-right: -4px;
 }
 
-.sectionToggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  margin: 0;
-  padding: 0;
-  border: none;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-  font: inherit;
-}
-
 .sectionLabel {
   flex: none;
   max-width: 45%;
@@ -469,7 +456,7 @@
   right: var(--dsh-session-list-edge-inset);
 }
 
-.listTopDropActive > .workspaceDropBefore:first-child::before {
+.listTopDropActive > .treeSection:first-child > .workspaceDropBefore:first-of-type::before {
   display: none;
 }
 
