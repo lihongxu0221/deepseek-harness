@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-19-workspace-extra-folders.md
-2026-08-19-workspace-extra-folders.md: db1df837fe2f5b1248949a33741d12f541d1b144
-2026-08-19-workspace-extra-folders.zh.md: 91ab0910509fa973d09ef4edb475d4bd3b0952f5
+2026-08-19-workspace-extra-folders.md: be70250c4673270180091c4c7fff510f018d8127
+2026-08-19-workspace-extra-folders.zh.md: f083e277527b96c3928e509e3b8b6739f413dabe

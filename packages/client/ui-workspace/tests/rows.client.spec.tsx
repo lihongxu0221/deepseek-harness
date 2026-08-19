@@ -249,11 +249,8 @@ describe('workspace browser rows', () => {
     expect(screen.getByRole('treeitem').querySelector('[data-state="done"]')).not.toBeNull()
   })
 
-  it('workspace row menu opens on the ellipsis, adds and removes folders, and shows the danger delete row', () => {
-    const onRename = vi.fn()
-    const onDelete = vi.fn()
-    const onAddFolder = vi.fn()
-    const onRemoveFolder = vi.fn()
+  it('workspace row menu opens on the ellipsis and requests the project editor', () => {
+    const onEdit = vi.fn()
     const onToggle = vi.fn()
     const group: GroupNode = {
       key: 'project', workspaceId: wid('project'), cwd: '/projects/project',
@@ -262,30 +259,13 @@ describe('workspace browser rows', () => {
     }
     render(<ProjectRowItem
       group={group} onToggle={onToggle} onCreate={vi.fn()}
-      actions={{ rename: onRename, delete: onDelete, addFolder: onAddFolder, removeFolder: onRemoveFolder }} t={t}
+      actions={{ edit: onEdit }} t={t}
     />)
     fireEvent.click(screen.getByRole('button', { name: '工作区“Project”的操作' }))
-    // Opening the menu neither toggles the group nor renames yet.
     expect(onToggle).not.toHaveBeenCalled()
-    expect(screen.getByRole('menuitem', { name: '删除工作区' }).className).toMatch(/danger/)
-    fireEvent.click(screen.getByRole('menuitem', { name: '添加文件夹…' }))
-    expect(onAddFolder).toHaveBeenCalledOnce()
-    fireEvent.click(screen.getByRole('button', { name: '工作区“Project”的操作' }))
-    const remove = screen.getByRole('menuitem', { name: '移除文件夹' })
-    fireEvent.mouseEnter(remove.parentElement as HTMLElement)
-    fireEvent.focus(remove)
-    fireEvent.click(screen.getByRole('menuitem', { name: '/projects/extra' }))
-    expect(onRemoveFolder).toHaveBeenCalledWith('/projects/extra')
-    fireEvent.click(screen.getByRole('button', { name: '工作区“Project”的操作' }))
-    fireEvent.click(screen.getByRole('menuitem', { name: '重命名' }))
-    expect(onRename).toHaveBeenCalledOnce()
+    fireEvent.click(screen.getByRole('menuitem', { name: '编辑项目' }))
+    expect(onEdit).toHaveBeenCalledOnce()
     expect(screen.queryByRole('menu')).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: '工作区“Project”的操作' }))
-    fireEvent.click(screen.getByRole('menuitem', { name: '删除工作区' }))
-    expect(screen.queryByRole('menu')).toBeNull()
-    expect(onRename).toHaveBeenCalledOnce()
-    expect(onDelete).toHaveBeenCalledOnce()
-    // Escape closes without selecting (Menu onClose path).
     fireEvent.click(screen.getByRole('button', { name: '工作区“Project”的操作' }))
     fireEvent.keyDown(document, { key: 'Escape' })
     expect(screen.queryByRole('menu')).toBeNull()

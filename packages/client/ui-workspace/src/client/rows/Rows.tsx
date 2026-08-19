@@ -1,16 +1,16 @@
 /**
  * Workspace browser tree row components (figma Cell set 14:3080): pure presentational —
  * all data and callbacks arrive via props. Hover swaps (folder->chevron,
- * time->ellipsis, action buttons) are CSS-only. Row ... menus are visual-only
- * except workspace Rename/Delete and session Rename/Fork/Archive; the session
- * and workspace hover cards are suppressed while a menu is open.
+ * time->ellipsis, action buttons) are CSS-only. The workspace row menu opens
+ * the project editor; session Rename/Fork/Archive stay on the row. Hover cards
+ * are suppressed while a menu is open.
  */
 import { useState } from 'react'
 import clsx from 'clsx'
 import {
   HoverCard, IconArchiveOutline20, IconBranchOutline16, IconEditOutline16,
   IconEllipsisOutline16, IconFolderClose16, IconFolderOpen16, IconPlusOutline16,
-  IconTrashOutline16, IconTriangleRightFill14, Menu, StateDot,
+  IconTriangleRightFill14, Menu, StateDot,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { StateDotState } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { WorkspaceBrowserProps } from '../contract/slots.ts'
@@ -117,10 +117,7 @@ export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, t }: 
   onCreate: () => void
   /** Real-Workspace actions; absent for the ungrouped bucket (no menu shown). */
   actions?: {
-    rename: () => void
-    delete: () => void
-    addFolder?: () => void
-    removeFolder?: (path: string) => void
+    edit: () => void
   } | undefined
   /** Present only for real Workspace rows in the grouped view. */
   drag?: WorkspaceRowDragProps | undefined
@@ -131,20 +128,8 @@ export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, t }: 
   const label = row.workspaceId === undefined ? t('group.ungrouped') : row.label
   const active = group.expanded && group.containsCurrent
   const [menuOpen, setMenuOpen] = useState(false)
-  const extraFolders = group.folders
   const workspaceMenuItems = [
-    ...actions?.addFolder === undefined
-      ? []
-      : [{ id: 'add-folder', label: t('menu.addFolder'), icon: <IconPlusOutline16 /> }],
-    ...actions?.removeFolder === undefined || extraFolders.length === 0
-      ? []
-      : [{
-        id: 'remove-folder',
-        label: t('menu.removeFolder'),
-        submenu: extraFolders.map(folder => ({ id: `remove:${folder}`, label: folder })),
-      }],
-    { id: 'rename', label: t('rename'), icon: <IconEditOutline16 /> },
-    { id: 'delete', label: t('delete.workspace'), icon: <IconTrashOutline16 />, danger: true },
+    { id: 'edit', label: t('menu.editProject'), icon: <IconEditOutline16 /> },
   ]
   const ownRow = (
     <div
@@ -181,18 +166,7 @@ export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, t }: 
               setMenuOpen(false)
               // Unknown ids leave before the dispatch: a future menu row must
               // not inherit the destructive branch as an else fallback.
-              if (id === 'add-folder') {
-                actions.addFolder?.()
-                return
-              }
-              if (id.startsWith('remove:')) {
-                actions.removeFolder?.(id.slice('remove:'.length))
-                return
-              }
-              /* v8 ignore next -- remaining rows are the rename/delete pair. */
-              if (id !== 'rename' && id !== 'delete') return
-              if (id === 'rename') actions.rename()
-              else actions.delete()
+              if (id === 'edit') actions.edit()
             }}
             portal
             closeOnPointerLeave

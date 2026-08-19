@@ -14,7 +14,7 @@ A Workspace keeps a primary `path` (new-session cwd) and an extra `folders` list
 
 Session membership matches a header cwd against the primary path or any extra folder. New sessions created from a Workspace still use the primary path as cwd. `workspace-write` policy resolution reads the mounted workspace registry and sets `SandboxExecutionPolicy.extraRoots` to every other owned directory, so a session whose cwd is an extra folder still writes the primary. `writableRoots`, Seatbelt, Landlock, bwrap, and Windows ACL standing grants all consume that list; a later `addFolder` receives an ACE on the next confine.
 
-The sidebar Workspace row menu offers **Add folder…** (same directory-flow hole as adding a Workspace) and **Remove folder** (extra folders only). The hover card lists every owned directory.
+The sidebar Workspace row menu **Edit project** opens a dialog for the display name, extra source folders, and registration removal. **Add folder** reuses the same directory-flow hole as adding a Workspace; extra folders stay in the draft until Save. The hover card lists every owned directory.
 
 ## Alternatives considered
 
@@ -30,4 +30,4 @@ Workspace-write sessions in a multi-folder Workspace can modify every owned dire
 
 ## Testing
 
-`packages/workspace/workspace/tests/workspace.spec.ts` covers add/remove, attach-by-extra-cwd, and conflict/primary errors. `packages/host/apiproxy/tests/api-proxy-workspace.spec.ts` and `rpc-schemas.spec.ts` cover the RPCs and wire defaults. `packages/sandbox/sandbox/tests/roots.spec.ts`, `sandbox-policy/tests/policy.spec.ts`, and `sandbox-local/tests/local.spec.ts` plus `acl-grants.spec.ts` cover extra write roots, an extra-folder session cwd, live Windows ACL grants, and the model-visible policy sentence. `packages/client/ui-workspace/tests/rows.client.spec.tsx` covers the row menu.
+`packages/workspace/workspace/tests/workspace.spec.ts` covers add/remove, attach-by-extra-cwd, and conflict/primary errors. `packages/host/apiproxy/tests/api-proxy-workspace.spec.ts` and `rpc-schemas.spec.ts` cover the RPCs and wire defaults. `packages/sandbox/sandbox/tests/roots.spec.ts`, `sandbox-policy/tests/policy.spec.ts`, and `sandbox-local/tests/local.spec.ts` plus `acl-grants.spec.ts` cover extra write roots, an extra-folder session cwd, live Windows ACL grants, and the model-visible policy sentence. `packages/client/ui-workspace/tests/rows.client.spec.tsx` covers the row menu. `workspace-edit-dialog.client.spec.tsx` and `workspace-browser.client.spec.tsx` cover the project editor.

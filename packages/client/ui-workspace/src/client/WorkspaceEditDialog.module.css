@@ -1,0 +1,141 @@
+/* Edit-project dialog: name, source-folder list, destructive remove, Save. */
+
+.card {
+  width: min(480px, 100%);
+}
+
+.name {
+  width: 100%;
+  height: 44px;
+  padding: 0 14px;
+  border-radius: 12px;
+  box-sizing: border-box;
+}
+
+.section {
+  margin-top: 16px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.folders {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.folderRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  min-width: 0;
+  color: var(--dsw-alias-label-primary);
+}
+
+.folderName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.primary {
+  flex: none;
+  padding: 0 8px;
+  border-radius: 8px;
+  background: var(--dsw-alias-interactive-bg-hover);
+  font-size: 12px;
+  line-height: 22px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.removeFolder {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 8px;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.removeFolder:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.removeFolder:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.addFolder {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 36px;
+  margin-top: 4px;
+  border: none;
+  border-radius: 8px;
+  padding: 0 4px;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  font-size: 14px;
+  line-height: 22px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.addFolder:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.addFolder:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+}
+
+.footerActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.removeProject:not(:disabled) {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.error {
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.status {
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-secondary);
+}

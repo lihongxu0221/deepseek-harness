@@ -983,58 +983,73 @@ describe('WorkspaceBrowser', () => {
     }
   })
 
-  it('renames a workspace through the row menu dialog', async () => {
+  it('edits a workspace through the project editor', async () => {
     let resolveRename!: () => void
     const renameWorkspace = vi.fn(() => new Promise<void>((resolve) => { resolveRename = resolve }))
+    const addFolder = vi.fn(async () => workspace('alpha', [], 'Gamma'))
+    const removeFolder = vi.fn(async () => workspace('alpha', [], 'Gamma'))
     mount({
-      useWorkspaces: hook(workspaceState([workspace('alpha', [], 'Alpha'), workspace('beta', [], 'Beta')])),
+      useWorkspaces: hook(workspaceState([
+        { ...workspace('alpha', [], 'Alpha'), folders: ['/projects/extra'] },
+        workspace('beta', [], 'Beta'),
+      ])),
       renameWorkspace,
+      addFolder,
+      removeFolder,
     })
     fireEvent.click(screen.getByRole('button', { name: '工作区“Alpha”的操作' }))
-    fireEvent.click(screen.getByRole('menuitem', { name: '重命名' }))
-    const input = screen.getByLabelText<HTMLInputElement>('工作区名称')
+    fireEvent.click(screen.getByRole('menuitem', { name: '编辑项目' }))
+    const input = screen.getByLabelText<HTMLInputElement>('项目名称')
     expect(input.value).toBe('Alpha')
-    // Unchanged and blank names stay blocked.
-    expect(screen.getByRole<HTMLButtonElement>('button', { name: '重命名' }).disabled).toBe(true)
-    fireEvent.change(input, { target: { value: '   ' } })
-    expect(screen.getByRole<HTMLButtonElement>('button', { name: '重命名' }).disabled).toBe(true)
-    // A duplicate of another workspace's title shows the inline conflict.
-    fireEvent.change(input, { target: { value: ' Beta ' } })
+    expect(screen.getByText('源文件夹')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    expect(renameWorkspace).not.toHaveBeenCalled()
+    expect(screen.queryByRole('dialog', { name: '编辑项目' })).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: '工作区“Alpha”的操作' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '编辑项目' }))
+    fireEvent.change(screen.getByLabelText('项目名称'), { target: { value: '   ' } })
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: '保存' }).disabled).toBe(true)
+    fireEvent.change(screen.getByLabelText('项目名称'), { target: { value: ' Beta ' } })
     expect(screen.getByRole('alert').textContent).toBe('已存在名为“Beta”的工作区。')
-    expect(screen.getByRole<HTMLButtonElement>('button', { name: '重命名' }).disabled).toBe(true)
-    fireEvent.change(input, { target: { value: 'Gamma' } })
-    fireEvent.click(screen.getByRole('button', { name: '重命名' }))
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: '保存' }).disabled).toBe(true)
+    fireEvent.change(screen.getByLabelText('项目名称'), { target: { value: 'Gamma' } })
+    fireEvent.click(screen.getByRole('button', { name: '移除文件夹“extra”' }))
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
     expect(renameWorkspace).toHaveBeenCalledWith(wid('alpha'), 'Gamma')
-    // While renaming: input disabled, close blocked, Enter ignored.
-    expect(input.disabled).toBe(true)
+    expect(screen.getByLabelText<HTMLInputElement>('项目名称').disabled).toBe(true)
     fireEvent.keyDown(document, { key: 'Escape' })
-    expect(screen.getByRole('dialog')).toBeTruthy()
+    expect(screen.getByRole('dialog', { name: '编辑项目' })).toBeTruthy()
     await act(async () => { resolveRename() })
-    expect(screen.queryByRole('dialog')).toBeNull()
+    await waitFor(() => { expect(removeFolder).toHaveBeenCalledWith(wid('alpha'), '/projects/extra') })
+    expect(addFolder).not.toHaveBeenCalled()
+    expect(screen.queryByRole('dialog', { name: '编辑项目' })).toBeNull()
   })
 
-  it('rename via Enter, failure surfaces the error, Cancel closes', async () => {
+  it('save via Enter, failure surfaces the error, Cancel closes', async () => {
     const renameWorkspace = vi.fn(async () => { throw new Error('rename conflict') })
     mount({
       useWorkspaces: hook(workspaceState([workspace('alpha', [], 'Alpha')])),
       renameWorkspace,
     })
     fireEvent.click(screen.getByRole('button', { name: '工作区“Alpha”的操作' }))
-    fireEvent.click(screen.getByRole('menuitem', { name: '重命名' }))
-    const input = screen.getByLabelText<HTMLInputElement>('工作区名称')
-    // Enter with a blocked draft (unchanged) does nothing.
+    fireEvent.click(screen.getByRole('menuitem', { name: '编辑项目' }))
+    const input = screen.getByLabelText<HTMLInputElement>('项目名称')
     fireEvent.keyDown(input, { key: 'Enter' })
     expect(renameWorkspace).not.toHaveBeenCalled()
-    fireEvent.change(input, { target: { value: 'Renamed' } })
-    fireEvent.keyDown(input, { key: 'a' })
-    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(screen.queryByRole('dialog', { name: '编辑项目' })).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: '工作区“Alpha”的操作' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '编辑项目' }))
+    fireEvent.change(screen.getByLabelText('项目名称'), { target: { value: 'Renamed' } })
+    fireEvent.keyDown(screen.getByLabelText('项目名称'), { key: 'a' })
+    fireEvent.keyDown(screen.getByLabelText('项目名称'), { key: 'Enter' })
     expect(renameWorkspace).toHaveBeenCalledWith(wid('alpha'), 'Renamed')
     await waitFor(() => { expect(screen.getByRole('alert').textContent).toBe('rename conflict') })
-    // The dialog stays for retry; typing clears the error; Cancel closes.
-    fireEvent.change(input, { target: { value: 'Renamed2' } })
+    fireEvent.change(screen.getByLabelText('项目名称'), { target: { value: 'Renamed2' } })
     expect(screen.queryByRole('alert')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: '取消' }))
-    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(screen.queryByRole('dialog', { name: '编辑项目' })).toBeNull()
   })
 
   it('reports non-Error rename failures as text', async () => {
@@ -1044,9 +1059,9 @@ describe('WorkspaceBrowser', () => {
       renameWorkspace,
     })
     fireEvent.click(screen.getByRole('button', { name: '工作区“Alpha”的操作' }))
-    fireEvent.click(screen.getByRole('menuitem', { name: '重命名' }))
-    fireEvent.change(screen.getByLabelText('工作区名称'), { target: { value: 'Other' } })
-    fireEvent.click(screen.getByRole('button', { name: '重命名' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '编辑项目' }))
+    fireEvent.change(screen.getByLabelText('项目名称'), { target: { value: 'Other' } })
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
     await waitFor(() => { expect(screen.getByRole('alert').textContent).toBe('denied') })
   })
 
@@ -1058,7 +1073,8 @@ describe('WorkspaceBrowser', () => {
       deleteWorkspace,
     })
     fireEvent.click(screen.getByRole('button', { name: '工作区“Alpha”的操作' }))
-    fireEvent.click(screen.getByRole('menuitem', { name: '删除工作区' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '编辑项目' }))
+    fireEvent.click(screen.getByRole('button', { name: '移除本地项目' }))
     const dialog = screen.getByRole('dialog', { name: '删除工作区' })
     expect(dialog.textContent).toContain('将把“Alpha”从工作区列表中移除')
     expect(dialog.textContent).toContain('文件夹与会话记录会保留')
@@ -1093,7 +1109,8 @@ describe('WorkspaceBrowser', () => {
       deleteWorkspace,
     })
     fireEvent.click(screen.getByRole('button', { name: '工作区“Alpha”的操作' }))
-    fireEvent.click(screen.getByRole('menuitem', { name: '删除工作区' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '编辑项目' }))
+    fireEvent.click(screen.getByRole('button', { name: '移除本地项目' }))
     fireEvent.click(screen.getByRole('button', { name: '删除工作区' }))
     await waitFor(() => { expect(screen.getByRole('alert').textContent).toBe('storage unavailable') })
     expect(screen.getByRole('dialog', { name: '删除工作区' })).toBeTruthy()
@@ -1111,7 +1128,8 @@ describe('WorkspaceBrowser', () => {
     })
     const open = () => {
       fireEvent.click(screen.getByRole('button', { name: '工作区“Alpha”的操作' }))
-      fireEvent.click(screen.getByRole('menuitem', { name: '删除工作区' }))
+      fireEvent.click(screen.getByRole('menuitem', { name: '编辑项目' }))
+      fireEvent.click(screen.getByRole('button', { name: '移除本地项目' }))
     }
     open()
     fireEvent.click(screen.getByRole('button', { name: '取消' }))
@@ -1123,8 +1141,8 @@ describe('WorkspaceBrowser', () => {
     expect(screen.queryByRole('dialog', { name: '删除工作区' })).toBeNull()
   })
 
-  it('adds an extra folder through the shared directory flow and removes it from the row menu', async () => {
-    let owner: { open: boolean; onPicked: (path: string) => void } | undefined
+  it('adds an extra folder through the shared directory flow from the project editor', async () => {
+    let owner: { open: boolean; onPicked: (path: string) => void; onCancel: () => void } | undefined
     const addFolder = vi.fn(async () => workspace('alpha', []))
     const removeFolder = vi.fn(async () => workspace('alpha', []))
     const startSession = vi.fn()
@@ -1136,36 +1154,35 @@ describe('WorkspaceBrowser', () => {
       removeFolder,
       startSession,
       createWorkspace,
-      renderSlot: ((_name: string, next: { open: boolean; onPicked: (path: string) => void }) => {
+      renderSlot: ((_name: string, next: { open: boolean; onPicked: (path: string) => void; onCancel: () => void }) => {
         owner = next
         return next.open ? <div data-testid="directory-flow" /> : null
       }) as never,
     })
     fireEvent.click(screen.getByRole('button', { name: '工作区“Alpha”的操作' }))
-    fireEvent.click(screen.getByRole('menuitem', { name: '添加文件夹…' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '编辑项目' }))
+    fireEvent.click(screen.getByRole('button', { name: '添加文件夹' }))
     await waitFor(() => { expect(screen.getByTestId('directory-flow')).toBeTruthy() })
-    await act(async () => { owner!.onPicked('/projects/extra') })
-    expect(addFolder).toHaveBeenCalledWith(wid('alpha'), '/projects/extra')
+    await act(async () => { owner!.onPicked('/projects/other') })
+    expect(addFolder).not.toHaveBeenCalled()
     expect(createWorkspace).not.toHaveBeenCalled()
     expect(startSession).not.toHaveBeenCalled()
     expect(screen.queryByTestId('directory-flow')).toBeNull()
-
-    fireEvent.click(screen.getByRole('button', { name: '工作区“Alpha”的操作' }))
-    const remove = screen.getByRole('menuitem', { name: '移除文件夹' })
-    fireEvent.mouseEnter(remove.parentElement as HTMLElement)
-    fireEvent.focus(remove)
-    fireEvent.click(screen.getByRole('menuitem', { name: '/projects/extra' }))
-    expect(removeFolder).toHaveBeenCalledWith(wid('alpha'), '/projects/extra')
+    expect(screen.getByTitle('/projects/other').textContent).toBe('other')
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    await waitFor(() => { expect(addFolder).toHaveBeenCalledWith(wid('alpha'), '/projects/other') })
+    expect(removeFolder).not.toHaveBeenCalled()
   })
 
-  it('omits add-folder from the row menu when no directory-flow occupant is composed', () => {
+  it('omits add-folder from the project editor when no directory-flow occupant is composed', () => {
     mount({
       useWorkspaces: hook(workspaceState([workspace('alpha', [], 'Alpha')])),
       useDirectoryFlow: bindSnapshotSelector({ getSnapshot: () => false, subscribe: () => () => {} }),
     })
     fireEvent.click(screen.getByRole('button', { name: '工作区“Alpha”的操作' }))
-    expect(screen.queryByRole('menuitem', { name: '添加文件夹…' })).toBeNull()
-    expect(screen.getByRole('menuitem', { name: '重命名' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('menuitem', { name: '编辑项目' }))
+    expect(screen.queryByRole('button', { name: '添加文件夹' })).toBeNull()
+    expect(screen.getByRole('dialog', { name: '编辑项目' })).toBeTruthy()
   })
 
   it('search hides drag affordances (rows are not draggable during search)', () => {
