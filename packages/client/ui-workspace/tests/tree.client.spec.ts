@@ -54,7 +54,7 @@ describe('deriveGroups', () => {
     const workspaces = [workspace('first', ['owned']), workspace('second', []), workspace('third', [])]
     const groups = deriveGroups(sessions, workspaces, noArchive, {
       expandedGroups: [],
-      pinnedWorkspaceIds: ['third', 'first'],
+      pinnedWorkspaceIds: ['missing', 'third', 'first'],
     })
     expect(groups.map(group => group.key)).toEqual(['third', 'first', 'second'])
     expect(groups.map(group => group.pinned)).toEqual([true, true, false])

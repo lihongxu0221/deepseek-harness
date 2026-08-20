@@ -365,7 +365,8 @@ export class LocalSandboxProvider extends SandboxProvider {
         '--mode', policy.mode,
       ]
     }
-    const temp = this.materializeAclGrant(sessionId, policy.workspaceRoot, policy.extraRoots ?? [])
+    const temp = this.materializeAclGrant(sessionId, policy.workspaceRoot)
+    this.syncExtraAclRoots(policy.workspaceRoot, policy.extraRoots ?? [])
     return [
       ...this.windowsAclRunnerInvocation(),
       '--workspace', policy.workspaceRoot,
@@ -379,59 +380,35 @@ export class LocalSandboxProvider extends SandboxProvider {
   /**
    * Materialize one workspace-write policy's ACEs once per provider
    * lifetime. The workspace SID and standing root grant are shared by the
-   * workspace. Extra roots added after the first confine receive a standing
-   * ACE on the next call; extra roots that left the workspace lose that ACE
-   * on the next call. The temp directory is random and carries a distinct
-   * SID, so another session on the same workspace cannot use the shared
-   * workspace SID to enter it. A fresh provider always chooses a new path;
-   * crash residue therefore cannot collide with or authorize a resumed
-   * session. Fail-closed: a half-materialized temp grant is revoked and its
-   * directory removed before the error propagates.
+   * workspace. The temp directory is random and carries a distinct SID, so
+   * another session on the same workspace cannot use the shared workspace
+   * SID to enter it. A fresh provider always chooses a new path; crash
+   * residue therefore cannot collide with or authorize a resumed session.
+   * Fail-closed: a half-materialized temp grant is revoked and its directory
+   * removed before the error propagates.
    * @param sessionId - the policy's calling-session identity.
    * @param workspaceRoot - the resolved policy root.
-   * @param extraRoots - additional directories that receive the same standing write ACE.
    * @returns the pair's private temp directory and write capability.
    */
-  private materializeAclGrant(
-    sessionId: SessionId,
-    workspaceRoot: string,
-    extraRoots: readonly string[] = [],
-  ): AclTempCapability {
+  private materializeAclGrant(sessionId: SessionId, workspaceRoot: string): AclTempCapability {
     assertTempRootOutsideWorkspace(workspaceRoot, tmpdir())
     const writeSid = workspaceWriteSid(workspaceRoot)
-    let workspaceGrant = this.workspaceGrants.get(workspaceRoot)
-    if (workspaceGrant === undefined) {
-      workspaceGrant = AclWriteGrant.create(writeSid)
+    if (!this.workspaceGrants.has(workspaceRoot)) {
+      const grant = AclWriteGrant.create(writeSid)
       try {
-        workspaceGrant.add(workspaceRoot, true)
-        for (const root of extraRoots) {
-          if (root === workspaceRoot) continue
-          workspaceGrant.add(root, true)
-        }
+        grant.add(workspaceRoot, true)
       } catch (error) {
         // Free the SID; a standing ACE (if the apply succeeded before a
         // post-apply throw) is the intended end state, not an error
         // artifact — nothing to revoke.
         try {
-          workspaceGrant.dispose()
+          grant.dispose()
         } catch (cleanupError) {
           throw new AggregateError([error, cleanupError], 'sandbox-local windows-acl workspace grant failed and its cleanup also failed')
         }
         throw error
       }
-      this.workspaceGrants.set(workspaceRoot, workspaceGrant)
-    } else {
-      // Live extra folders apply on the next confine: the standing grant is
-      // cached per primary root, so a later addFolder must still receive an ACE
-      // and a later removeFolder must drop the ACE it no longer owns.
-      const owned = new Set([workspaceRoot, ...extraRoots])
-      for (const path of workspaceGrant.paths) {
-        if (!owned.has(path)) workspaceGrant.revoke(path)
-      }
-      for (const root of extraRoots) {
-        if (root === workspaceRoot || workspaceGrant.paths.includes(root)) continue
-        workspaceGrant.add(root, true)
-      }
+      this.workspaceGrants.set(workspaceRoot, grant)
     }
     const key = JSON.stringify([String(sessionId), workspaceRoot])
     const existing = this.tempCapabilities.get(key)
@@ -464,6 +441,28 @@ export class LocalSandboxProvider extends SandboxProvider {
     const capability = { dir: tempDir, writeSid: tempSid, grant }
     this.tempCapabilities.set(key, capability)
     return capability
+  }
+
+  /**
+   * Apply extra-folder standing ACEs on a workspace grant already created by
+   * {@link materializeAclGrant}. Extra roots added after the first confine
+   * receive an ACE on the next call; extra roots that left the workspace
+   * lose that ACE. A missing grant is a no-op (read-only / no session).
+   * @param workspaceRoot - the resolved policy root.
+   * @param extraRoots - additional directories that receive the same standing write ACE.
+   */
+  private syncExtraAclRoots(workspaceRoot: string, extraRoots: readonly string[]): void {
+    const workspaceGrant = this.workspaceGrants.get(workspaceRoot)
+    /* v8 ignore next -- materializeAclGrant always caches the standing grant before this call. */
+    if (workspaceGrant === undefined) return
+    const owned = new Set([workspaceRoot, ...extraRoots])
+    for (const path of workspaceGrant.paths) {
+      if (!owned.has(path)) workspaceGrant.revoke(path)
+    }
+    for (const root of extraRoots) {
+      if (root === workspaceRoot || workspaceGrant.paths.includes(root)) continue
+      workspaceGrant.add(root, true)
+    }
   }
 
   /**

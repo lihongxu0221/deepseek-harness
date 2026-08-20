@@ -115,8 +115,8 @@ describe('workspace browser rows', () => {
     const onToggle = vi.fn()
     const onCreate = vi.fn()
     const group: GroupNode = {
-      key: 'project', workspaceId: wid('project'), cwd: '/projects/project', folders: [], createdAt: 0, label: 'Project',
-      sessionCount: 1, expanded: true, containsCurrent: true, pinned: false, sessions: [],
+      key: 'project', workspaceId: wid('project'), cwd: '/projects/project', createdAt: 0, label: 'Project',
+      sessionCount: 1, expanded: true, containsCurrent: true, sessions: [],
     }
     render(<ProjectRowItem group={group} onToggle={onToggle} onCreate={onCreate} t={t} />)
 
@@ -328,7 +328,7 @@ describe('workspace browser rows', () => {
     try {
       const group: GroupNode = {
         key: 'project', workspaceId: wid('project'), cwd: '/home/u/Documents/project', folders: [], createdAt: 0, label: 'Project',
-        sessionCount: 0, expanded: false, containsCurrent: false, pinned: false, sessions: [],
+        sessionCount: 1, expanded: false, containsCurrent: false, pinned: false, sessions: [],
       }
       render(<ProjectRowItem group={group} home="/home/u" onToggle={vi.fn()} onCreate={vi.fn()} t={t} />)
       fireEvent.pointerEnter(screen.getByRole('treeitem').parentElement as HTMLElement)
@@ -347,8 +347,8 @@ describe('workspace browser rows', () => {
     vi.useFakeTimers()
     try {
       const group: GroupNode = {
-        key: 'project', workspaceId: wid('project'), cwd: undefined, folders: [], createdAt: 0, label: 'Project',
-        sessionCount: 0, expanded: false, containsCurrent: false, pinned: false, sessions: [],
+        key: 'project', workspaceId: wid('project'), cwd: undefined, createdAt: 0, label: 'Project',
+        sessionCount: 0, expanded: false, containsCurrent: false, sessions: [],
       }
       render(<ProjectRowItem group={group} home="/home/u" onToggle={vi.fn()} onCreate={vi.fn()} t={t} />)
       fireEvent.pointerEnter(screen.getByRole('treeitem').parentElement as HTMLElement)

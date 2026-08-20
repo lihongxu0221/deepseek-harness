@@ -194,7 +194,7 @@ export interface BootProfileOptions extends RunProfileOptions {
    * When aborted, watcher-setup failures are treated as shutdown, not a broken
    * watch. The CLI aborts this on SIGINT/SIGTERM.
    */
-  signal?: AbortSignal
+  signal: AbortSignal
   /**
    * Receives the host context as soon as boot creates it, before entries mount,
    * so a signal during boot can still dispose the tree.
@@ -209,11 +209,11 @@ export interface BootProfileOptions extends RunProfileOptions {
  * await. Either way the failure describes a tree that is exiting as asked,
  * not a broken watch.
  * @param ctx - the booted root context.
- * @param signal - this invocation's signal-shutdown fact, if any.
+ * @param signal - this invocation's signal-shutdown fact.
  * @param error - the setup failure.
  */
-function suppressShutdownError(ctx: Context, signal: AbortSignal | undefined, error: unknown): void {
-  if (signal?.aborted) return
+function suppressShutdownError(ctx: Context, signal: AbortSignal, error: unknown): void {
+  if (signal.aborted) return
   if (ctx.fiber.state !== FiberState.ACTIVE || ctx.get('loader') === undefined) return
   throw error
 }
@@ -268,7 +268,7 @@ export async function bootProfile(options: BootProfileOptions): Promise<Context>
   // landed mid-setup. Watching is unconditional: a one-shot surface exits
   // through its bounded shutdown, which disposes the watchers before the
   // loop drains.
-  if (!options.signal?.aborted
+  if (!options.signal.aborted
     && ctx.fiber.state === FiberState.ACTIVE
     && ctx.get('loader') !== undefined) {
     try {

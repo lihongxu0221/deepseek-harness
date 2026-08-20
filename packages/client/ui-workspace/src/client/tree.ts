@@ -42,8 +42,6 @@ export interface GroupNode {
   /** Backing Workspace id; absent only for the ungrouped bucket. */
   workspaceId: WorkspaceId | undefined
   cwd: string | undefined
-  /** Extra folders besides {@link cwd}; empty for the ungrouped bucket. */
-  folders: readonly string[]
   /** Workspace creation time (epoch ms); absent only for the ungrouped bucket. */
   createdAt: number | undefined
   label: string
@@ -52,10 +50,12 @@ export interface GroupNode {
   expanded: boolean
   /** The group contains the selected session (active folder tint; supplied here so the renderer never scans). */
   containsCurrent: boolean
-  /** True when this Workspace sits in the browser-local pinned prefix. */
-  pinned: boolean
   /** Visible session rows (empty while the group is folded). */
   sessions: readonly SessionNode[]
+  /** Extra folders besides {@link cwd}; empty/absent for the ungrouped bucket. */
+  folders?: readonly string[]
+  /** True when this Workspace sits in the browser-local pinned prefix. */
+  pinned?: boolean
 }
 
 /** One flat search row combining list metadata with an optional content match. */
@@ -92,7 +92,6 @@ interface Group {
   key: string
   workspaceId: WorkspaceId | undefined
   cwd: string | undefined
-  folders: readonly string[]
   createdAt: number | undefined
   label: string
   sessions: SessionSummary[]
@@ -142,7 +141,6 @@ function buildGroup(
   key: string,
   workspaceId: WorkspaceId | undefined,
   cwd: string | undefined,
-  folders: readonly string[],
   createdAt: number | undefined,
   label: string,
   members: readonly SessionSummary[],
@@ -152,7 +150,7 @@ function buildGroup(
   // Real Workspace order comes from sessionIds. Ungrouped falls back to
   // recency until the browser supplies its persisted local order.
   if (order === 'recency') sessions.sort(byRecency)
-  return { key, workspaceId, cwd, folders, createdAt, label, sessions }
+  return { key, workspaceId, cwd, createdAt, label, sessions }
 }
 
 /** Apply a stored Ungrouped order and append newly loose Sessions by recency. */
@@ -197,7 +195,7 @@ function groupByWorkspace(
       members.push(summary)
     }
     groups.push(buildGroup(
-      workspace.workspaceId, workspace.workspaceId, workspace.path, workspace.folders ?? [],
+      workspace.workspaceId, workspace.workspaceId, workspace.path,
       Date.parse(workspace.createdAt), workspace.title, members, 'account',
     ))
   }
@@ -210,7 +208,6 @@ function groupByWorkspace(
       UNGROUPED_KEY,
       undefined,
       undefined,
-      [],
       undefined,
       UNGROUPED_LABEL,
       ungroupedOrder === undefined ? stray : orderedUngrouped(stray, ungroupedOrder),
@@ -265,6 +262,7 @@ export function deriveGroups(
         ?? UNGROUPED_KEY
   const pinnedIds = view.pinnedWorkspaceIds ?? []
   const pinnedSet = new Set(pinnedIds)
+  const foldersById = new Map(workspaces.map(workspace => [workspace.workspaceId as string, workspace.folders ?? []]))
   const grouped = groupByWorkspace(list, workspaces, archived, view.ungroupedOrder)
   const byKey = new Map(grouped.map(group => [group.key, group]))
   const ordered: Group[] = []
@@ -284,14 +282,14 @@ export function deriveGroups(
       key: g.key,
       workspaceId: g.workspaceId,
       cwd: g.cwd,
-      folders: g.folders,
       createdAt: g.createdAt,
       label: g.label,
       sessionCount: g.sessions.length,
       expanded,
       containsCurrent: g.key === currentGroup,
-      pinned: g.workspaceId !== undefined && pinnedSet.has(g.workspaceId as string),
       sessions: expanded ? g.sessions.map(session => sessionNode(session, descendants)) : [],
+      folders: foldersById.get(g.workspaceId as string) ?? [],
+      pinned: g.workspaceId !== undefined && pinnedSet.has(g.workspaceId as string),
     })
   }
   return groups

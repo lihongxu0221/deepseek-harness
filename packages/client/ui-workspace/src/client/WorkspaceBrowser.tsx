@@ -223,20 +223,6 @@ type SessionTreeProps = Pick<
   /** Host account home for POSIX hover-path abbreviation. */
   home?: string | undefined
   workspaces: readonly WorkspaceView[]
-  /** Workspace ids kept at the front of the grouped list, in pin order. */
-  pinnedWorkspaceIds: readonly string[]
-  /** Persist a Workspace in the browser-local pin prefix. */
-  pinWorkspace: (workspaceId: string) => void
-  /** Drop a Workspace from the browser-local pin prefix. */
-  unpinWorkspace: (workspaceId: string) => void
-  /** Whether the Workspaces section is expanded. */
-  workspacesOpen: boolean
-  /** Persist the Workspaces section open state. */
-  setWorkspacesOpen: (open: boolean) => void
-  /** Whether the Recents section is expanded. */
-  recentsOpen: boolean
-  /** Persist the Recents section open state. */
-  setRecentsOpen: (open: boolean) => void
   /** Explicit persisted zero-or-five-session state by Workspace group. */
   groupExpansion: Readonly<Record<string, boolean>>
   /** Persist one Workspace group's zero-or-five-session state. */
@@ -251,32 +237,46 @@ type SessionTreeProps = Pick<
   setSessionOrder: (accountKey: string, order: string[]) => void
   /** Registry-global archive set (hidden rows). */
   archivedSessionIds: readonly SessionNode['id'][]
-  /** Open the browser-owned project editor for a real Workspace group. */
-  onEditRequest: (workspaceId: WorkspaceId) => void
   /** Open the browser-owned rename dialog for a real Workspace group. */
   onRenameRequest: (workspaceId: WorkspaceId, currentTitle: string) => void
   /** Open the browser-owned delete-confirmation dialog for a real Workspace group. */
   onDeleteRequest: (workspaceId: WorkspaceId, currentTitle: string) => void
-  /** Drop one extra folder from this Workspace. */
-  onRemoveFolderRequest: (workspaceId: WorkspaceId, path: string) => void
   /** Open the browser-owned session rename dialog. */
   onSessionRename: (sessionId: SessionNode['id'], currentTitle: string) => void
   /** Archive a session (row menu action; the row disappears on the state echo). */
   onSessionArchive: (sessionId: SessionNode['id']) => void
   /** Session order behavior: fixed after edits, or additionally promoted by user activity. */
   orderBy: SessionOrderBy
+  /** Workspace ids kept at the front of the grouped list, in pin order. */
+  pinnedWorkspaceIds: readonly string[]
+  /** Persist a Workspace in the browser-local pin prefix. */
+  pinWorkspace: (workspaceId: string) => void
+  /** Drop a Workspace from the browser-local pin prefix. */
+  unpinWorkspace: (workspaceId: string) => void
+  /** Whether the Workspaces section is expanded. */
+  workspacesOpen: boolean
+  /** Persist the Workspaces section open state. */
+  setWorkspacesOpen: (open: boolean) => void
+  /** Whether the Recents section is expanded. */
+  recentsOpen: boolean
+  /** Persist the Recents section open state. */
+  setRecentsOpen: (open: boolean) => void
+  /** Open the browser-owned project editor for a real Workspace group. */
+  onEditRequest: (workspaceId: WorkspaceId) => void
+  /** Drop one extra folder from this Workspace. */
+  onRemoveFolderRequest: (workspaceId: WorkspaceId, path: string) => void
 }
 
 /** The scrolling session tree; unmounting drops the sessions subscription and expand-all state. */
 function SessionTree({
   useSessions, startSession, open, forkSession, workspaces, archivedSessionIds,
-  onEditRequest, onRenameRequest, onDeleteRequest, onRemoveFolderRequest,
-  onSessionRename, onSessionArchive,
+  onRenameRequest, onDeleteRequest, onSessionRename, onSessionArchive,
   insertWorkspaceBefore, insertSessionBefore, orderBy,
-  pinnedWorkspaceIds, pinWorkspace, unpinWorkspace,
-  workspacesOpen, setWorkspacesOpen, recentsOpen, setRecentsOpen,
   groupExpansion, setGroupExpanded,
   sessionOrderByAccount, sessionUpdatedAtByAccount, syncSessionOrderAccount, setSessionOrder, home, t,
+  pinnedWorkspaceIds, pinWorkspace, unpinWorkspace,
+  workspacesOpen, setWorkspacesOpen, recentsOpen, setRecentsOpen,
+  onEditRequest, onRemoveFolderRequest,
 }: SessionTreeProps) {
   const list = useSessions(s => s)
   const current = list.current
@@ -514,10 +514,6 @@ function SessionTree({
                   actions={group.workspaceId === undefined
                     ? undefined
                     : {
-                      edit: () => {
-                        /* v8 ignore next -- narrowing guard: the actions object exists only for real-workspace groups. */
-                        if (group.workspaceId !== undefined) onEditRequest(group.workspaceId)
-                      },
                       rename: () => {
                         /* v8 ignore next -- narrowing guard: the actions object exists only for real-workspace groups. */
                         if (group.workspaceId !== undefined) onRenameRequest(group.workspaceId, group.label)
@@ -526,6 +522,10 @@ function SessionTree({
                         /* v8 ignore next -- narrowing guard: the actions object exists only for real-workspace groups. */
                         if (group.workspaceId !== undefined) onDeleteRequest(group.workspaceId, group.label)
                       },
+                      edit: () => {
+                        /* v8 ignore next -- narrowing guard: the actions object exists only for real-workspace groups. */
+                        if (group.workspaceId !== undefined) onEditRequest(group.workspaceId)
+                      },
                       removeFolder: (path) => {
                         /* v8 ignore next -- narrowing guard: the actions object exists only for real-workspace groups. */
                         if (group.workspaceId !== undefined) onRemoveFolderRequest(group.workspaceId, path)
@@ -533,7 +533,7 @@ function SessionTree({
                       pin: () => {
                         /* v8 ignore next -- narrowing guard: the actions object exists only for real-workspace groups. */
                         if (group.workspaceId === undefined) return
-                        if (group.pinned) unpinWorkspace(group.workspaceId as string)
+                        if (group.pinned === true) unpinWorkspace(group.workspaceId as string)
                         else pinWorkspace(group.workspaceId as string)
                       },
                     }}
