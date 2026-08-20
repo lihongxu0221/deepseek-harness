@@ -5,23 +5,25 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { spawnSubprocess, taskkillProcessTree } from '../src/spawn.ts'
 
 const { spawnCalls, spawnSyncCalls } = vi.hoisted(() => ({
-  spawnCalls: [] as Array<{ windowsHide?: boolean }>,
-  spawnSyncCalls: [] as Array<{ windowsHide?: boolean }>,
+  spawnCalls: [] as Array<{ windowsHide: boolean | undefined }>,
+  spawnSyncCalls: [] as Array<{ windowsHide: boolean | undefined }>,
 }))
 
 vi.mock('node:child_process', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:child_process')>()
-  const optionsOf = (args: unknown[]): { windowsHide?: boolean } | undefined =>
-    args.find((arg): arg is { windowsHide?: boolean } =>
+  const windowsHideOf = (args: unknown[]): boolean | undefined => {
+    const options = args.find((arg): arg is { windowsHide?: boolean } =>
       arg !== null && typeof arg === 'object' && !Array.isArray(arg) && 'windowsHide' in arg)
+    return options?.windowsHide
+  }
   return {
     ...actual,
     spawn(...args: Parameters<typeof actual.spawn>) {
-      spawnCalls.push({ windowsHide: optionsOf(args)?.windowsHide })
+      spawnCalls.push({ windowsHide: windowsHideOf(args) })
       return actual.spawn(...args)
     },
     spawnSync(...args: Parameters<typeof actual.spawnSync>) {
-      spawnSyncCalls.push({ windowsHide: optionsOf(args)?.windowsHide })
+      spawnSyncCalls.push({ windowsHide: windowsHideOf(args) })
       return actual.spawnSync(...args)
     },
   }
