@@ -105,10 +105,12 @@ export function saveDesktopListen(home: string, listen: DesktopListen): void {
 }
 
 /**
- * Flag pair the web profile reads as `ctx.webStartup`.
+ * Flags the web profile reads as `ctx.webStartup`.
+ * `--no-open` is required: the desktop already owns the Chromium window, and
+ * web-app's Node `--eval` helper would spawn this same exe as a guest.
  * @param listen - persisted or default address.
- * @returns `--host` / `--port` argv.
+ * @returns `--host` / `--port` / `--no-open` argv.
  */
 export function desktopListenArgs(listen: DesktopListen): string[] {
-  return ['--host', listen.host, '--port', String(listen.port)]
+  return ['--host', listen.host, '--port', String(listen.port), '--no-open']
 }

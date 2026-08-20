@@ -21,6 +21,7 @@ import {
 } from './desktop-listen.ts'
 import {
   defaultDesktopWindowIo,
+  DESKTOP_WINDOW_HANDOFF_MS,
   openDesktopWindow,
   type OpenedDesktopWindow,
 } from './open-desktop-window.ts'
@@ -350,8 +351,11 @@ export async function runPackagedWebDesktop(io: PackagedWebDesktopIo): Promise<v
   const trackWindow = (window: OpenedDesktopWindow | undefined): void => {
     opened = window
     if (window === undefined) return
+    const openedAt = Date.now()
     const forget = (): void => {
-      if (opened === window) opened = undefined
+      if (opened !== window) return
+      if (Date.now() - openedAt < DESKTOP_WINDOW_HANDOFF_MS) return
+      opened = undefined
     }
     void window.wait.then(forget, forget)
   }

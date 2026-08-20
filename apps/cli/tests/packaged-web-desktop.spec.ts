@@ -18,7 +18,7 @@ import type {
   WindowsDesktopShell,
 } from '../src/windows-desktop-shell.ts'
 import type { DesktopListen } from '../src/desktop-listen.ts'
-import type { OpenedDesktopWindow } from '../src/open-desktop-window.ts'
+import { DESKTOP_WINDOW_HANDOFF_MS, type OpenedDesktopWindow } from '../src/open-desktop-window.ts'
 
 const environment = {} as LaunchEnvironmentSnapshot
 const temps: string[] = []
@@ -241,6 +241,7 @@ describe('runPackagedWebDesktop', () => {
       { type: 'state', running: true },
       { type: 'ready' },
     ]))
+    await new Promise<void>((resolvePromise) => { setTimeout(resolvePromise, DESKTOP_WINDOW_HANDOFF_MS + 20) })
     harness.windows[0]?.settle()
     await new Promise<void>((resolvePromise) => { setTimeout(resolvePromise, 20) })
     expect(harness.exits).toEqual([])
@@ -374,8 +375,8 @@ describe('runPackagedWebDesktop', () => {
     expect(harness.disposed).toEqual([1])
     expect(harness.windows).toHaveLength(2)
     expect(harness.bootArgs).toEqual([
-      ['--host', '127.0.0.1', '--port', '3080'],
-      ['--host', '127.0.0.1', '--port', '3080'],
+      ['--host', '127.0.0.1', '--port', '3080', '--no-open'],
+      ['--host', '127.0.0.1', '--port', '3080', '--no-open'],
     ])
     harness.emit({ type: 'quit' })
     await done
@@ -391,11 +392,24 @@ describe('runPackagedWebDesktop', () => {
     harness.emit({ type: 'listen', host: '0.0.0.0', port: 8080 })
     await waitFor(() => harness.messages.filter(message => message.type === 'ready').length === 2)
     expect(harness.saved).toEqual([{ host: '0.0.0.0', port: 8080 }])
-    expect(harness.bootArgs.at(-1)).toEqual(['--host', '0.0.0.0', '--port', '8080'])
+    expect(harness.bootArgs.at(-1)).toEqual(['--host', '0.0.0.0', '--port', '8080', '--no-open'])
     expect(process.env.DSH_WEB_ALLOW_ALL_INTERFACES).toBe('1')
     harness.emit({ type: 'quit' })
     await done
     delete process.env.DSH_WEB_ALLOW_ALL_INTERFACES
+  })
+
+  it('does not spawn another window when a launcher hands off immediately', async () => {
+    const harness = createHarness()
+    const done = runPackagedWebDesktop(harness.io)
+    await waitFor(() => harness.messages.some(message => message.type === 'ready'))
+    harness.windows[0]?.settle()
+    await new Promise<void>((resolvePromise) => { setTimeout(resolvePromise, 20) })
+    harness.emit({ type: 'show' })
+    await waitFor(() => harness.messages.some(message => message.type === 'focus'))
+    expect(harness.windows).toHaveLength(1)
+    harness.emit({ type: 'quit' })
+    await done
   })
 
   it('focuses an already-open window on Show', async () => {

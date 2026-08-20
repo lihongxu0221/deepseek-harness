@@ -48,6 +48,6 @@ describe('loadDesktopListen / saveDesktopListen', () => {
     temps.push(home)
     saveDesktopListen(home, { host: '0.0.0.0', port: 8080 })
     expect(loadDesktopListen(home)).toEqual({ host: '0.0.0.0', port: 8080 })
-    expect(desktopListenArgs({ host: '0.0.0.0', port: 8080 })).toEqual(['--host', '0.0.0.0', '--port', '8080'])
+    expect(desktopListenArgs({ host: '0.0.0.0', port: 8080 })).toEqual(['--host', '0.0.0.0', '--port', '8080', '--no-open'])
   })
 })

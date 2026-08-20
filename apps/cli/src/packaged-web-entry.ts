@@ -4,6 +4,8 @@
  * profile module fallback can symlink real packages. A first extra argument
  * that names an existing .js/.cjs/.mjs file is treated as a Node script so
  * a host that spawn()s this executable with a worker path behaves like node.
+ * CLI heads such as `plugin` and `--profile` import on-disk `lib/bin.js`
+ * instead of claiming the single-instance GUI lock.
  * @module @deepseek-ai/dsh/packaged-web-entry
  */
 
@@ -12,6 +14,24 @@ import { basename, dirname, extname, join, resolve } from 'node:path'
 
 /** Deployed Web desktop entry, relative to the launcher executable. */
 export const PACKAGED_WEB_ENTRY_REL = join('lib', 'packaged-web-bin.js')
+
+/** Deployed CLI entry, relative to the launcher executable. */
+export const PACKAGED_WEB_CLI_REL = join('lib', 'bin.js')
+
+/** Extra argv heads that must run `lib/bin.js` instead of the desktop lock. */
+export const PACKAGED_WEB_CLI_HEADS = new Set([
+  'plugin',
+  '--help',
+  '-h',
+  '--version',
+  '-V',
+  '--dump-config',
+  '--dump-default-config',
+  '--profile',
+])
+
+const MISSING_PACKAGED_FILE =
+  'Keep this executable inside the built folder; do not copy the .exe alone.'
 
 /** Script extensions a packaged host may import instead of the GUI entry. */
 const PACKAGED_WEB_SCRIPT_EXTS = new Set(['.js', '.cjs', '.mjs'])
@@ -46,11 +66,40 @@ export function resolvePackagedWebEntry(
 ): string {
   const entry = join(dirname(execPath), PACKAGED_WEB_ENTRY_REL)
   if (!exists(entry)) {
-    throw new Error(
-      `dsh-web: missing ${entry}. Keep this executable inside the built folder; do not copy the .exe alone.`,
-    )
+    throw new Error(`dsh-web: missing ${entry}. ${MISSING_PACKAGED_FILE}`)
   }
   return entry
+}
+
+/**
+ * Resolve the on-disk CLI entry beside the launcher executable.
+ * @param execPath - `process.execPath` of the launcher.
+ * @param exists - replaceable existence check.
+ * @returns the absolute CLI entry path.
+ */
+export function resolvePackagedCliEntry(
+  execPath: string,
+  exists: (path: string) => boolean = existsSync,
+): string {
+  const entry = join(dirname(execPath), PACKAGED_WEB_CLI_REL)
+  if (!exists(entry)) {
+    throw new Error(`dsh-web: missing ${entry}. ${MISSING_PACKAGED_FILE}`)
+  }
+  return entry
+}
+
+/**
+ * Extra argv that is a CLI invocation, or `undefined` to keep the GUI.
+ * The Plugin Market and `dsh plugin` spawn this same executable; `--profile`,
+ * help, version, and config dumps would likewise take the guest path and exit 0.
+ * Inner web flags such as `--port` still boot or focus the GUI.
+ * @param args - extra argv after {@link extraPackagedArgv}.
+ * @returns the CLI argv when the first token is a CLI head.
+ */
+export function packagedCliArgv(args: readonly string[]): string[] | undefined {
+  const head = args[0]
+  if (head === undefined || !PACKAGED_WEB_CLI_HEADS.has(head)) return undefined
+  return [...args]
 }
 
 /**

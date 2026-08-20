@@ -6,7 +6,8 @@
  * This is not the JSON-RPC agent and does not read a sidecar cordis.yml.
  * A first extra argument that names an existing .js/.cjs/.mjs file is
  * imported instead, so a packaged host that spawn()s this executable with
- * a worker script behaves like node.
+ * a worker script behaves like node. CLI heads such as `plugin` and `--profile`
+ * run the on-disk CLI against `.config` instead of claiming the GUI lock.
  * @module @deepseek-ai/dsh/packaged-web-bin
  */
 
@@ -15,16 +16,19 @@
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { loadLayeredEnv } from '@deepseek-ai/dsh-app-boot'
-import { defaultDesktopWindowIo, openDesktopWindow } from './open-desktop-window.ts'
+import { defaultDesktopWindowIo, DESKTOP_WINDOW_HANDOFF_MS, openDesktopWindow } from './open-desktop-window.ts'
 import { defaultPackagedWebDesktopIo, runPackagedWebDesktop } from './packaged-web-desktop.ts'
-import { extraPackagedArgv, resolvePackagedScriptArg } from './packaged-web-entry.ts'
+import {
+  extraPackagedArgv,
+  packagedCliArgv,
+  resolvePackagedCliEntry,
+  resolvePackagedScriptArg,
+} from './packaged-web-entry.ts'
 import { applyPackagedWebHome } from './packaged-web-home.ts'
 import { runProfile } from './profile-boot.ts'
 
-/** Launchers that hand off to an existing browser process exit almost immediately. */
-const DESKTOP_WINDOW_HANDOFF_MS = 2_000
-
-const script = resolvePackagedScriptArg(extraPackagedArgv(process.argv, fileURLToPath(import.meta.url)))
+const extra = extraPackagedArgv(process.argv, fileURLToPath(import.meta.url))
+const script = resolvePackagedScriptArg(extra)
 if (script !== undefined) {
   await import(pathToFileURL(script).href)
 } else {
@@ -34,7 +38,12 @@ if (script !== undefined) {
   }
 
   const home = applyPackagedWebHome(process.execPath)
-  if (process.platform === 'win32') {
+  const cli = packagedCliArgv(extra)
+  if (cli !== undefined) {
+    const cliEntry = resolvePackagedCliEntry(process.execPath)
+    process.argv = [process.execPath, cliEntry, ...cli]
+    await import(pathToFileURL(cliEntry).href)
+  } else if (process.platform === 'win32') {
     await runPackagedWebDesktop(defaultPackagedWebDesktopIo())
   } else {
     console.error(`dsh-web: starting the Web GUI (config ${home})`)
@@ -43,7 +52,7 @@ if (script !== undefined) {
       environment: loadLayeredEnv('dsh'),
       profile: 'web',
       patchFiles: [],
-      args: process.argv.slice(2),
+      args: ['--no-open', ...process.argv.slice(2)],
     })
 
     const settled = ctx.get('loader')?.await()

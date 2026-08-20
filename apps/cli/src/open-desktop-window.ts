@@ -65,6 +65,13 @@ export interface OpenedDesktopWindow {
 const LOOPBACK_HOST = '127.0.0.1'
 
 /**
+ * Chromium and `start`/`open` launchers can exit as soon as they hand the URL
+ * to an existing process. Forgetting the window that fast makes the next Show
+ * spawn another `--app=` window.
+ */
+export const DESKTOP_WINDOW_HANDOFF_MS = 2_000
+
+/**
  * Accept only the loopback HTTP URL the packaged Web server prints.
  * @param url - candidate URL.
  * @returns the parsed URL.
