@@ -23,6 +23,7 @@ function mount(props: {
   copyText?: string
   copyLabel?: string
   copiedLabel?: string
+  className?: string
 } = {}) {
   const view = render(
     <HoverCard anchor={<span>row</span>} content={<div>card body</div>} {...props} />,

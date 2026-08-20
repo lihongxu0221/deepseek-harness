@@ -14,6 +14,7 @@ import {
   IconTriangleRightFill14, Menu, StateDot,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { StateDotState } from '@deepseek-ai/dsh-client-ui-primitives'
+import { abbreviateHomePath } from '@deepseek-ai/dsh-client-runtime/client'
 import type { WorkspaceBrowserProps } from '../contract/slots.ts'
 import type { GroupNode, SearchResultNode, SessionNode } from '../tree.ts'
 import { relativeTime } from '../tree.ts'
@@ -39,13 +40,26 @@ function hoverTimeLabel(updatedAt: number, now: number, t: RowTranslate): string
   return unit === 'now' ? t('time.now') : t('time.ago', { t: t(`time.${unit}`, { n }) })
 }
 
-/** Hover-card body: title + pin, session count, owned paths, Edit project. */
-function WorkspaceHoverContent({ label, cwd, folders, sessionCount, pinned, onPin, onEdit, t }: {
+/**
+ * Absolute creation time through the dictionary's date template (the message
+ * clock pattern): `toLocaleString` would follow the browser language, not the
+ * app locale, and produce mixed-language text after a switch.
+ */
+function createdLabel(createdAt: number, t: RowTranslate): string {
+  const d = new Date(createdAt)
+  const pad2 = (v: number): string => String(v).padStart(2, '0')
+  const date = t('date.ymd', { y: d.getFullYear(), m: d.getMonth() + 1, d: d.getDate() })
+  return t('hover.created', { time: `${date} ${pad2(d.getHours())}:${pad2(d.getMinutes())}` })
+}
+
+/** Hover-card body: title + pin, session count, owned paths, Edit project, creation time. */
+function WorkspaceHoverContent({ label, cwd, folders, sessionCount, pinned, createdAt, onPin, onEdit, t }: {
   label: string
   cwd: string | undefined
   folders: readonly string[]
   sessionCount: number
   pinned: boolean
+  createdAt: number
   onPin: () => void
   onEdit: () => void
   t: RowTranslate
@@ -82,6 +96,7 @@ function WorkspaceHoverContent({ label, cwd, folders, sessionCount, pinned, onPi
         <IconSettingsOutline16 size={14} />
         {t('menu.editProject')}
       </button>
+      <div className={css.hoverTime}>{createdLabel(createdAt, t)}</div>
     </div>
   )
 }
@@ -124,10 +139,11 @@ function rowHalf(e: { clientY: number; currentTarget: HTMLElement }): 'before' |
  * @param props.onToggle - expand/collapse the group.
  * @param props.onCreate - start a frontend Session inside this Workspace.
  * @param props.drag - optional workspace-row drag wiring.
+ * @param props.home - host account home for POSIX hover-path abbreviation.
  * @param props.t - the browser root's locale seat.
  * @returns the row element.
  */
-export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, t }: {
+export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, home, t }: {
   group: GroupNode
   onToggle: () => void
   onCreate: () => void
@@ -141,6 +157,8 @@ export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, t }: 
   } | undefined
   /** Present only for real Workspace rows in the grouped view. */
   drag?: WorkspaceRowDragProps | undefined
+  /** Host account home; POSIX home-rooted hover paths display as `~`. */
+  home?: string | undefined
   t: RowTranslate
 }) {
   const row = group
@@ -241,15 +259,19 @@ export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, t }: 
       anchor={ownRow}
       content={<WorkspaceHoverContent
         label={row.label}
-        cwd={row.cwd}
-        folders={row.folders}
+        cwd={row.cwd === undefined ? undefined : abbreviateHomePath(row.cwd, home)}
+        folders={row.folders.map(folder => abbreviateHomePath(folder, home))}
         sessionCount={row.sessionCount}
         pinned={row.pinned}
+        createdAt={row.createdAt}
         onPin={() => { actions?.pin() }}
         onEdit={() => { actions?.edit() }}
         t={t}
       />}
       disabled={menuOpen}
+      copyText={row.cwd}
+      copyLabel={t('copy')}
+      copiedLabel={t('hover.copied')}
       {...(css.hoverCard === undefined ? {} : { className: css.hoverCard })}
     />
   )

@@ -31,6 +31,9 @@ beforeEach(() => { localStorage.clear() })
 /** Runtime with the locale face installed (the browser entry declares `locale:` — zh default backs the t seat). */
 async function createRuntime(): Promise<SlotTestRuntime> {
   const runtime = await SlotTestRuntime.create()
+  runtime.provide('connection', {
+    hostDescription: { getSnapshot: () => undefined, subscribe: () => () => {} },
+  })
   const locale = new LocaleRuntime(runtime.ctx)
   runtime.provide('locale', locale)
   runtime.slots.installLocale(locale)
@@ -41,6 +44,11 @@ async function createRuntime(): Promise<SlotTestRuntime> {
 type FrameProps = PropsRenderSlots<'sidebar.workspaces'>
 function SidebarFrame({ renderSlot }: FrameProps) {
   return <>{renderSlot('sidebar.workspaces', { wide: true, expandSidebar: () => {} })}</>
+}
+
+function collapseRecents(view: ReturnType<SlotTestRuntime['renderRoot']>): void {
+  const toggle = view.queryByRole('button', { name: '折叠或展开最近会话' })
+  if (toggle !== null) fireEvent.click(toggle)
 }
 
 describe('session rename through the assembled browser', () => {
@@ -66,6 +74,7 @@ describe('session rename through the assembled browser', () => {
     )
     await runtime.mount({ inject: [...inject], apply })
     const view = runtime.renderRoot()
+    collapseRecents(view)
 
     // The current session's group auto-expands; open the row's action menu.
     const row = (await view.findByText('旧标题')).closest('[role="treeitem"]')!
@@ -114,6 +123,7 @@ describe('session rename through the assembled browser', () => {
     await runtime.mount({ inject: [...inject], apply })
     const view = runtime.renderRoot()
     await runtime.flush()
+    collapseRecents(view)
 
     const row = (await view.findByText('旧标题')).closest('[role="treeitem"]')!
     fireEvent.click(within(row as HTMLElement).getByLabelText('会话“旧标题”的操作'))
