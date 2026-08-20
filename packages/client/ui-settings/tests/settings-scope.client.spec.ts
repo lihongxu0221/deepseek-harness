@@ -452,10 +452,13 @@ describe('SettingsScopeBinder.bind', () => {
     expect(theme.getSnapshot()).toMatchObject({ revision: 1 })
   })
 
-  it('binds a remote browser in memory mode without starting a settings read', async () => {
-    const describeCall = vi.fn()
+  it('binds a LAN browser in host mode so settings persist on the serving host', async () => {
+    const describeCall = vi.fn().mockResolvedValue({
+      rpcId: 'lan-bind' as never,
+      result: { ok: true, value: { writable: true, hasDocument: false, namespaces: [] } },
+    })
     const wire = { settings: { describe: describeCall } }
-    const mirror = new SettingsDescribeMirror(wire as never, 'memory')
+    const mirror = new SettingsDescribeMirror(wire as never, 'host')
     const ctx = new Context()
     ctx.provide('connection', { api: wire, isLoopback: false } as never)
     let scope!: SettingsScope<UiTestSettings>
@@ -468,8 +471,8 @@ describe('SettingsScopeBinder.bind', () => {
       },
     })
     await fiber.await()
-    expect(scope.getSnapshot()).toMatchObject({ status: 'unavailable', mode: 'memory', writable: false })
+    expect(scope.getSnapshot().mode).toBe('host')
+    await vi.waitFor(() => { expect(describeCall).toHaveBeenCalled() })
     await fiber.dispose()
-    expect(describeCall).not.toHaveBeenCalled()
   })
 })

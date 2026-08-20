@@ -786,6 +786,22 @@ describe('envelope observation', () => {
   })
 })
 
+describe('mintRpcId', () => {
+  it('mints a UUID v4 without crypto.randomUUID', async () => {
+    vi.stubGlobal('crypto', {
+      getRandomValues(bytes: Uint8Array) {
+        return bytes.fill(0)
+      },
+    })
+    try {
+      const listed = await client().sessions.list({})
+      expect(listed.rpcId).toBe('00000000-0000-4000-8000-000000000000')
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+})
+
 describe('resolveBase', () => {
   it('prefers a real location.origin and falls back to the internal authority', async () => {
     class Probe extends AbstractApiClient {

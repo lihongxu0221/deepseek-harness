@@ -19,7 +19,14 @@ async function bench() {
     subscribe: () => () => {},
   } as never)
   ctx.provide('connection', {
-    api: { settings: { describe: async () => ({ result: { ok: false } }) } },
+    api: {
+      settings: {
+        describe: async () => ({
+          rpcId: 'shell' as never,
+          result: { ok: true as const, value: { writable: true, hasDocument: false, namespaces: [] } },
+        }),
+      },
+    },
     isLoopback: false,
   } as never)
   ctx.provide('remote', { $on: () => () => {} } as never)

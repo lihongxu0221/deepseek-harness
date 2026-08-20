@@ -319,6 +319,51 @@ describe('connection client apply', () => {
     })
   })
 
+  it('loads agent presets and the provider catalog without secure-context randomUUID', async () => {
+    ;(globalThis as Win).location = {
+      hostname: '192.0.2.20', search: '', origin: 'http://192.0.2.20:3080',
+    }
+    vi.stubGlobal('crypto', {
+      getRandomValues(bytes: Uint8Array) {
+        return bytes.fill(0)
+      },
+    })
+    const original = globalThis.fetch
+    const seen: { url: string; method: string }[] = []
+    try {
+      const handle = await mount()
+      globalThis.fetch = async (input: URL | RequestInfo, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+        if (typeof init?.body !== 'string') throw new TypeError('expected a JSON string request body')
+        const body = JSON.parse(init.body) as { rpcId: string; method: string }
+        seen.push({ url, method: body.method })
+        const value = body.method === 'agentPreset.list'
+          ? { presets: [], authorable: false, hasDocument: false }
+          : { providers: [] }
+        return Response.json({
+          type: 'server-response',
+          rpcId: body.rpcId,
+          result: { ok: true, value },
+        })
+      }
+      await expect(handle.api.agentPresets.list({})).resolves.toMatchObject({
+        rpcId: '00000000-0000-4000-8000-000000000000',
+        result: { ok: true, value: { presets: [], authorable: false, hasDocument: false } },
+      })
+      await expect(handle.api.llm.providers({})).resolves.toMatchObject({
+        rpcId: '00000000-0000-4000-8000-000000000000',
+        result: { ok: true, value: { providers: [] } },
+      })
+    } finally {
+      globalThis.fetch = original
+      vi.unstubAllGlobals()
+    }
+    expect(seen).toEqual([
+      { url: 'http://192.0.2.20:3080/api/agentPreset.list', method: 'agentPreset.list' },
+      { url: 'http://192.0.2.20:3080/api/llm.providers', method: 'llm.providers' },
+    ])
+  })
+
   it('validates generic RPC transport failures, correlation, and targets', async () => {
     ;(globalThis as Win).location = {
       hostname: 'harness.example', search: '', origin: 'https://harness.example',
