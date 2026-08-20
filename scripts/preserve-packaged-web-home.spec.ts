@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -47,6 +47,28 @@ describe('withPreservedPackagedWebHome', () => {
     })
     expect(readFileSync(join(home, '.credentials.yaml'), 'utf8')).toBe('marker: credentials')
     expect(readFileSync(join(home, 'sessions', 'one.json'), 'utf8')).toBe('{"ok":true}')
+  })
+
+  it('omits profiles/node_modules junctions and keeps profile files', async () => {
+    const directory = fixture('dsh-web-config-fallback-')
+    const home = join(directory, PACKAGED_WEB_HOME_DIR)
+    const packageDir = fixture('dsh-web-config-pkg-')
+    writeFileSync(join(packageDir, 'index.js'), 'module.exports = 1\n')
+    mkdirSync(join(home, 'profiles', 'web'), { recursive: true })
+    mkdirSync(join(home, 'profiles', 'node_modules', '@scope'), { recursive: true })
+    writeFileSync(join(home, 'profiles', 'web', 'package.json'), '{"name":"web"}')
+    writeFileSync(join(home, '.credentials.yaml'), 'marker: credentials')
+    symlinkSync(
+      packageDir,
+      join(home, 'profiles', 'node_modules', '@scope', 'pkg'),
+      process.platform === 'win32' ? 'junction' : 'dir',
+    )
+    await withPreservedPackagedWebHome(directory, async () => {
+      rmSync(directory, { recursive: true, force: true })
+    })
+    expect(readFileSync(join(home, '.credentials.yaml'), 'utf8')).toBe('marker: credentials')
+    expect(readFileSync(join(home, 'profiles', 'web', 'package.json'), 'utf8')).toBe('{"name":"web"}')
+    expect(existsSync(join(home, 'profiles', 'node_modules'))).toBe(false)
   })
 
   it('restores .config when action throws', async () => {

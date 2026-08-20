@@ -6,13 +6,35 @@
 import { existsSync } from 'node:fs'
 import { cp, mkdir, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve, sep } from 'node:path'
 
 /** Directory name for the packaged executable's harness home, beside the exe. */
 export const PACKAGED_WEB_HOME_DIR = '.config'
 
+/** Installation fallback healed on launch; not user data. */
+const MODULE_FALLBACK_SEGMENTS = ['profiles', 'node_modules'] as const
+
+/**
+ * Copy a packaged `.config` tree, omitting `profiles/node_modules`.
+ * That directory is installation junctions recreated on launch; `fs.cp` would
+ * recreate them as privilege-gated symlinks and fail with `EPERM` on Windows.
+ * @param source - existing `.config` directory.
+ * @param destination - directory that should receive the copy.
+ */
+async function copyPackagedWebHome(source: string, destination: string): Promise<void> {
+  const fallback = resolve(source, ...MODULE_FALLBACK_SEGMENTS)
+  await cp(source, destination, {
+    recursive: true,
+    filter: (path) => {
+      const resolved = resolve(path)
+      return resolved !== fallback && !resolved.startsWith(fallback + sep)
+    },
+  })
+}
+
 /**
  * Copy `<directory>/.config` aside before a rebuild deletes that tree.
+ * Omits `profiles/node_modules`, the installation fallback healed on launch.
  * @param directory - staging or product folder that may already contain user data.
  * @returns the temp folder holding `.config`, or `undefined` when none existed.
  */
@@ -20,7 +42,7 @@ export async function stashPackagedWebHome(directory: string): Promise<string | 
   const home = join(directory, PACKAGED_WEB_HOME_DIR)
   if (!existsSync(home)) return undefined
   const stashRoot = await mkdtemp(join(tmpdir(), 'dsh-web-config-'))
-  await cp(home, join(stashRoot, PACKAGED_WEB_HOME_DIR), { recursive: true })
+  await copyPackagedWebHome(home, join(stashRoot, PACKAGED_WEB_HOME_DIR))
   return stashRoot
 }
 
@@ -40,7 +62,7 @@ export async function restorePackagedWebHome(
   await mkdir(directory, { recursive: true })
   await rm(destination, { recursive: true, force: true })
   try {
-    await cp(source, destination, { recursive: true })
+    await copyPackagedWebHome(source, destination)
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error)
     throw new Error(`build-web-exe: failed to restore ${destination} from ${source}: ${detail}`)

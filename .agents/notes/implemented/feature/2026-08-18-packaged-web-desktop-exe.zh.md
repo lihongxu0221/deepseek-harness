@@ -18,7 +18,7 @@ Status: implemented
 
 打包入口在加载 `.env` 并启动之前，会把进程 cwd 改成可执行文件所在目录，因为资源管理器的 cwd 常常不是那个目录。若尚未设置 `$DSH_HOME`，接着会把它指向 `<exeDir>/.config` 并创建该目录。这个文件夹就是完整的 harness 主目录：`settings.yaml`、`.credentials.yaml`、会话和 `desktop-chromium`。源码启动的 `pnpm dsh` 不变，仍使用 `~/.dsh`。
 
-`scripts/build-web-exe.ts` 和仓库根目录的 `build-exe.bat` 只生成这个 Web 文件夹。它们用 `@yao-pkg/pkg --sea` 打包薄启动器，用 `pnpm deploy --filter @deepseek-ai/dsh` 部署闭包，不会同步进 Python runtime，也不会跑 `verify-runtime-closure`。制品构建的子进程设置 `LEFTHOOK=0`，而不是 `CI=true`，因为 pnpm 10 会把 `CI=true` 当成运行 `pnpm install --production` 的信号，随后 lefthook 的 postinstall 就无法导入 lefthook。在 `rm` 掉 staging 或产品文件夹之前，构建会先把已有的 `.config` 拷到一边，完成后再拷回去，即使 deploy 或 pack 失败也会这样做。
+`scripts/build-web-exe.ts` 和仓库根目录的 `build-exe.bat` 只生成这个 Web 文件夹。它们用 `@yao-pkg/pkg --sea` 打包薄启动器，用 `pnpm deploy --filter @deepseek-ai/dsh` 部署闭包，不会同步进 Python runtime，也不会跑 `verify-runtime-closure`。制品构建的子进程设置 `LEFTHOOK=0`，而不是 `CI=true`，因为 pnpm 10 会把 `CI=true` 当成运行 `pnpm install --production` 的信号，随后 lefthook 的 postinstall 就无法导入 lefthook。在 `rm` 掉 staging 或产品文件夹之前，构建会先把已有的 `.config` 拷到一边，完成后再拷回去，即使 deploy 或 pack 失败也会这样做。拷贝会跳过 `profiles/node_modules`，该安装回退目录由 `healProfilesModuleFallback` 在启动时重建。
 
 JSON-RPC 旁边的 `cordis.yml` 约定保持不变。[单文件 JSON-RPC exe](../architecture/2026-07-10-single-file-executable-sdk-runtime-distribution.md) 仍是 Python SDK 载体。
 
@@ -44,4 +44,4 @@ JSON-RPC 旁边的 `cordis.yml` 约定保持不变。[单文件 JSON-RPC exe](..
 
 ## Consequences
 
-Windows 用户运行 `build-exe.bat`，然后双击 `dist-exe/dsh-web-win-x64/dsh-web.exe`。目标机器打开 GUI、对话、添加工作区或写入 API key 时不需要安装系统 Node.js 或 Python：启动器内嵌 Node，`node_modules/` 随文件夹分发，窗口使用 Edge 或 Chrome。Agent 调用的 `python` 或 `node` 命令以及 `dsh plugin` 仍需要这些宿主工具。API key 来自「设置 → 模型」，会写入 `.config/.credentials.yaml`。再次构建会保留 `.config`。exe 旁边的 `.env` 仍可作为项目层使用。`apps/cli/tests/open-desktop-window.spec.ts`、`apps/cli/tests/packaged-web-entry.spec.ts`、`apps/cli/tests/packaged-web-home.spec.ts` 和 `scripts/preserve-packaged-web-home.spec.ts` 中的单元测试固定了 URL 拒绝规则、浏览器优先级、应用模式参数、`start`/`open`/`xdg-open` 回退、缺少文件夹时的错误、SEA 启动器必须保持为 CommonJS，worker 脚本额外参数会导入而不是启动 GUI，未设置、仅空白和显式 `$DSH_HOME` 的情况，重建删除后会恢复 `.config`，以及 Windows 打包会把 PE 子系统设为 GUI。
+Windows 用户运行 `build-exe.bat`，然后双击 `dist-exe/dsh-web-win-x64/dsh-web.exe`。目标机器打开 GUI、对话、添加工作区或写入 API key 时不需要安装系统 Node.js 或 Python：启动器内嵌 Node，`node_modules/` 随文件夹分发，窗口使用 Edge 或 Chrome。Agent 调用的 `python` 或 `node` 命令以及 `dsh plugin` 仍需要这些宿主工具。API key 来自「设置 → 模型」，会写入 `.config/.credentials.yaml`。再次构建会保留 `.config`。exe 旁边的 `.env` 仍可作为项目层使用。`apps/cli/tests/open-desktop-window.spec.ts`、`apps/cli/tests/packaged-web-entry.spec.ts`、`apps/cli/tests/packaged-web-home.spec.ts` 和 `scripts/preserve-packaged-web-home.spec.ts` 中的单元测试固定了 URL 拒绝规则、浏览器优先级、应用模式参数、`start`/`open`/`xdg-open` 回退、缺少文件夹时的错误、SEA 启动器必须保持为 CommonJS，worker 脚本额外参数会导入而不是启动 GUI，未设置、仅空白和显式 `$DSH_HOME` 的情况，重建删除后会恢复 `.config` 并跳过 `profiles/node_modules`，以及 Windows 打包会把 PE 子系统设为 GUI。
