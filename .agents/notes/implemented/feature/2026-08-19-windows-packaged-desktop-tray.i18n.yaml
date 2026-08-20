@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-19-windows-packaged-desktop-tray.md
-2026-08-19-windows-packaged-desktop-tray.md: b4e46fba6fcfc2e19fc88782f3f95734f2c93348
-2026-08-19-windows-packaged-desktop-tray.zh.md: f7511d0186b0c47ada97b18f2d7a75dcd4eb382f
+2026-08-19-windows-packaged-desktop-tray.md: d79adb59f54ffb35eee3cb4cfa4df9fb1f7e10f7
+2026-08-19-windows-packaged-desktop-tray.zh.md: 5240c403a51538c1c3a27b004fafc52d17b9212e

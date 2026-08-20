@@ -1,3 +1,4 @@
+import { createConnection } from 'node:net'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -7,6 +8,7 @@ import type { LaunchEnvironmentSnapshot } from '@deepseek-ai/dsh-launch-environm
 import {
   claimDesktopInstance,
   desktopPipeName,
+  parseDesktopGuestCommand,
   runPackagedWebDesktop,
   type PackagedWebDesktopIo,
 } from '../src/packaged-web-desktop.ts'
@@ -119,10 +121,9 @@ function createHarness(overrides: {
       writeFile() { /* unused */ },
       unlink() { /* unused */ },
     },
-    claimInstance: async (_home, onCommand) => {
+    claimInstance: async (_home, _onShow) => {
       if (overrides.claimError !== undefined) throw overrides.claimError
       if (overrides.role === 'guest') return { role: 'guest', close() { lockClosed += 1 } }
-      commandHandler = onCommand
       return { role: 'owner', close() { lockClosed += 1 } }
     },
     exit(code) { exits.push(code) },
@@ -165,18 +166,51 @@ describe('desktopPipeName', () => {
   })
 })
 
+describe('parseDesktopGuestCommand', () => {
+  it('accepts show and drops every other tray command', () => {
+    expect(parseDesktopGuestCommand('{"type":"show"}')).toEqual({ type: 'show' })
+    expect(parseDesktopGuestCommand('{"type":"quit"}')).toBeUndefined()
+    expect(parseDesktopGuestCommand('{"type":"stop"}')).toBeUndefined()
+    expect(parseDesktopGuestCommand('{"type":"listen","host":"0.0.0.0","port":8080}')).toBeUndefined()
+    expect(parseDesktopGuestCommand('{"type":"start"}')).toBeUndefined()
+    expect(parseDesktopGuestCommand('{"type":"restart"}')).toBeUndefined()
+    expect(parseDesktopGuestCommand('{"type":"settings"}')).toBeUndefined()
+  })
+})
+
 describe('claimDesktopInstance', () => {
   it('forwards show from a second process to the owner', async () => {
     const home = mkdtempSync(join(tmpdir(), 'dsh-desktop-lock-'))
     temps.push(home)
     const pipe = desktopPipeName(home)
-    const received: ShellToHost[] = []
-    const owner = await claimDesktopInstance(pipe, (command) => { received.push(command) })
+    let shows = 0
+    const owner = await claimDesktopInstance(pipe, () => { shows += 1 })
     expect(owner.role).toBe('owner')
     const guest = await claimDesktopInstance(pipe, () => undefined)
     expect(guest.role).toBe('guest')
-    await waitFor(() => received.some(command => command.type === 'show'))
+    await waitFor(() => shows === 1)
     guest.close()
+    owner.close()
+  })
+
+  it('ignores quit and listen on the single-instance pipe', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'dsh-desktop-lock-'))
+    temps.push(home)
+    const pipe = desktopPipeName(home)
+    let shows = 0
+    const owner = await claimDesktopInstance(pipe, () => { shows += 1 })
+    await new Promise<void>((resolvePromise, reject) => {
+      const socket = createConnection(pipe)
+      socket.once('error', reject)
+      socket.once('connect', () => {
+        socket.end(
+          '{"type":"quit"}\n{"type":"listen","host":"0.0.0.0","port":1}\n{"type":"show"}\n',
+        )
+      })
+      socket.once('close', () => { resolvePromise() })
+    })
+    await waitFor(() => shows === 1)
+    expect(shows).toBe(1)
     owner.close()
   })
 })

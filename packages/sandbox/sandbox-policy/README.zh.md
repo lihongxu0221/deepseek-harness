@@ -64,6 +64,6 @@ Current DSH file policy: danger-full-access. The DSH file sandbox does not restr
 
 ## 已知限制与暂缓事项
 
-- **每个会话只有一个主要工作区根目录**：策略解析 `SessionHeader.cwd`；额外可写根目录不属于 `SandboxExecutionPolicy`。
+- **每个会话只有一个主要工作区根目录**：策略把 `SessionHeader.cwd` 解析为 `workspaceRoot`；工作区其余已拥有文件夹作为 `SandboxExecutionPolicy.extraRoots` 到达。
 - **仅限文件操作模式**：`SandboxMode` 管控文件操作；网络和进程策略不在其词汇中，因此这里没有限制它们的旋钮。
 - **有意概述临时区域**：强制执行后端会授予不同的平台临时区域，这些区域在策略解析后才会选定，因此无法在当前上下文中如实枚举。

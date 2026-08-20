@@ -242,10 +242,10 @@ const RUNNER_FAILURE_RULES = {
 /**
  * Local process-sandbox provider. Registers as `ctx.sandbox`. Caches the
  * chain verdict and, on the windows-acl rung, the write grants
- * ({@link AclWriteGrant}: the standing workspace-root grant per workspace
- * and the revocable private-temp grant per live session/workspace pair, the
- * latter revoked on provider dispose); the one-time probes spawn nothing
- * else.
+ * ({@link AclWriteGrant}: the standing workspace-root grant per workspace,
+ * standing extra-folder ACEs revoked when that folder leaves, and the
+ * revocable private-temp grant per live session/workspace pair, the latter
+ * revoked on provider dispose); the one-time probes spawn nothing else.
  */
 export class LocalSandboxProvider extends SandboxProvider {
   // Inline schema call: the config catalog walks `static Config` statically.
@@ -380,7 +380,8 @@ export class LocalSandboxProvider extends SandboxProvider {
    * Materialize one workspace-write policy's ACEs once per provider
    * lifetime. The workspace SID and standing root grant are shared by the
    * workspace. Extra roots added after the first confine receive a standing
-   * ACE on the next call. The temp directory is random and carries a distinct
+   * ACE on the next call; extra roots that left the workspace lose that ACE
+   * on the next call. The temp directory is random and carries a distinct
    * SID, so another session on the same workspace cannot use the shared
    * workspace SID to enter it. A fresh provider always chooses a new path;
    * crash residue therefore cannot collide with or authorize a resumed
@@ -421,7 +422,12 @@ export class LocalSandboxProvider extends SandboxProvider {
       this.workspaceGrants.set(workspaceRoot, workspaceGrant)
     } else {
       // Live extra folders apply on the next confine: the standing grant is
-      // cached per primary root, so a later addFolder must still receive an ACE.
+      // cached per primary root, so a later addFolder must still receive an ACE
+      // and a later removeFolder must drop the ACE it no longer owns.
+      const owned = new Set([workspaceRoot, ...extraRoots])
+      for (const path of workspaceGrant.paths) {
+        if (!owned.has(path)) workspaceGrant.revoke(path)
+      }
       for (const root of extraRoots) {
         if (root === workspaceRoot || workspaceGrant.paths.includes(root)) continue
         workspaceGrant.add(root, true)

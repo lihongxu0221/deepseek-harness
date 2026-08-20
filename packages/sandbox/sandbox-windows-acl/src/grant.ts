@@ -6,8 +6,9 @@
  * private paths and are deliberately new after a restart.
  *
  * Fail-closed: `add` throws on any grant failure and the caller disposes the
- * instance (revoking every path granted so far); `dispose` revokes every
- * standing grant and reports every cleanup failure.
+ * instance (revoking every path granted so far); `revoke` drops one standing
+ * extra-folder ACE when that folder leaves the workspace; `dispose` revokes
+ * revocable paths and reports every cleanup failure.
  * @module @deepseek-ai/dsh-sandbox-windows-acl/grant
  */
 
@@ -18,12 +19,14 @@ import type { NativePtr, Win32Bindings } from './ffi.ts'
 /**
  * One write SID's provider-lifetime grant materialization: the parsed SID
  * pointer plus every directory whose DACL currently carries its ACE.
- * Workspace paths are added STANDING (their ACEs are the cross-session reuse
- * cache and outlive the grant — dispose() skips revoking them, or the next
- * provision would re-propagate the whole tree); temp paths are revocable
- * (dispose() revokes them — an inheritable ACE must not outlive its
- * session's temp directory). Create with {@link AclWriteGrant.create};
- * dispose revokes the revocable paths and frees the SID.
+ * The primary workspace root is added STANDING (its ACE is the
+ * cross-session reuse cache and outlives the grant — dispose() skips
+ * revoking it). Extra folders are also added standing while owned, then
+ * {@link AclWriteGrant.revoke} drops that ACE when the folder leaves.
+ * Temp paths are revocable (dispose() revokes them — an inheritable ACE
+ * must not outlive its session's temp directory). Create with
+ * {@link AclWriteGrant.create}; dispose revokes the revocable paths and
+ * frees the SID.
  */
 export class AclWriteGrant {
   /** The write SID in SDDL string form. */
@@ -67,9 +70,10 @@ export class AclWriteGrant {
    * treat a throw as a failed materialization and dispose the instance to
    * revoke the paths granted so far.
    * @param path - the directory whose DACL gains the grant.
-   * @param standing - the ACE outlives this grant (the workspace reuse
-   *   cache; dispose() skips revoking it). Default false (revoked on
-   *   dispose — the temp-directory lifecycle).
+   * @param standing - the ACE outlives {@link dispose} (the primary-root
+   *   reuse cache, or an extra folder while the workspace owns it).
+   *   {@link revoke} can still drop a standing extra-folder ACE. Default
+   *   false (revoked on dispose — the temp-directory lifecycle).
    */
   add(path: string, standing = false): void {
     ;(standing ? this.standingPaths : this.revocablePaths).push(path)
@@ -79,6 +83,20 @@ export class AclWriteGrant {
   /** Every directory currently carrying the grant, in grant order. */
   get paths(): readonly string[] {
     return [...this.standingPaths, ...this.revocablePaths]
+  }
+
+  /**
+   * Remove the write ACE from one standing directory and drop it from this
+   * grant. The sandbox seam calls this for an extra folder that left the
+   * workspace; it never passes the primary root, which stays the reuse cache.
+   * An unknown or revocable path is a no-op. Fail-closed: a revoke error
+   * leaves the path recorded so a later call can retry.
+   * @param path - standing directory that should lose the ACE.
+   */
+  revoke(path: string): void {
+    if (!this.standingPaths.includes(path) || this.revocablePaths.includes(path)) return
+    revokeWrite(this.api, path, this.sidPtr)
+    this.standingPaths.splice(this.standingPaths.indexOf(path), 1)
   }
 
   /** Revoke every revocable grant (standing ACEs stay) and free the SID; reports every cleanup failure. */

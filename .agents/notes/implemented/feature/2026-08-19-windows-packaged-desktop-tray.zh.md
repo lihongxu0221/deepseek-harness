@@ -22,7 +22,7 @@ Status: implemented
 
 宿主脚本写入 `$DSH_HOME` 而非 `%TEMP%`：临时目录与机器上所有其他进程共享，也是终端防护扫描最激进的目录，而正在运行的 PowerShell 下脚本被删除或加锁会杀掉托盘。文件名带上父进程 pid 与时间戳，因此重启永不会 unlink 它正在替换的那个宿主的脚本。
 
-`scripts/build-web-exe.ts` 把 Windows 启动器的 PE 子系统设为 GUI，资源管理器不会再附加控制台。第二个使用同一 `$DSH_HOME` 的进程会以访客身份占用 named pipe，发送 `show` 后退出。macOS 和 Linux 仍使用[打包 Web 桌面可执行文件](2026-08-18-packaged-web-desktop-exe.md)说明里的控制台托管路径。
+`scripts/build-web-exe.ts` 把 Windows 启动器的 PE 子系统设为 GUI，资源管理器不会再附加控制台。第二个使用同一 `$DSH_HOME` 的进程会以访客身份占用 named pipe，发送 `show` 后退出。owner 在该管道上只接受 `show`；start、stop、listen 和 quit 仍走托盘 stdin。macOS 和 Linux 仍使用[打包 Web 桌面可执行文件](2026-08-18-packaged-web-desktop-exe.md)说明里的控制台托管路径。
 
 ## Alternatives considered
 
@@ -44,4 +44,4 @@ Status: implemented
 
 ## Consequences
 
-Windows 打包产品的生命周期不再绑在 Chromium 窗口或控制台上。用户从托盘停止、重启并重新绑定产品。WinForms 进程退出时 Node 宿主继续运行。即使没有 Chromium 浏览器，服务仍会启动；显示主界面随后走 `cmd start`，托盘保留。`apps/cli/tests/windows-desktop-shell.spec.ts`、`apps/cli/tests/desktop-listen.spec.ts` 和 `apps/cli/tests/packaged-web-desktop.spec.ts` 固定了 JSON 行协议、嵌入脚本、启动/停止/重启、打开 URL 托盘项、鲸鱼 `.ico`、持久化监听、`#settings`、访客 `show`、关闭窗口不会退出、重启退避，以及三条 PowerShell 托管规则：处理器可见控件的 `$script:` 作用域、不使用运行 scriptblock 的原生线程、以及被捕获的 WinForms 线程异常。`packages/bundle/web-app/tests/startup.spec.ts` 固定了全接口环境变量白名单。`packages/client/ui-settings-general/tests/settings-root.client.spec.tsx` 固定了 hash 深链。WinForms 闪窗和托盘没有组装应用快照：这些窗口不在 Web e2e harness 里。
+Windows 打包产品的生命周期不再绑在 Chromium 窗口或控制台上。用户从托盘停止、重启并重新绑定产品。WinForms 进程退出时 Node 宿主继续运行。即使没有 Chromium 浏览器，服务仍会启动；显示主界面随后走 `cmd start`，托盘保留。`apps/cli/tests/windows-desktop-shell.spec.ts`、`apps/cli/tests/desktop-listen.spec.ts` 和 `apps/cli/tests/packaged-web-desktop.spec.ts` 固定了 JSON 行协议、嵌入脚本、启动/停止/重启、打开 URL 托盘项、鲸鱼 `.ico`、持久化监听、`#settings`、访客 `show`、单实例管道忽略 `quit` 和 `listen`、关闭窗口不会退出、重启退避，以及三条 PowerShell 托管规则：处理器可见控件的 `$script:` 作用域、不使用运行 scriptblock 的原生线程、以及被捕获的 WinForms 线程异常。`packages/bundle/web-app/tests/startup.spec.ts` 固定了全接口环境变量白名单。`packages/client/ui-settings-general/tests/settings-root.client.spec.tsx` 固定了 hash 深链。WinForms 闪窗和托盘没有组装应用快照：这些窗口不在 Web e2e harness 里。

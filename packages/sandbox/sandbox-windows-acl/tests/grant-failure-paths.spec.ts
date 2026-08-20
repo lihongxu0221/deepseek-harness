@@ -84,6 +84,16 @@ describe('AclWriteGrant failure paths', () => {
     expect(() =>{  grant.dispose() }).toThrow(AggregateError)
   })
 
+  it('revoke leaves a standing path recorded when the ACE removal fails', () => {
+    const { api, failReads } = grantThenFailApi()
+    const grant = AclWriteGrant.create('S-1-4-42-42', api)
+    grant.add('C:\\extra', true)
+    expect(grant.paths).toEqual(['C:\\extra'])
+    failReads()
+    expect(() => { grant.revoke('C:\\extra') }).toThrow()
+    expect(grant.paths).toEqual(['C:\\extra'])
+  })
+
   it('dispose aggregates a failing SID free into an AggregateError', () => {
     const api = {
       convertStringSidToSidW: vi.fn((_sid: string, slot: NativePtr) => {

@@ -98,7 +98,18 @@ function sendGuestShow(path: string): Promise<void> {
   })
 }
 
-function attachCommandReader(socket: net.Socket, onCommand: (command: ShellToHost) => void): void {
+/**
+ * Accept only `show` from a second process. Start, stop, listen, and quit
+ * stay on the tray stdin so a local connector cannot rebind or exit the host.
+ * @param line - one JSON line from the single-instance pipe.
+ * @returns the show command, or `undefined` for any other payload.
+ */
+export function parseDesktopGuestCommand(line: string): Extract<ShellToHost, { type: 'show' }> | undefined {
+  const command = parseShellToHost(line)
+  return command?.type === 'show' ? command : undefined
+}
+
+function attachGuestReader(socket: net.Socket, onShow: () => void): void {
   socket.setEncoding('utf8')
   let buffer = ''
   socket.on('data', (chunk: string) => {
@@ -107,8 +118,7 @@ function attachCommandReader(socket: net.Socket, onCommand: (command: ShellToHos
     while (index >= 0) {
       const line = buffer.slice(0, index)
       buffer = buffer.slice(index + 1)
-      const command = parseShellToHost(line)
-      if (command !== undefined) onCommand(command)
+      if (parseDesktopGuestCommand(line) !== undefined) onShow()
       index = buffer.indexOf('\n')
     }
   })
@@ -116,16 +126,16 @@ function attachCommandReader(socket: net.Socket, onCommand: (command: ShellToHos
 
 /**
  * Listen on `pipeName`, or connect as a guest and send `show` when the name
- * is already owned.
+ * is already owned. The owner accepts only `show` on this pipe.
  * @param pipeName - {@link desktopPipeName} for this home.
- * @param onCommand - owner callback for guest commands.
+ * @param onShow - owner callback when a guest asks to show the window.
  * @returns the lock. Guests should exit after this resolves.
  */
 export async function claimDesktopInstance(
   pipeName: string,
-  onCommand: (command: ShellToHost) => void,
+  onShow: () => void,
 ): Promise<DesktopInstanceLock> {
-  const server = net.createServer((socket) => { attachCommandReader(socket, onCommand) })
+  const server = net.createServer((socket) => { attachGuestReader(socket, onShow) })
   try {
     await listenPipe(server, pipeName)
     return {
@@ -182,10 +192,10 @@ export interface PackagedWebDesktopIo {
   /**
    * Claim the single-instance lock for `home`.
    * @param home - resolved harness home.
-   * @param onCommand - owner callback for guest commands.
+   * @param onShow - owner callback when a guest asks to show the window.
    * @returns owner or guest lock.
    */
-  claimInstance(home: string, onCommand: (command: ShellToHost) => void): Promise<DesktopInstanceLock>
+  claimInstance(home: string, onShow: () => void): Promise<DesktopInstanceLock>
   /**
    * Process exit. Production calls `process.exit`; tests record the code.
    * @param code - process exit code.
@@ -219,7 +229,7 @@ export function defaultPackagedWebDesktopIo(): PackagedWebDesktopIo {
     openWindow: url => openDesktopWindow(url, defaultDesktopWindowIo()),
     startShell: startWindowsDesktopShell,
     shellIo: defaultWindowsDesktopShellIo(execPath, home),
-    claimInstance: (claimedHome, onCommand) => claimDesktopInstance(desktopPipeName(claimedHome), onCommand),
+    claimInstance: (claimedHome, onShow) => claimDesktopInstance(desktopPipeName(claimedHome), onShow),
     exit: (code) => { process.exit(code) },
     loadListen: () => loadDesktopListen(home),
     saveListen: (next) => { saveDesktopListen(home, next) },
@@ -266,7 +276,7 @@ export async function runPackagedWebDesktop(io: PackagedWebDesktopIo): Promise<v
   let commandSink: (command: ShellToHost) => void = () => undefined
   let lock: DesktopInstanceLock
   try {
-    lock = await io.claimInstance(io.home, (command) => { commandSink(command) })
+    lock = await io.claimInstance(io.home, () => { commandSink({ type: 'show' }) })
   } catch (error) {
     io.exit(1)
     throw error

@@ -28,11 +28,13 @@
  *    STATUS_DLL_INIT_FAILED under the restriction);
  *  - the private temp directory and every writable directory must be owned by the
  *    caller (owner-implicit WRITE_DAC);
- *  - grants are standing ACE mutations on real directories. WORKSPACE grants
- *    are deliberately never revoked — the ACE is the cross-session reuse
- *    cache (revoking would force the next session to re-propagate the whole
- *    tree). TEMP grants are revocable: dispose() removes them so a standing
- *    inheritable ACE never outlives its session's temp directory. The
+ *  - grants are standing ACE mutations on real directories. The primary
+ *    workspace-root ACE is deliberately never revoked — it is the
+ *    cross-session reuse cache (revoking would force the next session to
+ *    re-propagate the whole tree). Extra-folder ACEs are standing while the
+ *    workspace owns them and revoked when that folder leaves. TEMP grants
+ *    are revocable: dispose() removes them so a standing inheritable ACE
+ *    never outlives its session's temp directory. The
  *    ambient temp root is never granted implicitly. With `manageDacls: false`
  *    the CALLER owns the DACLs (the sandbox seam's grant reuse):
  *    init()/dispose() skip grant/revoke entirely and the caller must not
