@@ -2,8 +2,10 @@
  * Process plumbing for the local subprocess service: detached process-tree
  * spawn with per-stream stdio dispositions, tail-keep collection with spill
  * files, tree-scoped signalling (POSIX groups; Windows taskkill), and the
- * SIGTERM→SIGKILL escalation. This layer reacts to an abort signal; callers
- * own deadlines, teardown ladders, and cause classification.
+ * SIGTERM→SIGKILL escalation. Windows spawns hide a new console so a GUI
+ * host (the packaged Web desktop) does not flash one per child. This layer
+ * reacts to an abort signal; callers own deadlines, teardown ladders, and
+ * cause classification.
  * @module dsh-subprocess-local/spawn
  */
 
@@ -278,7 +280,7 @@ export function taskkillProcessTree(pid: number): void {
   // Outcome deliberately unchecked: an already-absent tree (status 128), exit
   // races, and a missing taskkill binary (spawnSync reports, never throws) are
   // as tolerable here as ESRCH is for a POSIX group signal.
-  spawnSync('taskkill', ['/PID', String(pid), '/T', '/F'], { stdio: 'ignore' })
+  spawnSync('taskkill', ['/PID', String(pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true })
 }
 
 /**
@@ -358,6 +360,9 @@ export function spawnSubprocess(spec: SubprocessSpawnSpec, internals: SpawnInter
     // `detached` gives teardown a tree root on POSIX (its own process group);
     // Windows terminates by root pid through taskkill /T instead.
     detached: platform !== 'win32',
+    // CREATE_NO_WINDOW: a GUI-subsystem host otherwise allocates a visible
+    // console for each console-subsystem child (packaged rg.exe, pwsh, taskkill).
+    windowsHide: true,
   })
 
   const collectStream = (mode: SubprocessOutputMode, stream: Readable | null, label: string): OutputCollector | undefined => {
