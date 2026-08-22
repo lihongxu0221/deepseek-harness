@@ -6,7 +6,7 @@ Status: implemented
 
 ## Problem
 
-当 pi-ai 路由变成[一份声明而非 catalog 查表](2026-08-03-pi-ai-declared-provider-catalog.md)之后，要接入一个 OpenAI 兼容网关的人，必须先知道它的模型 id 才能完成配置。适配器不再把人限制在已安装 catalog 里——这正是那次改动的目的——但也意味着没有任何东西告诉用户该端点究竟服务什么，而这类端点大多在 `GET /models` 上公布了这份列表。
+当 pi-ai 路由变成[一份声明而非 catalog 查表](2026-08-03-pi-ai-declared-provider-catalog.zh.md)之后，要接入一个 OpenAI 兼容网关的人，必须先知道它的模型 id 才能完成配置。适配器不再把人限制在已安装 catalog 里——这正是那次改动的目的——但也意味着没有任何东西告诉用户该端点究竟服务什么，而这类端点大多在 `GET /models` 上公布了这份列表。
 
 显而易见的答案——后台刷新的运行时动态 catalog——已随下层一并被拒绝：它会把路由的模型列表变成需要缓存、失效语义与离线路径的外部可变状态，而产品需求要窄得多。真正需要的是*一次性询问*，其答案由用户采纳进 `settings.yaml`，从而让 `settings.yaml` 始终是决定路由服务内容的唯一真源。
 
@@ -19,7 +19,7 @@ Status: implemented
 - `ctx.llm.registerModelDiscovery(settingsNs, discover)` 让适配器插件为自己拥有的 namespace 提供「询问端点」的能力，`ctx.llm.discoverModels(settingsNs, request)` 发起询问。没有任何办法枚举哪些 namespace 注册过：询问不了的界面会从那句拒绝里知道，而一份无人消费的列表只会变成一个什么都不做的必填协议字段。以 namespace 为键是对的，因为配置界面已经从可配置提供方目录里拿到了它，也因为正在新增的提供方没有路由可点名。
 - `LlmModelDiscoveryRequest` 携带草稿——可选的 `provider`、可选的 `baseURL`、可选的 `api`、可选的 `apiKey`，以及一个 signal——且 `provider` 与 `baseURL` 至少要有一个，才有东西可答。`provider` 之所以存在，是因为适配器已经描述过的路由直接由它自己的注册表作答、完全不联网；只有它未描述的路由才会抵达某个端点。这条路径不写 settings 与 credentials。唯一的读取是请求所点名路由的凭据：配置界面拿到的是脱敏描述符而非已存的机密，因此草稿里的 `apiKey` 只在用户正键入时才存在；没有这次读取，已配置好的路由就会被不带认证地询问，只换回一个 401。键入的密钥优先，因为那正是被测试的那一把。
 - `LlmDiscoveredModel` 除 `id` 外每个字段都可选，因为大多数列表只公布 id。回复是候选而非 catalog：采纳其中一条的界面仍要补上适配器所需的容量。
-- `llm.discoverModels` 把同一份草稿送过协议层。它的 `apiKey` 是可承载机密的第三个、也是最后一个载荷（另两个是 `settings.update`/`mutate` 与 `credentials.set`），且绝不被存储或回显。它确实会像其他承载机密的载荷一样随客户端外发信封同行，`subscribeEnvelopes()` 观察者看得到；把那个抽头脱敏是整个配置面的改动，不该由这一个方法独自决定。它走外层 trusted-host fence：已经能 `session.prompt` 的同源 LAN 调用方也可以让宿主向草稿端点发起 GET（[受信任 LAN 配置面](2026-08-20-trusted-lan-configuration-plane.md)）。每一种拒绝都折叠为 `model-discovery-failed`，其消息是适配器自己的文本，details 点名被询问的端点，绝不点名所提供的凭据。
+- `llm.discoverModels` 把同一份草稿送过协议层。它的 `apiKey` 是可承载机密的第三个、也是最后一个载荷（另两个是 `settings.update`/`mutate` 与 `credentials.set`），且绝不被存储或回显。它确实会像其他承载机密的载荷一样随客户端外发信封同行，`subscribeEnvelopes()` 观察者看得到；把那个抽头脱敏是整个配置面的改动，不该由这一个方法独自决定。它走外层 trusted-host fence：已经能 `session.prompt` 的同源 LAN 调用方也可以让宿主向草稿端点发起 GET（[受信任 LAN 配置面](2026-08-20-trusted-lan-configuration-plane.zh.md)）。每一种拒绝都折叠为 `model-discovery-failed`，其消息是适配器自己的文本，details 点名被询问的端点，绝不点名所提供的凭据。
 
 `dsh-llm-pi-ai` 的实现只是一次朴素的 `GET {baseURL}/models`，且仅限 OpenAI 兼容协议。它们的列表形状是网关、自建服务与官方端点三方一致认可的那一种，而这正是该动作存在的场景。其余协议一律以 `DISCOVERY_UNSUPPORTED` 回答，让界面回退到手工填写，而不是把猜错的响应形状报成一个空提供方。`baseURL` 按前缀而非待解析 URL 处理，因此 `https://gateway.example/openai/v1` 这类部署路径会保留其路径段。回复在四兆字节上限下读取，且上限落在实际收到的字节上——端点是用户自己填的 URL，因此会先看声明的 `content-length` 作为善意提示，但绝不把它当作边界；这与 `dsh-web-fetch` 面对自己的调用方提供 URL 时所用的两段式形状一致。
 

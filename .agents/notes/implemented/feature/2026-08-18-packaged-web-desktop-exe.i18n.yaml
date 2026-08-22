@@ -3,4 +3,4 @@
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-18-packaged-web-desktop-exe.md
 2026-08-18-packaged-web-desktop-exe.md: af81c7e183b9b9ce17eafb69db3ca9b95a48f42b
-2026-08-18-packaged-web-desktop-exe.zh.md: 21c6628f7abedce6efbdebb3e71793db7f322919
+2026-08-18-packaged-web-desktop-exe.zh.md: d135b7e9658e37b1c0f4e608152c6e9c288a1f18

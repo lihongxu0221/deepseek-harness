@@ -4,9 +4,9 @@ Status: implemented
 
 [English](2026-07-30-config-plane-boundaries.md) | 中文
 
-> 范围：对 [Web 配置面](2026-07-30-web-config-plane.md)的边界加固——哪些 namespace 能抵达协议、哪些调用方能抵达它们，以及一个只持有局部且可能陈旧的视图的编辑器该如何写入，才不会毁掉它看不见的东西。
+> 范围：对 [Web 配置面](2026-07-30-web-config-plane.zh.md)的边界加固——哪些 namespace 能抵达协议、哪些调用方能抵达它们，以及一个只持有局部且可能陈旧的视图的编辑器该如何写入，才不会毁掉它看不见的东西。
 
-> 调用方边界、脱敏与 revision 设栅依然有效。把「哪些 namespace 能抵达协议」限制为可配置提供方目录这一条，已被[由插件自己拥有的设置表层](2026-08-12-plugin-owned-settings-surface.md)取代——后者服务每一个已注册的 namespace。
+> 调用方边界、脱敏与 revision 设栅依然有效。把「哪些 namespace 能抵达协议」限制为可配置提供方目录这一条，已被[由插件自己拥有的设置表层](2026-08-12-plugin-owned-settings-surface.zh.md)取代——后者服务每一个已注册的 namespace。
 
 ## 问题
 
@@ -20,7 +20,7 @@ Status: implemented
 
 ## 决策
 
-**读取配置与写入配置同样属于特权操作。**`settings.describe` 与 `credentials.describe` 与配置面其余方法一同走外层 trusted-host fence；原生桌面打开器仍仅限回环（[受信任 LAN 配置面](2026-08-20-trusted-lan-configuration-plane.md)）。模型目录（`llm.providers`、`llm.models`）本来就不需要那层额外钉死：它携带的是提供方 id、显示名与模型列表——没有端点、没有密钥状态——而 LAN 客户端的模型选择器正需要它。这条边界由一台真实 HTTP 服务器来断言，而不是手工拼装的请求，因为真正决定它的，是浏览器实际发出的那个 `Host` 头。
+**读取配置与写入配置同样属于特权操作。**`settings.describe` 与 `credentials.describe` 与配置面其余方法一同走外层 trusted-host fence；原生桌面打开器仍仅限回环（[受信任 LAN 配置面](2026-08-20-trusted-lan-configuration-plane.zh.md)）。模型目录（`llm.providers`、`llm.models`）本来就不需要那层额外钉死：它携带的是提供方 id、显示名与模型列表——没有端点、没有密钥状态——而 LAN 客户端的模型选择器正需要它。这条边界由一台真实 HTTP 服务器来断言，而不是手工拼装的请求，因为真正决定它的，是浏览器实际发出的那个 `Host` 头。
 
 **这个面恰好服务于已注册模型提供方所指向的那些 namespace。**`ctx.llm.listConfigurableProviders()` 就是允许列表，于是产品边界是被执行的，而不是从今天的插件集合里推断出来的；将来的 namespace 只有加入该目录才会变得可在 Web 上配置。未注册的 namespace 与未暴露的 namespace 得到完全相同的答复（`settings-not-exposed`），因此探测无法枚举注册表。
 

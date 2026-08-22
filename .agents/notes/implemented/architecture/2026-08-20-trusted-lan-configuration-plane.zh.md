@@ -16,7 +16,7 @@ Status: implemented
 
 `PRIVILEGED_METHODS` 仍保留原生桌面操作与 preset 创作：`host.pickDirectory`、`host.openPath`、`settings.openDocument`、`agentPreset.openDocument`，以及 `agentPreset.read`/`copy`/`remove`。它们仍以空信任表过 fence。`ui-settings-general` 在非回环页面上仍不挂载设置文件操作。
 
-这修正了[配置面边界](2026-07-30-config-plane-boundaries.md)中「配置面仅限回环」的规则，以及[Web 配置面](2026-07-30-web-config-plane.md)中特权集合的成员资格。`llm.discoverModels` 不再仅限回环；[草稿提供方探询](2026-08-04-draft-provider-endpoint-interrogation.md)中的 SSRF 顾虑，对已经能 `session.prompt` 的调用方被接受。
+这修正了[配置面边界](2026-07-30-config-plane-boundaries.zh.md)中「配置面仅限回环」的规则，以及[Web 配置面](2026-07-30-web-config-plane.zh.md)中特权集合的成员资格。`llm.discoverModels` 不再仅限回环；[草稿提供方探询](2026-08-04-draft-provider-endpoint-interrogation.zh.md)中的 SSRF 顾虑，对已经能 `session.prompt` 的调用方被接受。
 
 ## Alternatives considered
 

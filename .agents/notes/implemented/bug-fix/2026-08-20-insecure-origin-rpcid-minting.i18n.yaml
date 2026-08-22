@@ -3,4 +3,4 @@
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-08-20-insecure-origin-rpcid-minting.md
 2026-08-20-insecure-origin-rpcid-minting.md: 9e44ae696fa7d1c7e1c6c47ecab48351af2226c9
-2026-08-20-insecure-origin-rpcid-minting.zh.md: 0a7436e31b47cd5a8ad2fe601407d3da41e56e93
+2026-08-20-insecure-origin-rpcid-minting.zh.md: b13fa579bab25d5a1b43a7045f6c9b8b2332fdae

@@ -6,7 +6,7 @@ Status: implemented
 
 ## Problem
 
-浏览器在非安全上下文中不提供 `crypto.randomUUID`。对 LAN IP 字面量使用 HTTP 不是安全上下文，而 `localhost` 是。Web GUI 把 LAN IP URL 当作受支持的访问路径（[API 浏览器信任边界](../architecture/2026-07-28-api-browser-trust-boundary.md)）：权威栅栏接纳这些字面量，且 `agentPreset.list`、`llm.providers` 等配置读取并不限制在环回地址。
+浏览器在非安全上下文中不提供 `crypto.randomUUID`。对 LAN IP 字面量使用 HTTP 不是安全上下文，而 `localhost` 是。Web GUI 把 LAN IP URL 当作受支持的访问路径（[API 浏览器信任边界](../architecture/2026-07-28-api-browser-trust-boundary.zh.md)）：权威栅栏接纳这些字面量，且 `agentPreset.list`、`llm.providers` 等配置读取并不限制在环回地址。
 
 `AbstractApiClient.mintRpcId` 为每一元域调用签发时使用 `crypto.randomUUID`。因此在 `http://<lan-ip>` 打开设置会在 fetch 之前抛出 `crypto.randomUUID is not a function`，Agent 预设名单和提供方目录都加载失败。通用 Connection RPC 路径已经用浏览器在非安全源上仍暴露的 `crypto.getRandomValues` 签发；域载体没有。
 

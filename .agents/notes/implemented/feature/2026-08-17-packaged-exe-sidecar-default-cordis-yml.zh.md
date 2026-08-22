@@ -8,7 +8,7 @@ Status: implemented
 
 打包后的 JSON-RPC 可执行文件在没有 `$DSH_CORDIS_CONFIG` 或 argv 路径时拒绝启动。这对通用 bin、node 载体，以及会注入检入默认配置的 Python SDK 是正确约定。但对直接启动 `dsh-jsonrpc-agent-pkg-*.exe` 的人来说，这是错误的首次运行体验：资源管理器和空 shell 不会提供配置，进程只打印用法并以 1 退出。
 
-隐藏的 exe 内回退同样错误。[single-exe 分发](../architecture/2026-07-10-single-file-executable-sdk-runtime-distribution.md) 仍然要求实际启动的插件列表来自外部 `cordis.yml`。
+隐藏的 exe 内回退同样错误。[single-exe 分发](../architecture/2026-07-10-single-file-executable-sdk-runtime-distribution.zh.md) 仍然要求实际启动的插件列表来自外部 `cordis.yml`。
 
 ## Decision
 

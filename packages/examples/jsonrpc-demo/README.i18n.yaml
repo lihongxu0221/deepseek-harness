@@ -3,4 +3,4 @@
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/examples/jsonrpc-demo/README.md
 README.md: b5bcd4fd9504297c2dc10efc2bef869f58339916
-README.zh.md: a3ff442d09347e9cf75d7def0b7a494e8a8885d9
+README.zh.md: c08e57ffd5c134b6ccb00db01c19a5ae5f0a6817

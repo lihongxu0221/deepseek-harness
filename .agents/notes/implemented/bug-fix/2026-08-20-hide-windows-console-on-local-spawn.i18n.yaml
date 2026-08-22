@@ -3,4 +3,4 @@
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-08-20-hide-windows-console-on-local-spawn.md
 2026-08-20-hide-windows-console-on-local-spawn.md: 0c058af71dfee4fc07c63b339978ced745a92614
-2026-08-20-hide-windows-console-on-local-spawn.zh.md: 1cbbded15a6f7b74348dd0deccfc2a348c9418b9
+2026-08-20-hide-windows-console-on-local-spawn.zh.md: fb0200c86a5266c1c8aeb5ec52c57ea29b8b3c17

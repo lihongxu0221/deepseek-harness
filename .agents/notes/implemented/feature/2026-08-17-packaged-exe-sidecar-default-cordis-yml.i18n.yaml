@@ -3,4 +3,4 @@
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-17-packaged-exe-sidecar-default-cordis-yml.md
 2026-08-17-packaged-exe-sidecar-default-cordis-yml.md: a2b16647c8758995c6272602b95b45821f38c40d
-2026-08-17-packaged-exe-sidecar-default-cordis-yml.zh.md: cb0979960f61f2972c4896924f5ff83bce06797b
+2026-08-17-packaged-exe-sidecar-default-cordis-yml.zh.md: b5349f321e104b2bb133962089c4ce56a9c9f01b

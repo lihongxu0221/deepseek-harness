@@ -3,4 +3,4 @@
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-08-20-packaged-desktop-plugin-cli.md
 2026-08-20-packaged-desktop-plugin-cli.md: f5b6013687c266f90cae6888ad9f0a2fa7dc02fd
-2026-08-20-packaged-desktop-plugin-cli.zh.md: f52464656cd0ae37363e0085916941a1b09758d5
+2026-08-20-packaged-desktop-plugin-cli.zh.md: 90564fa4a316a6ae35f0627e6362960ac1fc8102

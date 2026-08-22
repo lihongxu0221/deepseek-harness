@@ -2,17 +2,17 @@
 
 [English](README.md) | 中文
 
-只包含 bin 的应用，启动外部 `cordis.yml`；其 [`jsonrpc`](../../sdk/server/README.md) 入口通过按换行分隔的 stdio 为 SDK 客户端提供服务。配置负责组合主干、后端和服务插件。发布的 `dsh-jsonrpc-agent` bin 从配置项目解析裸插件。Python SDK 的 `dsh-jsonrpc-agent-pkg` [单文件可执行运行时](../../../.agents/notes/implemented/architecture/2026-07-10-single-file-executable-sdk-runtime-distribution.md)改用 `lib/packaged-bin.js`：已打包的裸插件从封闭运行时包树解析，相对插件仍以配置目录为基准。
+只包含 bin 的应用，启动外部 `cordis.yml`；其 [`jsonrpc`](../../sdk/server/README.zh.md) 入口通过按换行分隔的 stdio 为 SDK 客户端提供服务。配置负责组合主干、后端和服务插件。发布的 `dsh-jsonrpc-agent` bin 从配置项目解析裸插件。Python SDK 的 `dsh-jsonrpc-agent-pkg` [单文件可执行运行时](../../../.agents/notes/implemented/architecture/2026-07-10-single-file-executable-sdk-runtime-distribution.zh.md)改用 `lib/packaged-bin.js`：已打包的裸插件从封闭运行时包树解析，相对插件仍以配置目录为基准。
 
 ## 配置发现
 
-第一个非空通道生效：先 `$DSH_CORDIS_CONFIG`，再位置参数 `argv[2]`。已指定但文件不存在时，bin 会向 stderr 打印单行用法并以 1 退出。未打包启动没有工作目录回退或内置回退。打包后的可执行文件（`node:sea` 或文件名以 `dsh-jsonrpc-agent-pkg` 开头）在两个通道都为空时使用 `<executable-dir>/cordis.yml`：文件不存在就写入捆绑的默认配置，并在 stderr 报告这次写入，同时把未设置的 `DSH_CWD` / `DSH_SESSION_ROOT` 默认到该目录和 `<executable-dir>/.sessions`。它还会从可执行文件目录加载 `.env`，且不覆盖已有变量。[`dsh-app-boot`](../../boot/app-boot/README.md) 会使插件加载失败成为致命错误。此协议不使用 `DSH_SNAPSHOT`。
+第一个非空通道生效：先 `$DSH_CORDIS_CONFIG`，再位置参数 `argv[2]`。已指定但文件不存在时，bin 会向 stderr 打印单行用法并以 1 退出。未打包启动没有工作目录回退或内置回退。打包后的可执行文件（`node:sea` 或文件名以 `dsh-jsonrpc-agent-pkg` 开头）在两个通道都为空时使用 `<executable-dir>/cordis.yml`：文件不存在就写入捆绑的默认配置，并在 stderr 报告这次写入，同时把未设置的 `DSH_CWD` / `DSH_SESSION_ROOT` 默认到该目录和 `<executable-dir>/.sessions`。它还会从可执行文件目录加载 `.env`，且不覆盖已有变量。[`dsh-app-boot`](../../boot/app-boot/README.zh.md) 会使插件加载失败成为致命错误。此协议不使用 `DSH_SNAPSHOT`。
 
 不含 `dsh-sdk-jsonrpc-server` 的配置仍然有效，只是不提供任何服务；bin 不会指定服务器插件。
 
 ## 退出生命周期
 
-stdin EOF 和 `SIGTERM` 会 dispose（释放资源）根上下文，等待完全停稳后以 0 退出；`SIGINT` 完成同样的 dispose 后以 130 退出。EOF 可能按[分发 Agent Note](../../../.agents/notes/implemented/architecture/2026-07-10-single-file-executable-sdk-runtime-distribution.md) 所述截断正在处理的轮次。`jsonrpc` 插件拥有先响应再退出的协议关闭流程；两条路径均幂等，即使发生竞态也安全。
+stdin EOF 和 `SIGTERM` 会 dispose（释放资源）根上下文，等待完全停稳后以 0 退出；`SIGINT` 完成同样的 dispose 后以 130 退出。EOF 可能按[分发 Agent Note](../../../.agents/notes/implemented/architecture/2026-07-10-single-file-executable-sdk-runtime-distribution.zh.md) 所述截断正在处理的轮次。`jsonrpc` 插件拥有先响应再退出的协议关闭流程；两条路径均幂等，即使发生竞态也安全。
 
 ## stdout 是协议
 

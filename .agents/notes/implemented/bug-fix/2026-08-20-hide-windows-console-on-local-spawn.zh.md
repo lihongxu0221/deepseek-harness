@@ -16,7 +16,7 @@ Status: implemented
 
 该标志在每个宿主上都无条件设置：Node 在非 Windows 上忽略它；CUI 宿主已经拥有控制台，隐藏新控制台不会改变已连接的 stdio。管道与收集式 stdio 仍使用管道；`inherit` 仍使用父进程描述符。终端会话继续走 `node-pty` / ConPTY，不使用该标志。
 
-Windows ACL 沙箱子进程仍是单独的原生 spawn，并且仍然省略 `CREATE_NO_WINDOW`，因为受限令牌在该标志下会以 `STATUS_DLL_INIT_FAILED` 死亡；参见 [Windows ACL 沙箱决策](../feature/2026-08-08-windows-acl-restricted-token-sandbox.md)。
+Windows ACL 沙箱子进程仍是单独的原生 spawn，并且仍然省略 `CREATE_NO_WINDOW`，因为受限令牌在该标志下会以 `STATUS_DLL_INIT_FAILED` 死亡；参见 [Windows ACL 沙箱决策](../feature/2026-08-08-windows-acl-restricted-token-sandbox.zh.md)。
 
 ## Verification
 
@@ -28,7 +28,7 @@ Windows ACL 沙箱子进程仍是单独的原生 spawn，并且仍然省略 `CRE
 
 **向 `SubprocessSpawnSpec` 增加 `windowsHide` 字段。** 拒绝，因为当前没有消费方需要额外的可见控制台；按次标志会在调用方遗漏时重新引入闪窗。
 
-**把宿主保持为 CUI 可执行文件。** 拒绝，因为资源管理器会为桌面本身打开一个持久控制台；[Windows 闪窗与托盘宿主](../feature/2026-08-19-windows-packaged-desktop-tray.md) 已经把启动器标成 GUI。
+**把宿主保持为 CUI 可执行文件。** 拒绝，因为资源管理器会为桌面本身打开一个持久控制台；[Windows 闪窗与托盘宿主](../feature/2026-08-19-windows-packaged-desktop-tray.zh.md) 已经把启动器标成 GUI。
 
 **在 Windows 上使用 `detached: true` 来隐藏控制台。** 拒绝，因为 detached 的 Windows 子进程仍可能分配控制台，而且本地 provider 已经让 Windows 进程树保持附加，以便 `taskkill /T` 能按根 pid 寻址。
 

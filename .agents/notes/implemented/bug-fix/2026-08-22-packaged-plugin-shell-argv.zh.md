@@ -6,7 +6,7 @@ Status: implemented
 
 ## Problem
 
-[2026-08-20 的 CLI 头分发](2026-08-20-packaged-desktop-plugin-cli.md)跳过启动器自身槽位时，拿其余 argv 项与 argv[0] 比较。插件市场在 Windows 的回退路径是 `cmd /d /s /c "dsh plugin --profile web add …"`，而 SEA 在入口运行前重写了 argv：argv[0] 变成绝对可执行路径，按输入原样的 token——`dsh`——被保留到下一个槽位。跳过逻辑认不出这个回声，`packagedCliArgv` 把 `dsh`（而不是 `plugin`）当作头，整个调用落进桌面访客路径——发送 `show`、以 0 退出、pnpm 从未运行。市场把干净退出当作成功，复查已安装版本后报 `STALE(release-age)`；owner 持续运行期间，`desktop-host.log` 每次尝试记下一行 `role=guest`。（追踪证据：SEA 内 `cmd /c dsh --version` 得到 `argv = [<exe>, "dsh", "--version"]`。）
+[2026-08-20 的 CLI 头分发](2026-08-20-packaged-desktop-plugin-cli.zh.md)跳过启动器自身槽位时，拿其余 argv 项与 argv[0] 比较。插件市场在 Windows 的回退路径是 `cmd /d /s /c "dsh plugin --profile web add …"`，而 SEA 在入口运行前重写了 argv：argv[0] 变成绝对可执行路径，按输入原样的 token——`dsh`——被保留到下一个槽位。跳过逻辑认不出这个回声，`packagedCliArgv` 把 `dsh`（而不是 `plugin`）当作头，整个调用落进桌面访客路径——发送 `show`、以 0 退出、pnpm 从未运行。市场把干净退出当作成功，复查已安装版本后报 `STALE(release-age)`；owner 持续运行期间，`desktop-host.log` 每次尝试记下一行 `role=guest`。（追踪证据：SEA 内 `cmd /c dsh --version` 得到 `argv = [<exe>, "dsh", "--version"]`。）
 
 这个失败之上还叠着两个打包形态独有的问题。发布文件夹不在用户 PATH 上，同样的 `cmd /c dsh …` 与市场的重启回放（PowerShell 下的 `& 'dsh'`）在默认机器上根本解析不到可执行文件。另外，市场的重启助手以 `nodeExecutable()` 加 `['-e', <源码>]` 拉起进程；打包宿主里 `process.argv0` 就是产品 exe，于是助手进程走了桌面访客路径，助手源码从未执行——重启杀掉宿主后再也没有拉起替代进程（临时目录下 `dsh-market-restart-*.err.log` 里的 `the replacement did not bind port … within 20s`）。
 
