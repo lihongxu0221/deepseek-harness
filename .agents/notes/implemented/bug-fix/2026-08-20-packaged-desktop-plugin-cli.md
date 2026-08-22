@@ -14,7 +14,7 @@ The market treats a clean exit as a successful add, then finds no new loadable p
 
 After applying packaged `$DSH_HOME`, `lib/packaged-web-bin.js` inspects extra argv. When the first token is a CLI head (`plugin`, `--profile`, `--help`, `--version`, `--dump-config`, and the short aliases), it rewrites `process.argv` so `lib/bin.js` sees the CLI invocation and dynamically imports that on-disk entry. Worker-script extras still import the script; empty extra argv still boots the GUI; inner web flags such as `--port` still take the desktop or guest-`show` path so a second double-click does not start another web profile. The desktop boot also passes `--no-open`: web-app's Node `--eval` helper would spawn this same exe as a guest about two seconds after owner start. A Chromium launcher that exits within `DESKTOP_WINDOW_HANDOFF_MS` does not forget the GUI, so a guest `show` (or a plugin-install spawn of this exe) focuses the existing `--app=` window instead of opening another. A packaged exe that is not named `node` uses `cmd /c start`, `open`, or `xdg-open` instead of `--eval` against `process.execPath`.
 
-`packagedCliArgv` and `resolvePackagedCliEntry` in `apps/cli/src/packaged-web-entry.ts` own the token test and the `lib/bin.js` path beside the exe.
+`packagedCliArgv` and `resolvePackagedCliEntry` in `apps/cli/src/packaged-web-entry.ts` own the token test and the `lib/bin.js` path beside the exe. `extraPackagedArgv` first drops launcher slots and the invocation echo a shell spawn preserves (`dsh` after the SEA rewrites argv[0]); [the shell-argv note](2026-08-22-packaged-plugin-shell-argv.md) owns that skip, the PATH prepend, the `dsh` product alias, and `-e` eval.
 
 ## Alternatives considered
 

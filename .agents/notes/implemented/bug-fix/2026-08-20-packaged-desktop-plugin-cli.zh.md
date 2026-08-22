@@ -14,7 +14,7 @@ Status: implemented
 
 `lib/packaged-web-bin.js` 在应用打包后的 `$DSH_HOME` 之后检查额外 argv。第一个 token 是 CLI 头（`plugin`、`--profile`、`--help`、`--version`、`--dump-config` 及其短别名）时，它改写 `process.argv`，让 `lib/bin.js` 看到 CLI 调用，并动态导入磁盘上的该入口。worker 脚本参数仍导入脚本；空额外 argv 仍启动 GUI；像 `--port` 这样的 web 内部旗标仍走桌面或访客 `show`，这样第二次双击不会再开一个 web profile。桌面启动还会带上 `--no-open`：web-app 的 Node `--eval` 助手会在 owner 启动约两秒后再把同一个 exe 拉成访客。Chromium 启动器若在 `DESKTOP_WINDOW_HANDOFF_MS` 内退出，不会忘掉当前 GUI，因此访客 `show`（或安装插件时再拉起这个 exe）会聚焦已有的 `--app=` 窗口，而不是再开一个。可执行文件名不是 `node` 时，改用 `cmd /c start`、`open` 或 `xdg-open`，而不是对 `process.execPath` 做 `--eval`。
 
-`apps/cli/src/packaged-web-entry.ts` 里的 `packagedCliArgv` 和 `resolvePackagedCliEntry` 负责 token 判断，以及 exe 旁边的 `lib/bin.js` 路径。
+`apps/cli/src/packaged-web-entry.ts` 里的 `packagedCliArgv` 和 `resolvePackagedCliEntry` 负责 token 判断，以及 exe 旁边的 `lib/bin.js` 路径。`extraPackagedArgv` 会先丢掉启动器槽位，以及 shell spawn 保留的调用回声（SEA 重写 argv[0] 之后留下的 `dsh`）；[shell-argv 说明](2026-08-22-packaged-plugin-shell-argv.md)负责该跳过、PATH 前置、产品目录里的 `dsh` 别名，以及 `-e` 求值。
 
 ## Alternatives considered
 

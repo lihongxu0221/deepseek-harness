@@ -130,6 +130,9 @@ export function runPlugin(profile: string, args: readonly string[]): number {
     cwd: dir,
     stdio: 'inherit',
     shell: process.platform === 'win32',
+    // CREATE_NO_WINDOW: the .cmd shim otherwise flashes an empty console
+    // when the parent is a GUI-subsystem packaged exe (Plugin Market).
+    windowsHide: true,
   })
   if (result.error !== undefined) {
     const code = (result.error as NodeJS.ErrnoException).code

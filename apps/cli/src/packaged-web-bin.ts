@@ -6,14 +6,20 @@
  * This is not the JSON-RPC agent and does not read a sidecar cordis.yml.
  * A first extra argument that names an existing .js/.cjs/.mjs file is
  * imported instead, so a packaged host that spawn()s this executable with
- * a worker script behaves like node. CLI heads such as `plugin` and `--profile`
- * run the on-disk CLI against `.config` instead of claiming the GUI lock.
+ * a worker script behaves like node. `-e`/`--eval` inline source runs the
+ * same way for helpers that spawn this executable as node. CLI heads such
+ * as `plugin` and `--profile` run the on-disk CLI against `.config` instead
+ * of claiming the GUI lock. The executable's directory is prepended to
+ * `PATH` so children re-invoke `dsh` by name.
  * @module @deepseek-ai/dsh/packaged-web-bin
  */
 
 /* v8 ignore file -- packaged desktop entry; window opening is unit-tested. */
 
-import { dirname, resolve } from 'node:path'
+import { randomUUID } from 'node:crypto'
+import { writeFileSync, rmSync } from 'node:fs'
+import { dirname, join, resolve } from 'node:path'
+import { tmpdir } from 'node:os'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { loadLayeredEnv } from '@deepseek-ai/dsh-app-boot'
 import { defaultDesktopWindowIo, DESKTOP_WINDOW_HANDOFF_MS, openDesktopWindow } from './open-desktop-window.ts'
@@ -21,6 +27,8 @@ import { defaultPackagedWebDesktopIo, runPackagedWebDesktop } from './packaged-w
 import {
   extraPackagedArgv,
   packagedCliArgv,
+  packagedEvalSource,
+  prependPackagedBinToPath,
   resolvePackagedCliEntry,
   resolvePackagedScriptArg,
 } from './packaged-web-entry.ts'
@@ -28,9 +36,27 @@ import { applyPackagedWebHome } from './packaged-web-home.ts'
 import { runProfile } from './profile-boot.ts'
 
 const extra = extraPackagedArgv(process.argv, fileURLToPath(import.meta.url))
+prependPackagedBinToPath(process.execPath, process.env)
 const script = resolvePackagedScriptArg(extra)
+const evalSource = packagedEvalSource(extra)
 if (script !== undefined) {
   await import(pathToFileURL(script).href)
+} else if (evalSource !== undefined) {
+  const evalPath = join(tmpdir(), `dsh-packaged-eval-${randomUUID()}.cjs`)
+  writeFileSync(evalPath, evalSource, 'utf8')
+  try {
+    await import(pathToFileURL(evalPath).href)
+  } catch (error) {
+    console.error(error)
+    process.exitCode = 1
+  } finally {
+    try {
+      rmSync(evalPath)
+    } catch {
+      // Windows can briefly keep the just-imported temp file locked; the
+      // temp directory owns its eventual removal.
+    }
+  }
 } else {
   const execDir = dirname(process.execPath)
   if (resolve(process.cwd()) !== resolve(execDir)) {

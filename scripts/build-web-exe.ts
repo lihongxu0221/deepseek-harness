@@ -499,6 +499,14 @@ class WebExeBuild {
         console.log(`build-web-exe: Windows PE subsystem GUI: ${launcher}`)
       }
     }
+    const marketAlias = join(product, target.platform === 'win' ? 'dsh.exe' : 'dsh')
+    if (resolve(marketAlias) !== resolve(launcher)) {
+      if (this.cli.dryRun) console.log(`build-web-exe: [dry-run] copy ${launcher} ${marketAlias}`)
+      else {
+        await copyFile(launcher, marketAlias)
+        console.log(`build-web-exe: market CLI alias: ${marketAlias}`)
+      }
+    }
     await this.writeReadme(product)
     return [product, launcher]
   }

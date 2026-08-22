@@ -7,7 +7,11 @@ import {
   PACKAGED_WEB_CLI_REL,
   PACKAGED_WEB_ENTRY_REL,
   packagedCliArgv,
+  packagedEvalSource,
+  packagedMarketCliAliasName,
+  prependPackagedBinToPath,
   resolvePackagedCliEntry,
+  withPackagedMarketCliArgv,
   resolvePackagedScriptArg,
   resolvePackagedWebEntry,
 } from '../src/packaged-web-entry.ts'
@@ -27,6 +31,19 @@ describe('resolvePackagedWebEntry', () => {
     expect(launcher).toContain("join(dirname(process.execPath), 'lib', 'packaged-web-bin.js')")
     expect(launcher).toContain('Keep this executable inside the built folder')
     expect(launcher).toContain('resolvePackagedScriptArg')
+    expect(launcher).toContain('isInvocationEcho(value, process.execPath)')
+    expect(launcher).toContain("INVOCATION_STEMS = new Set(['dsh', 'dsh-web'])")
+    expect(launcher).toContain("join(dirname(process.execPath), 'lib', 'bin.js')")
+    // The market's cmd.exe consoles are hidden by wrapping child_process in
+    // the launcher, before any ESM import creates the builtin facade.
+    expect(launcher).toContain("require('node:child_process')")
+    expect(launcher).toContain('cp.spawn = wrap(cp.spawn)')
+    expect(launcher).toContain('cp.spawnSync = wrap(cp.spawnSync)')
+    expect(launcher).toContain('shouldHideConsole')
+    expect(launcher).toContain("CONSOLE_STEMS = new Set(['cmd', 'powershell', 'pwsh'])")
+    const wrapAt = launcher.indexOf('process.platform === \'win32\'', launcher.indexOf("require('node:child_process')"))
+    expect(wrapAt).toBeGreaterThan(-1)
+    expect(wrapAt).toBeLessThan(launcher.indexOf('const SCRIPT_EXTS'))
     expect(launcher).toContain('.cjs')
   })
 })
@@ -59,6 +76,27 @@ describe('extraPackagedArgv', () => {
     const plugin = ['plugin', '--profile', 'web', 'add', 'github:owner/repo#path:/skin']
     expect(extraPackagedArgv(['D:\\dist\\dsh-web.exe', launcher, ...plugin], launcher)).toEqual(plugin)
     expect(extraPackagedArgv(['D:\\dist\\dsh.exe', ...plugin], launcher)).toEqual(plugin)
+  })
+
+  it('drops the invocation echo the SEA preserves when a shell passed the token as typed', () => {
+    const plugin = ['plugin', '--profile', 'web', 'add', 'dshmarket@latest']
+    const exec = resolve('D:\\dist\\dsh.exe')
+    expect(extraPackagedArgv([exec, 'dsh', ...plugin], launcher, exec)).toEqual(plugin)
+    expect(extraPackagedArgv([exec, 'dsh.exe', ...plugin], launcher, exec)).toEqual(plugin)
+    expect(extraPackagedArgv([exec, 'D:/dist/dsh.exe', ...plugin], launcher, exec)).toEqual(plugin)
+    expect(extraPackagedArgv([exec, 'dsh', '-e', 'console.log(1)'], launcher, exec)).toEqual(['-e', 'console.log(1)'])
+    const worker = resolve('D:\\dist\\worker.cjs')
+    expect(extraPackagedArgv([exec, 'dsh', worker], launcher, exec)).toEqual([worker])
+    const web = resolve('D:\\dist\\dsh-web.exe')
+    expect(extraPackagedArgv([web, 'dsh', ...plugin], launcher, web)).toEqual(plugin)
+    expect(extraPackagedArgv([web, 'dsh-web', ...plugin], launcher, web)).toEqual(plugin)
+    expect(extraPackagedArgv([web, join('D:\\dist', 'lib', 'bin.js'), ...plugin], launcher, web)).toEqual(plugin)
+  })
+
+  it('never treats a leading option or an unrelated name as the invocation echo', () => {
+    const exec = resolve('D:\\dist\\dsh.exe')
+    expect(extraPackagedArgv([exec, '--port', '8080'], launcher, exec)).toEqual(['--port', '8080'])
+    expect(extraPackagedArgv([exec, 'web', '--port', '8080'], launcher, exec)).toEqual(['web', '--port', '8080'])
   })
 })
 
@@ -94,5 +132,60 @@ describe('resolvePackagedCliEntry', () => {
     const expected = join('D:\\dist', PACKAGED_WEB_CLI_REL)
     expect(resolvePackagedCliEntry(execPath, path => path === expected)).toBe(expected)
     expect(() => resolvePackagedCliEntry(execPath, () => false)).toThrow(/Keep this executable inside the built folder/)
+  })
+})
+
+describe('prependPackagedBinToPath', () => {
+  it('prepends the executable directory to a win32 PATH once', () => {
+    const env: { PATH?: string } = { PATH: 'C:\\Windows;C:\\Windows\\System32' }
+    prependPackagedBinToPath('D:\\dist\\dsh.exe', env, 'win32')
+    expect(env.PATH).toBe('D:\\dist;C:\\Windows;C:\\Windows\\System32')
+    prependPackagedBinToPath('D:\\dist\\dsh.exe', env, 'win32')
+    expect(env.PATH).toBe('D:\\dist;C:\\Windows;C:\\Windows\\System32')
+  })
+
+  it('creates a PATH when the environment carries none', () => {
+    const env: { PATH?: string } = {}
+    prependPackagedBinToPath('D:\\dist\\dsh.exe', env, 'win32')
+    expect(env.PATH).toBe('D:\\dist')
+  })
+
+  it('treats an existing entry case-insensitively and leaves other platforms alone', () => {
+    const env: { PATH?: string } = { PATH: 'C:\\Windows;d:\\DIST' }
+    prependPackagedBinToPath('D:\\dist\\dsh.exe', env, 'win32')
+    expect(env.PATH).toBe('C:\\Windows;d:\\DIST')
+    const posix: { PATH?: string } = { PATH: '/usr/bin' }
+    prependPackagedBinToPath('/opt/dist/dsh', posix, 'linux')
+    expect(posix.PATH).toBe('/usr/bin')
+  })
+})
+
+describe('packagedMarketCliAliasName', () => {
+  it('names the market PATH fallback beside the product launcher', () => {
+    expect(packagedMarketCliAliasName('win')).toBe('dsh.exe')
+    expect(packagedMarketCliAliasName('win32')).toBe('dsh.exe')
+    expect(packagedMarketCliAliasName('linux')).toBe('dsh')
+    expect(packagedMarketCliAliasName('darwin')).toBe('dsh')
+  })
+})
+
+describe('withPackagedMarketCliArgv', () => {
+  it('points argv[1] at lib/bin.js so a market spawn could name the CLI entry', () => {
+    const exec = resolve('D:\\dist\\dsh-web.exe')
+    expect(withPackagedMarketCliArgv(exec, [exec, resolve('D:\\dist\\lib\\packaged-web-bin.js')])).toEqual([
+      exec,
+      join('D:\\dist', 'lib', 'bin.js'),
+    ])
+  })
+})
+
+describe('packagedEvalSource', () => {
+  it('returns the source after -e/--eval and nothing for other heads', () => {
+    expect(packagedEvalSource(['-e', 'console.log(1)'])).toBe('console.log(1)')
+    expect(packagedEvalSource(['--eval', 'process.exit(0)'])).toBe('process.exit(0)')
+    expect(packagedEvalSource(['-e'])).toBeUndefined()
+    expect(packagedEvalSource(['--port', '8080'])).toBeUndefined()
+    expect(packagedEvalSource(['plugin'])).toBeUndefined()
+    expect(packagedEvalSource([])).toBeUndefined()
   })
 })
