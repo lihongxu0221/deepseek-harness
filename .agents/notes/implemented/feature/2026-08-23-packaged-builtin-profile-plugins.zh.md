@@ -22,4 +22,4 @@ Status: implemented
 
 ## Consequences
 
-新打出来的文件夹启动时，钉扎插件已经可解析。`scripts/build-builtin-profile-plugins.spec.ts` 固定了合并、首次 seed 的身份字段、allowBuilds 追加、dry-run 和空操作。打包桌面 README 记录了这次 seed。
+新打出来的文件夹启动时，钉扎插件已经可解析。winexe zip 只拷这份种好的 `profiles/web`，其余 `.config` 不进包，这样发布文件夹不会带上构建机的会话或凭据。`scripts/build-builtin-profile-plugins.spec.ts` 固定了合并、首次 seed 的身份字段、allowBuilds 追加、dry-run 和空操作。打包桌面 README 记录了这次 seed。

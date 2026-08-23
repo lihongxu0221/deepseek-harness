@@ -69,11 +69,18 @@ jobs:
           $ver = '${{ steps.version.outputs.version }}'
           $src = 'dist-exe/dsh-web-win-x64'
           if (-not (Test-Path -LiteralPath $src)) { throw "missing $src" }
+          $profile = Join-Path $src '.config/profiles/web'
+          if (-not (Test-Path -LiteralPath $profile)) { throw "missing seeded profile $profile" }
           $stage = Join-Path $env:RUNNER_TEMP "dsh-web-win-x64-$ver"
           New-Item -ItemType Directory -Force -Path $stage | Out-Null
+          # Ship the factory-seeded profile; omit the rest of `.config` so a
+          # rebuild machine's sessions and credentials never enter the zip.
           Get-ChildItem -LiteralPath $src -Force | Where-Object { $_.Name -ne '.config' } | ForEach-Object {
             Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $stage $_.Name) -Recurse -Force
           }
+          $destProfile = Join-Path $stage '.config/profiles/web'
+          New-Item -ItemType Directory -Force -Path (Split-Path -Parent $destProfile) | Out-Null
+          Copy-Item -LiteralPath $profile -Destination $destProfile -Recurse -Force
           $zip = Join-Path (Resolve-Path dist-exe) "dsh-web-win-x64-$ver.zip"
           if (Test-Path -LiteralPath $zip) { Remove-Item -LiteralPath $zip }
           Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip

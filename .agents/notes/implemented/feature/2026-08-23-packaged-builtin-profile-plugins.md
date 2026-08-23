@@ -22,4 +22,4 @@ A packaged desktop folder ships without `.config`. First launch therefore boots 
 
 ## Consequences
 
-A newly packed folder boots with the pinned plugins already resolvable. `scripts/build-builtin-profile-plugins.spec.ts` pins merge, first-seed identity, allowBuilds append, dry-run, and no-op. The packaged-desktop README records the seed.
+A newly packed folder boots with the pinned plugins already resolvable. The winexe zip copies that seeded `profiles/web` tree and omits the rest of `.config`, so a published folder does not carry the builder's sessions or credentials. `scripts/build-builtin-profile-plugins.spec.ts` pins merge, first-seed identity, allowBuilds append, dry-run, and no-op. The packaged-desktop README records the seed.
