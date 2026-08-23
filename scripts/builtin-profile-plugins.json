@@ -1,0 +1,14 @@
+{
+  "profile": "web",
+  "plugins": {
+    "dshmarket": "1.18.1",
+    "@linxin666/dsh-web-ui-all": "0.2.9",
+    "@ychris12138/dsh-usage-stats": "0.2.10"
+  },
+  "allowBuilds": {
+    "cloudflared": true,
+    "cpu-features": true,
+    "node-pty": true,
+    "ssh2": true
+  }
+}

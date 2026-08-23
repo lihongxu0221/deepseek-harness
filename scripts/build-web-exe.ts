@@ -11,6 +11,7 @@ import { existsSync, readFileSync, statSync } from 'node:fs'
 import { copyFile, cp, lstat, mkdir, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve, sep } from 'node:path'
 import { parseArgs } from 'node:util'
+import { seedBuiltinProfilePlugins } from './build-builtin-profile-plugins.ts'
 import { resolvePackagedWebExeVersion } from './packaged-web-exe-version.ts'
 import { withPreservedPackagedWebHome } from './preserve-packaged-web-home.ts'
 import { setWindowsPeSubsystem } from './windows-pe-subsystem.ts'
@@ -298,6 +299,16 @@ class WebExeBuild {
       return
     }
     await this.run('build', pnpmBin(), ['run', 'build'])
+  }
+
+  /** Seed the deployed staging web profile with the builtin community plugins. */
+  async seedBuiltinPlugins(): Promise<void> {
+    await seedBuiltinProfilePlugins(this.staging, {
+      dryRun: this.cli.dryRun,
+      log: (line): void => {
+        console.log(`build-web-exe: ${line}`)
+      },
+    })
   }
 
 
@@ -678,6 +689,10 @@ async function main(): Promise<void> {
   }
   await pipeline.build()
   await pipeline.deployStaging()
+  // Seeding runs on the staging tree, so every packed product copy inherits
+  // the seeded .config/profiles/web while an existing product folder's own
+  // preserved .config keeps winning over the fresh seed.
+  await pipeline.seedBuiltinPlugins()
   const products: string[] = []
   for (const target of cli.targets) products.push(...await pipeline.pack(target))
   pipeline.printProducts(products)
