@@ -119,6 +119,13 @@ describe('resolvePackagedWebEntry', () => {
     expect(typeof seen[7]![4]).toBe('function')
     expect(typeof seen[8]![3]).toBe('function')
     expect((seen[8]![2] as { cwd: string }).cwd).toBe('X')
+
+    // A caller-owned windowsHide wins over the injected product default:
+    // GUI-window spawners declare false and must keep it.
+    wrapped.spawn('git', ['-v'], { stdio: 'ignore', windowsHide: false })
+    wrapped.spawn('git', ['-v'], { stdio: 'ignore', windowsHide: true })
+    expect(seen[9]![3]).toEqual({ stdio: 'ignore', windowsHide: false })
+    expect(seen[10]![3]).toEqual({ stdio: 'ignore', windowsHide: true })
   })
 })
 

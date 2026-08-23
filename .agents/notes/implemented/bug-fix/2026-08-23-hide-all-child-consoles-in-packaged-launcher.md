@@ -10,9 +10,9 @@ The packaged Web desktop (`dsh-web.exe`) is a GUI-subsystem executable with no c
 
 ## Decision
 
-The SEA launcher wraps the whole exported `node:child_process` family on win32 — `spawn`, `spawnSync`, `exec`, `execSync`, `execFile`, `execFileSync` — and injects `windowsHide: true` into every options argument before importing the app entry. The wrap runs before any ESM import creates the builtin facade, so a plugin's later `import { spawn } from 'node:child_process'` binds to the wrapper. Each wrapper normalizes its function's documented arities: args arrays, options objects, and trailing callbacks pass through untouched; only the options object gains the flag.
+The SEA launcher wraps the whole exported `node:child_process` family on win32 — `spawn`, `spawnSync`, `exec`, `execSync`, `execFile`, `execFileSync` — and injects `windowsHide: true` into every options argument before importing the app entry. The wrap runs before any ESM import creates the builtin facade, so a plugin's later `import { spawn } from 'node:child_process'` binds to the wrapper. Each wrapper normalizes its function's documented arities: args arrays, options objects, and trailing callbacks pass through untouched; the options object gains the flag unless the caller already specified `windowsHide`, whose value always wins.
 
-The override is unconditional. This product never shows an OS console window. `CREATE_NO_WINDOW` concerns console allocation only, so GUI windows children create for themselves — dialogs, browsers — are unaffected, and in-app terminal sessions stay on `node-pty`/ConPTY, which does not route through these exports. The [local subprocess provider](2026-08-20-hide-windows-console-on-local-spawn.md) remains the owner for `ctx.subprocess` spawns; this note owns the raw-module path plugin code takes.
+The default is unconditional for callers that leave `windowsHide` unset. `CREATE_NO_WINDOW` hides the child's console but also seeds `STARTUPINFO` with `SW_HIDE`, and Chromium-style children honor that show state for their first `--app` window, so the packaged desktop's browser spawn declares `windowsHide: false` explicitly. WinForms hosts reveal their windows through explicit `Show` calls and keep `windowsHide: true`. In-app terminal sessions stay on `node-pty`/ConPTY, which does not route through these exports. The [local subprocess provider](2026-08-20-hide-windows-console-on-local-spawn.md) remains the owner for `ctx.subprocess` spawns; this note owns the raw-module path plugin code takes.
 
 ## Alternatives considered
 
@@ -24,6 +24,6 @@ The override is unconditional. This product never shows an OS console window. `C
 
 ## Consequences
 
-Every plugin child starts console-free on Windows regardless of its code, and repackaging preserves the guarantee because the policy lives in committed launcher source rather than installed `node_modules`. The cost is deliberate: a plugin cannot opt out through `windowsHide: false`; no product surface wants that today, and reintroducing an escape hatch means a reviewed config field, not a per-callsite flag.
+Every plugin child starts console-free on Windows unless its own code explicitly asks otherwise, and repackaging preserves the guarantee because the policy lives in committed launcher source rather than installed `node_modules`. The cost is bounded: the only first-party opt-out is the desktop browser window that must stay visible, and a plugin that genuinely wants a visible console declares `windowsHide: false` in the same call, where code review sees it.
 
-`apps/cli/tests/packaged-web-entry.spec.ts` pins the wrap position before the first ESM import and exercises every documented call shape against recording stand-ins, including args and callback passthrough.
+`apps/cli/tests/packaged-web-entry.spec.ts` pins the wrap position before the first ESM import and exercises every documented call shape against recording stand-ins, including args and callback passthrough and explicit `windowsHide` passthrough.

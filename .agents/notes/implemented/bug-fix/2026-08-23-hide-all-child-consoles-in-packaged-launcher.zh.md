@@ -10,9 +10,9 @@ Status: implemented
 
 ## Decision
 
-SEA 启动器在 win32 上包装整个 `node:child_process` 导出家族——`spawn`、`spawnSync`、`exec`、`execSync`、`execFile`、`execFileSync`——并在导入应用入口之前向每个 options 实参注入 `windowsHide: true`。包装发生在任何 ESM 导入创建内建门面之前，因此插件随后 `import { spawn } from 'node:child_process'` 绑定的就是包装函数。每个包装器按各自函数的文档化重载归一化实参：args 数组、options 对象与末尾回调原样透传，只有 options 对象被附加该标志。
+SEA 启动器在 win32 上包装整个 `node:child_process` 导出家族——`spawn`、`spawnSync`、`exec`、`execSync`、`execFile`、`execFileSync`——并在导入应用入口之前向每个 options 实参注入 `windowsHide: true`。包装发生在任何 ESM 导入创建内建门面之前，因此插件随后 `import { spawn } from 'node:child_process'` 绑定的就是包装函数。每个包装器按各自函数的文档化重载归一化实参：args 数组、options 对象与末尾回调原样透传；options 对象会附加该标志，但调用方已显式给出 `windowsHide` 时以其值为准。
 
-覆盖是无条件的：本产品从不显示 OS 控制台窗口。`CREATE_NO_WINDOW` 只关乎控制台分配，子进程自行创建的图形窗口（对话框、浏览器）不受影响；应用内终端会话继续走 `node-pty`/ConPTY，不经过这些导出。[本地 subprocess provider](2026-08-20-hide-windows-console-on-local-spawn.zh.md) 仍是 `ctx.subprocess` spawn 的属主；插件代码所走的裸模块路径由本文接管。
+对未设置 `windowsHide` 的调用方，该默认无条件生效。`CREATE_NO_WINDOW` 隐藏子进程控制台的同时也会把 `STARTUPINFO` 的显示状态置为 `SW_HIDE`，Chromium 系子进程的首个 `--app` 窗口会遵循它——因此打包桌面的浏览器 spawn 显式声明 `windowsHide: false`。WinForms 宿主通过显式 `Show` 调用显示窗口，继续使用 `windowsHide: true`。应用内终端会话继续走 `node-pty`/ConPTY，不经过这些导出。[本地 subprocess provider](2026-08-20-hide-windows-console-on-local-spawn.zh.md) 仍是 `ctx.subprocess` spawn 的属主；插件代码所走的裸模块路径由本文接管。
 
 ## Alternatives considered
 
@@ -24,6 +24,6 @@ SEA 启动器在 win32 上包装整个 `node:child_process` 导出家族——`s
 
 ## Consequences
 
-无论代码如何，Windows 上每个插件子进程都不再出现控制台；由于策略位于提交在仓库里的启动器源码而非已安装的 `node_modules`，重新打包即可保留保证。代价是有意的：插件无法通过 `windowsHide: false` 退出隐藏；今天没有产品表面需要它，将来若要引入退出通道，应当是一个经过评审的 config 字段，而不是按次调用的标志。
+除非插件代码自己明确要求，否则 Windows 上的插件子进程不再出现控制台；由于策略位于提交在仓库里的启动器源码而非已安装的 `node_modules`，重新打包即可保留保证。代价有边界：唯一的一方退出点是必须保持可见的桌面浏览器窗口；确实需要可见控制台的插件在同一调用里声明 `windowsHide: false` 即可，代码评审自然覆盖。
 
-`apps/cli/tests/packaged-web-entry.spec.ts` 固定了包装相对首次 ESM 导入的位置，并针对记录替身演练了全部文档化调用形态，包括 args 与回调透传。
+`apps/cli/tests/packaged-web-entry.spec.ts` 固定了包装相对首次 ESM 导入的位置，并针对记录替身演练了全部文档化调用形态，包括 args 与回调透传，以及显式 `windowsHide` 的透传。

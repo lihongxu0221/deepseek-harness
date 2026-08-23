@@ -24,12 +24,15 @@ const { pathToFileURL } = require('node:url')
 // be fixed per callsite, so wrap the whole child_process export family here,
 // before any ESM import creates the node:child_process facade; every later
 // `import { spawn } from 'node:child_process'` sees the wrapped functions.
-// The override is unconditional: this product never shows a console window.
+// An explicit caller-owned windowsHide always wins: CREATE_NO_WINDOW also
+// seeds STARTUPINFO with SW_HIDE, which hides the first GUI window of
+// Chromium-style children, so window-spawning helpers declare `false`.
 if (process.platform === 'win32') {
   const hideOptions = (options) => {
     if (options === undefined || options === null || typeof options !== 'object' || Array.isArray(options)) {
       return { windowsHide: true }
     }
+    if ('windowsHide' in options) return options
     return { ...options, windowsHide: true }
   }
   const wrapArgv = (fn) => function windowsHiddenSpawn(file, args, options) {

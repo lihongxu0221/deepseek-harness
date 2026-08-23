@@ -100,7 +100,13 @@ export function defaultDesktopWindowIo(): DesktopWindowIo {
     env: process.env,
     userDataDir: join(resolveDshHome(), 'desktop-chromium'),
     existsSync,
-    spawn: (command, args) => spawn(command, [...args], { stdio: 'ignore' }),
+    spawn: (command, args) => spawn(command, [...args], {
+      // A GUI browser must keep the default show state; CREATE_NO_WINDOW
+      // seeds STARTUPINFO with SW_HIDE and Chromium honors it for --app
+      // windows, which would launch the desktop UI invisible.
+      stdio: 'ignore',
+      windowsHide: false,
+    }),
   }
 }
 
