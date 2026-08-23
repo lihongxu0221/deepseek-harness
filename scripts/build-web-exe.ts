@@ -7,10 +7,11 @@
  */
 
 import { spawn } from 'node:child_process'
-import { existsSync, statSync } from 'node:fs'
+import { existsSync, readFileSync, statSync } from 'node:fs'
 import { copyFile, cp, lstat, mkdir, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve, sep } from 'node:path'
 import { parseArgs } from 'node:util'
+import { resolvePackagedWebExeVersion } from './packaged-web-exe-version.ts'
 import { withPreservedPackagedWebHome } from './preserve-packaged-web-home.ts'
 import { setWindowsPeSubsystem } from './windows-pe-subsystem.ts'
 
@@ -127,6 +128,8 @@ class BuildCli {
     readonly dryRun: boolean,
     /** Restore missing staged packages without clearing the product folder. */
     readonly restoreOnly: boolean,
+    /** Product-folder VERSION stamp; defaults to the root package.json version. */
+    readonly productVersion: string,
   ) {}
 
   /**
@@ -152,7 +155,10 @@ class BuildCli {
       }
       seen.add(key)
     }
-    return new BuildCli(targets, values['skip-build'], values['dry-run'], values['restore-only'])
+    const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as { version?: string }
+    const baseVersion = typeof manifest.version === 'string' ? manifest.version : ''
+    const productVersion = resolvePackagedWebExeVersion(baseVersion, process.env, values['product-version'])
+    return new BuildCli(targets, values['skip-build'], values['dry-run'], values['restore-only'], productVersion)
   }
 
   private static parseRaw(argv: string[]) {
@@ -163,6 +169,7 @@ class BuildCli {
         'skip-build': { type: 'boolean', default: false },
         'dry-run': { type: 'boolean', default: false },
         'restore-only': { type: 'boolean', default: false },
+        'product-version': { type: 'string' },
         'help': { type: 'boolean', default: false },
       },
     }).values
@@ -177,6 +184,7 @@ class BuildCli {
       '  --skip-build           skip `pnpm run build` (lib/ artifacts must already exist).',
       '  --dry-run              print every command and config patch without executing.',
       '  --restore-only         copy missing staged packages; do not rebuild or wipe.',
+      '  --product-version=<v>  stamp VERSION / README; default: package.json or DSH_WEB_EXE_*.',
       '  --help                 print this help.',
       '',
       `Build route: deploy the CLI closure, then ${PKG_SPEC} --sea for a thin launcher.`,
@@ -507,6 +515,7 @@ class WebExeBuild {
         console.log(`build-web-exe: market CLI alias: ${marketAlias}`)
       }
     }
+    await this.writeVersion(product)
     await this.writeReadme(product)
     return [product, launcher]
   }
@@ -540,12 +549,26 @@ class WebExeBuild {
   }
 
   /**
+   * Write the product version stamp next to the launcher.
+   * @param product - the product directory.
+   */
+  private async writeVersion(product: string): Promise<void> {
+    const path = join(product, 'VERSION')
+    if (this.cli.dryRun) {
+      console.log(`build-web-exe: [dry-run] write ${path}`)
+      return
+    }
+    await writeFile(path, this.cli.productVersion + '\n')
+  }
+
+  /**
    * Write a short start guide next to the launcher.
    * @param product - the product directory.
    */
   private async writeReadme(product: string): Promise<void> {
     const text = [
       'DeepSeek Harness Web desktop',
+      `Version ${this.cli.productVersion}`,
       '',
       'Double-click dsh-web.exe (or dsh-web on macOS/Linux) to start the GUI.',
       'Keep this whole folder together; the exe is only a launcher.',
@@ -624,7 +647,8 @@ class WebExeBuild {
         // Artifact builds must not mutate or validate a developer's Git hooks.
         // Do not set CI=true: pnpm 10 then runs `pnpm install --production`,
         // which removes lefthook and then fails the lefthook postinstall.
-        env: { ...process.env, LEFTHOOK: '0' },
+        // Unset CI too: GitHub Actions always injects CI=true.
+        env: { ...process.env, LEFTHOOK: '0', CI: '' },
         shell: process.platform === 'win32',
       })
       child.once('error', (error) => {
@@ -646,6 +670,7 @@ async function main(): Promise<void> {
   const cli = BuildCli.parse(process.argv.slice(2))
   const pipeline = new WebExeBuild(cli)
   console.log(`build-web-exe: targets: ${cli.targets.map(target => target.spec).join(', ')}`)
+  console.log(`build-web-exe: version: ${cli.productVersion}`)
   console.log(`build-web-exe: staging: ${pipeline.staging}`)
   if (cli.restoreOnly) {
     await pipeline.restoreExisting()

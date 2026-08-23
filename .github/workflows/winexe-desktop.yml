@@ -1,0 +1,102 @@
+# Pack the Windows Web desktop on every winexeBuilder push and publish a
+# prerelease zip. Official package.json versions stay unchanged; the product
+# stamp is <package-version>.winexe.<GitHub run number>.
+name: Winexe desktop
+
+on:
+  push:
+    branches: [winexeBuilder]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: winexe-desktop-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PRIMARY_NODE_VERSION: '24'
+  DSH_TELEMETRY_DISABLED: '1'
+  LEFTHOOK: '0'
+  # Empty, not "false": a set CI string is truthy in Node and makes pnpm
+  # run `install --production`, which drops tsx and lefthook.
+  CI: ''
+
+jobs:
+  pack:
+    name: Pack Windows desktop
+    runs-on: windows-latest
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.PRIMARY_NODE_VERSION }}
+          cache: pnpm
+
+      - name: Resolve product version
+        id: version
+        run: |
+          $base = (Get-Content -Raw package.json | ConvertFrom-Json).version
+          $iter = '${{ github.run_number }}'
+          $ver = "$base.winexe.$iter"
+          "version=$ver" | Add-Content $env:GITHUB_OUTPUT
+          "iteration=$iter" | Add-Content $env:GITHUB_OUTPUT
+          Write-Output "product version $ver"
+
+      - name: Install
+        run: pnpm install --frozen-lockfile --config.confirmModulesPurge=false
+
+      - name: Build desktop
+        env:
+          NODE_ENV: development
+          DSH_WEB_EXE_ITERATION: ${{ steps.version.outputs.iteration }}
+        run: pnpm exec tsx scripts/build-web-exe.ts --targets=node24-win-x64
+
+      - name: Zip product
+        id: zip
+        run: |
+          $ver = '${{ steps.version.outputs.version }}'
+          $src = 'dist-exe/dsh-web-win-x64'
+          if (-not (Test-Path -LiteralPath $src)) { throw "missing $src" }
+          $stage = Join-Path $env:RUNNER_TEMP "dsh-web-win-x64-$ver"
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+          Get-ChildItem -LiteralPath $src -Force | Where-Object { $_.Name -ne '.config' } | ForEach-Object {
+            Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $stage $_.Name) -Recurse -Force
+          }
+          $zip = Join-Path (Resolve-Path dist-exe) "dsh-web-win-x64-$ver.zip"
+          if (Test-Path -LiteralPath $zip) { Remove-Item -LiteralPath $zip }
+          Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip
+          "path=$zip" | Add-Content $env:GITHUB_OUTPUT
+          Get-Item -LiteralPath $zip | Format-List FullName, Length
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dsh-web-win-x64-${{ steps.version.outputs.version }}
+          path: ${{ steps.zip.outputs.path }}
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $ver = '${{ steps.version.outputs.version }}'
+          $tag = "winexe-$ver"
+          $zip = '${{ steps.zip.outputs.path }}'
+          $notes = "Automated winexeBuilder desktop $ver from ${{ github.sha }}."
+          if (gh release view $tag 2>$null) {
+            gh release upload $tag $zip --clobber
+          } else {
+            gh release create $tag $zip --target ${{ github.sha }} --prerelease --title "Web desktop $ver" --notes $notes
+          }
