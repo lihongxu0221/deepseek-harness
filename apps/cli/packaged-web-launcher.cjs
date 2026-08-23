@@ -17,37 +17,47 @@ const cp = require('node:child_process')
 const { basename, dirname, extname, join, resolve } = require('node:path')
 const { pathToFileURL } = require('node:url')
 
-// Hide the cmd.exe consoles the Plugin Market opens (`cmd /c pnpm --version`
-// on first open, `cmd /c dsh plugin …` per install). Those calls live in
-// dshmarket and cannot set windowsHide themselves. Patching here — before
-// any ESM import creates the node:child_process facade — lets every later
-// `import { spawn } from 'node:child_process'` see the wrapped functions.
+// Hide every child console on Windows. The packaged host is a GUI process
+// without its own console, so a child spawned without windowsHide — git from
+// a sidebar plugin, pnpm from the market, any future plugin's CLI helper —
+// allocates a new, visible, empty console window. Third-party plugins cannot
+// be fixed per callsite, so wrap the whole child_process export family here,
+// before any ESM import creates the node:child_process facade; every later
+// `import { spawn } from 'node:child_process'` sees the wrapped functions.
+// The override is unconditional: this product never shows a console window.
 if (process.platform === 'win32') {
-  const CONSOLE_STEMS = new Set(['cmd', 'powershell', 'pwsh'])
   const hideOptions = (options) => {
     if (options === undefined || options === null || typeof options !== 'object' || Array.isArray(options)) {
       return { windowsHide: true }
     }
     return { ...options, windowsHide: true }
   }
-  const shouldHideConsole = (file, args, options) => {
-    const opts = Array.isArray(args) || args === undefined ? options : args
-    if (opts !== undefined && opts !== null && typeof opts === 'object' && !Array.isArray(opts) && opts.shell === true) {
-      return true
+  const wrapArgv = (fn) => function windowsHiddenSpawn(file, args, options) {
+    if (Array.isArray(args) || args === undefined || args === null) {
+      return fn.call(this, file, args, hideOptions(options))
     }
-    const name = basename(String(file ?? '')).toLowerCase()
-    const stem = name.replace(/\.exe$/u, '')
-    return CONSOLE_STEMS.has(stem) || name.endsWith('.cmd') || name.endsWith('.bat')
+    return fn.call(this, file, hideOptions(args))
   }
-  const wrap = (fn) => function windowsHiddenSpawn(file, args, options) {
-    const hide = shouldHideConsole(file, args, options)
-    if (Array.isArray(args) || args === undefined) {
-      return fn.call(this, file, args, hide ? hideOptions(options) : options)
+  const wrapExec = (fn) => function windowsHiddenExec(command, options, callback) {
+    if (typeof options === 'function') return fn.call(this, command, hideOptions(), options)
+    return fn.call(this, command, hideOptions(options), callback)
+  }
+  const wrapExecFile = (fn) => function windowsHiddenExecFile(file, args, options, callback) {
+    if (Array.isArray(args) || args === undefined || args === null) {
+      if (typeof options === 'function') return fn.call(this, file, args, hideOptions(), options)
+      return fn.call(this, file, args, hideOptions(options), callback)
     }
-    return fn.call(this, file, hide ? hideOptions(args) : args)
+    if (typeof args === 'function') return fn.call(this, file, hideOptions(), args)
+    // execFile(file, options[, callback]): the args slot carries the options.
+    if (typeof options === 'function') return fn.call(this, file, hideOptions(args), options)
+    return fn.call(this, file, hideOptions(args), callback)
   }
-  cp.spawn = wrap(cp.spawn)
-  cp.spawnSync = wrap(cp.spawnSync)
+  cp.spawn = wrapArgv(cp.spawn)
+  cp.spawnSync = wrapArgv(cp.spawnSync)
+  cp.exec = wrapExec(cp.exec)
+  cp.execSync = wrapExec(cp.execSync)
+  cp.execFile = wrapExecFile(cp.execFile)
+  cp.execFileSync = wrapExecFile(cp.execFileSync)
 }
 
 const SCRIPT_EXTS = new Set(['.js', '.cjs', '.mjs'])

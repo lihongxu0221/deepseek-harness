@@ -16,7 +16,7 @@ Status: implemented
 
 该标志在每个宿主上都无条件设置：Node 在非 Windows 上忽略它；CUI 宿主已经拥有控制台，隐藏新控制台不会改变已连接的 stdio。管道与收集式 stdio 仍使用管道；`inherit` 仍使用父进程描述符。终端会话继续走 `node-pty` / ConPTY，不使用该标志。
 
-Windows ACL 沙箱子进程仍是单独的原生 spawn，并且仍然省略 `CREATE_NO_WINDOW`，因为受限令牌在该标志下会以 `STATUS_DLL_INIT_FAILED` 死亡；参见 [Windows ACL 沙箱决策](../feature/2026-08-08-windows-acl-restricted-token-sandbox.zh.md)。
+Windows ACL 沙箱子进程仍是单独的原生 spawn，并且仍然省略 `CREATE_NO_WINDOW`，因为受限令牌在该标志下会以 `STATUS_DLL_INIT_FAILED` 死亡；参见 [Windows ACL 沙箱决策](../feature/2026-08-08-windows-acl-restricted-token-sandbox.zh.md)。打包启动器另行包装了裸 `node:child_process` 导出，让第三方插件的子进程同样隐藏；参见[打包启动器子控制台决策](2026-08-23-hide-all-child-consoles-in-packaged-launcher.zh.md)。
 
 ## Verification
 

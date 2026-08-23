@@ -36,17 +36,89 @@ describe('resolvePackagedWebEntry', () => {
     expect(launcher).toContain('isInvocationEcho(value, process.execPath)')
     expect(launcher).toContain("INVOCATION_STEMS = new Set(['dsh', 'dsh-web'])")
     expect(launcher).toContain("join(dirname(process.execPath), 'lib', 'bin.js')")
-    // The market's cmd.exe consoles are hidden by wrapping child_process in
-    // the launcher, before any ESM import creates the builtin facade.
+    // Every child console is hidden on Windows by wrapping child_process in
+    // the launcher, before any ESM import creates the builtin facade; a GUI
+    // host without this makes each unpatched plugin spawn pop an empty
+    // console window (git from source-control panels, pnpm installs, ...).
     expect(launcher).toContain("require('node:child_process')")
-    expect(launcher).toContain('cp.spawn = wrap(cp.spawn)')
-    expect(launcher).toContain('cp.spawnSync = wrap(cp.spawnSync)')
-    expect(launcher).toContain('shouldHideConsole')
-    expect(launcher).toContain("CONSOLE_STEMS = new Set(['cmd', 'powershell', 'pwsh'])")
+    expect(launcher).toContain('allocates a new, visible, empty console window')
+    expect(launcher).toContain('cp.spawn = wrapArgv(cp.spawn)')
+    expect(launcher).toContain('cp.spawnSync = wrapArgv(cp.spawnSync)')
+    expect(launcher).toContain('cp.exec = wrapExec(cp.exec)')
+    expect(launcher).toContain('cp.execSync = wrapExec(cp.execSync)')
+    expect(launcher).toContain('cp.execFile = wrapExecFile(cp.execFile)')
+    expect(launcher).toContain('cp.execFileSync = wrapExecFile(cp.execFileSync)')
     const wrapAt = launcher.indexOf('process.platform === \'win32\'', launcher.indexOf("require('node:child_process')"))
     expect(wrapAt).toBeGreaterThan(-1)
     expect(wrapAt).toBeLessThan(launcher.indexOf('const SCRIPT_EXTS'))
     expect(launcher).toContain('.cjs')
+  })
+
+  it('forces windowsHide onto every documented child_process call shape', () => {
+    const launcher = readFileSync(fileURLToPath(new URL('../packaged-web-launcher.cjs', import.meta.url)), 'utf8')
+    const guard = "if (process.platform === 'win32') {"
+    const start = launcher.indexOf(guard)
+    const end = launcher.indexOf('const SCRIPT_EXTS')
+    expect(start).toBeGreaterThan(-1)
+    // Evaluate the block body against recording stand-ins so every wrapper
+    // branch is exercised without spawning real children.
+    const body = launcher.slice(start + guard.length, end).replace(/\}\s*$/u, '')
+    const seen: unknown[][] = []
+    const record = (name: string) =>
+      (...callArgs: unknown[]): unknown => {
+        seen.push([name, ...callArgs])
+        return { pid: 0 }
+      }
+    const cp = {
+      spawn: record('spawn'),
+      spawnSync: record('spawnSync'),
+      exec: record('exec'),
+      execSync: record('execSync'),
+      execFile: record('execFile'),
+      execFileSync: record('execFileSync'),
+    }
+    const build = new Function(
+      'cp',
+      body +
+        '\nreturn { spawn: cp.spawn, spawnSync: cp.spawnSync, exec: cp.exec, execSync: cp.execSync, execFile: cp.execFile, execFileSync: cp.execFileSync }',
+    )
+    const wrapped = build(cp) as {
+      spawn: (...callArgs: unknown[]) => unknown
+      spawnSync: (...callArgs: unknown[]) => unknown
+      exec: (...callArgs: unknown[]) => unknown
+      execSync: (...callArgs: unknown[]) => unknown
+      execFile: (...callArgs: unknown[]) => unknown
+      execFileSync: (...callArgs: unknown[]) => unknown
+    }
+    const noop = (): void => {}
+    wrapped.spawn('git')
+    wrapped.spawn('git', ['-v'])
+    wrapped.spawn('git', ['-v'], { stdio: 'pipe' })
+    wrapped.exec('git status', noop)
+    wrapped.execSync('git diff')
+    wrapped.execFileSync('git', ['diff'], { cwd: 'X' })
+    wrapped.execFile('git', noop)
+    wrapped.execFile('git', ['log'], noop)
+    wrapped.execFile('git', { cwd: 'X' }, noop)
+
+    for (const entry of seen) {
+      const options = entry
+        .slice(1)
+        .filter(arg => arg !== null && typeof arg === 'object' && !Array.isArray(arg))
+        .pop() as { windowsHide?: boolean } | undefined
+      expect(options?.windowsHide).toBe(true)
+    }
+    expect(seen[1]!.slice(2)).toEqual([['-v'], { windowsHide: true }])
+    expect(seen[2]![3]).toEqual({ stdio: 'pipe', windowsHide: true })
+    expect(typeof seen[3]![3]).toBe('function')
+    expect(seen[4]![1]).toBe('git diff')
+    expect(seen[5]![2]).toEqual(['diff'])
+    expect((seen[5]![3] as { cwd: string }).cwd).toBe('X')
+    expect(typeof seen[6]![3]).toBe('function')
+    expect(seen[7]![2]).toEqual(['log'])
+    expect(typeof seen[7]![4]).toBe('function')
+    expect(typeof seen[8]![3]).toBe('function')
+    expect((seen[8]![2] as { cwd: string }).cwd).toBe('X')
   })
 })
 

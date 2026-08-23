@@ -16,7 +16,7 @@ The public subprocess spec does not carry a window-visibility flag. Visibility i
 
 The flag is unconditional on every host: Node ignores it off Windows, and a CUI host already owns a console, so hiding a new one does not change attached stdio. Piped and collected stdio stay pipes; `inherit` still uses the parent descriptors. Terminal sessions stay on `node-pty` / ConPTY and do not use this flag.
 
-Windows ACL sandbox children remain a separate native spawn that still omits `CREATE_NO_WINDOW`, because a restricted token dies with `STATUS_DLL_INIT_FAILED` under that flag; see [the Windows ACL sandbox decision](../feature/2026-08-08-windows-acl-restricted-token-sandbox.md).
+Windows ACL sandbox children remain a separate native spawn that still omits `CREATE_NO_WINDOW`, because a restricted token dies with `STATUS_DLL_INIT_FAILED` under that flag; see [the Windows ACL sandbox decision](../feature/2026-08-08-windows-acl-restricted-token-sandbox.md). The packaged launcher separately wraps raw `node:child_process` exports so third-party-plugin children are hidden too; see [the packaged-launcher child-console decision](2026-08-23-hide-all-child-consoles-in-packaged-launcher.md).
 
 ## Verification
 
