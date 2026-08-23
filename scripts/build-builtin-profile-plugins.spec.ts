@@ -160,6 +160,21 @@ describe('seedBuiltinProfilePlugins', () => {
     expect(fake.runs.length).toBe(1)
   })
 
+  it('reruns install when allowBuilds gains a new key', async () => {
+    const product = join(tempRoot(), 'product')
+    const first = join(tempRoot(), 'first.json')
+    const second = join(tempRoot(), 'second.json')
+    writeFileSync(first, JSON.stringify({ profile: 'web', plugins: { 'pkg-a': '1.0.0' }, allowBuilds: { ssh2: true } }))
+    writeFileSync(second, JSON.stringify({ profile: 'web', plugins: { 'pkg-a': '1.0.0' }, allowBuilds: { ssh2: true, sharp: true } }))
+    const fake = fakeInstall(['pkg-a'])
+    await seedBuiltinProfilePlugins(product, { manifestPath: first, runInstall: fake.install, log: () => {} })
+    const result = await seedBuiltinProfilePlugins(product, { manifestPath: second, runInstall: fake.install, log: () => {} })
+    expect(result.upToDate).toBe(false)
+    expect(result.ranInstall).toBe(true)
+    expect(fake.runs.length).toBe(2)
+    expect(readFileSync(join(profileDirOf(product), 'pnpm-workspace.yaml'), 'utf8')).toContain('sharp: true')
+  })
+
   it('reinstalls without manifest churn when a plugin stopped resolving', async () => {
     const product = join(tempRoot(), 'product')
     const fake = fakeInstall(pluginNames)
@@ -225,11 +240,17 @@ describe('planAllowBuildsAppend', () => {
     expect(merged).toMatch(/^# hoisted linker/)
   })
 
-  it('is idempotent and defers to an owner-managed block', () => {
+  it('is idempotent and appends only missing keys', () => {
     const first = planAllowBuildsAppend('', allow)
     expect(first).not.toBeNull()
     expect(planAllowBuildsAppend(first!, allow)).toBeNull()
-    expect(planAllowBuildsAppend('allowBuilds:\n  esbuild: false\n', allow)).toBeNull()
+    const owner = planAllowBuildsAppend('allowBuilds:\n  esbuild: false\n', allow)
+    expect(owner).toContain('esbuild: false')
+    expect(owner).toContain('node-pty: true')
+    expect(owner).toContain('ssh2: true')
     expect(planAllowBuildsAppend('', {})).toBeNull()
+    const placeholder = planAllowBuildsAppend('allowBuilds:\n  sharp: set this to true or false\n', { sharp: true })
+    expect(placeholder).toContain('  sharp: true\n')
+    expect(placeholder).not.toContain('set this to true or false')
   })
 })

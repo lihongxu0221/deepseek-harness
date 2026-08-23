@@ -251,8 +251,8 @@ function defaultManifestPath(): string {
  * Merge the builtin native-build allowlist into a profile pnpm-workspace.yaml.
  * pnpm refuses to run dependency install scripts that the workspace does not
  * list, and several builtin plugins need them (node-pty and ssh2 ship native
- * code; cloudflared downloads its tunnel binary). A file that already declares
- * an allowBuilds block is owner-managed and returned untouched.
+ * code; cloudflared downloads its tunnel binary). Existing `allowBuilds` keys
+ * stay owner-managed; missing keys are appended and placeholder values are set.
  * @param existingText - current workspace file contents.
  * @param allowBuilds - package name → allowed mapping to merge.
  * @returns the updated file text, or null when nothing needs changing.
@@ -261,17 +261,36 @@ export function planAllowBuildsAppend(
   existingText: string,
   allowBuilds: Readonly<Record<string, boolean>>,
 ): string | null {
-  if (/^allowBuilds:/mu.test(existingText)) return null
   const entries = Object.entries(allowBuilds)
   if (entries.length === 0) return null
-  const block = [
-    '',
-    '# Native install scripts the builtin plugins need at runtime; pnpm blocks',
-    '# unlisted builds, so this mirrors the installation root reviewed list.',
-    'allowBuilds:',
-    ...entries.map(([name, allowed]) => `  ${name}: ${allowed}`),
-  ].join('\n')
-  return existingText.replace(/\n*$/u, '\n') + block + '\n'
+  let text = existingText
+  const toAdd: Array<readonly [string, boolean]> = []
+  for (const [name, allowed] of entries) {
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')
+    if (new RegExp(`^  ${escaped}:\\s*${String(allowed)}\\s*$`, 'mu').test(text)) continue
+    const any = new RegExp(`^  ${escaped}:.*$`, 'mu')
+    if (any.test(text)) {
+      text = text.replace(any, `  ${name}: ${allowed}`)
+      continue
+    }
+    toAdd.push([name, allowed])
+  }
+  if (toAdd.length === 0) return text === existingText ? null : text
+  const extra = toAdd.map(([name, allowed]) => `  ${name}: ${allowed}`).join('\n')
+  if (!/^allowBuilds:/mu.test(text)) {
+    const block = [
+      '',
+      '# Native install scripts the builtin plugins need at runtime; pnpm blocks',
+      '# unlisted builds, so this mirrors the installation root reviewed list.',
+      'allowBuilds:',
+      extra,
+    ].join('\n')
+    return text.replace(/\n*$/u, '\n') + block + '\n'
+  }
+  if (/^allowBuilds:\s*$/mu.test(text)) {
+    return text.replace(/^allowBuilds:\s*$/mu, `allowBuilds:\n${extra}`)
+  }
+  return text.replace(/\n*$/u, '\n') + extra + '\n'
 }
 
 /**
@@ -312,7 +331,10 @@ export async function seedBuiltinProfilePlugins(
 
   const changed = plan.manifest !== existing
   const missingBefore = Object.keys(builtin.plugins).filter(name => !pluginResolvable(profileDir, name))
-  if (!changed && missingBefore.length === 0) {
+  const allowBuildsChanged = dryRun
+    ? false
+    : applyAllowBuilds(profileDir, builtin.allowBuilds, log)
+  if (!changed && missingBefore.length === 0 && !allowBuildsChanged) {
     if (!dryRun) healProfileVirtualStoreDir(profileDir)
     log(`${BIN}: profile already up to date`)
     return {
@@ -345,15 +367,6 @@ export async function seedBuiltinProfilePlugins(
 
   log(`${BIN}: installing builtin plugins into ${profileDir}`)
   healProfileVirtualStoreDir(profileDir)
-  if (builtin.allowBuilds !== undefined) {
-    const workspacePath = join(profileDir, 'pnpm-workspace.yaml')
-    const current = existsSync(workspacePath) ? readFileSync(workspacePath, 'utf8') : ''
-    const merged = planAllowBuildsAppend(current, builtin.allowBuilds)
-    if (merged !== null) {
-      log(`${BIN}: allowing native build scripts in ${workspacePath}`)
-      writeFileSync(workspacePath, merged)
-    }
-  }
   const runInstall = options.runInstall ?? runPnpmInstall
   await runInstall(profileDir)
   healProfileVirtualStoreDir(profileDir)
@@ -374,6 +387,28 @@ export async function seedBuiltinProfilePlugins(
     refreshedDependencies: plan.refreshedDependencies,
     conflicts: plan.conflicts,
   }
+}
+
+/**
+ * Append or correct `allowBuilds` keys in the profile workspace file.
+ * @param profileDir - the profile directory.
+ * @param allowBuilds - keys to allow, or omitted.
+ * @param log - diagnostic logger.
+ * @returns whether the file changed.
+ */
+function applyAllowBuilds(
+  profileDir: string,
+  allowBuilds: BuiltinManifest['allowBuilds'],
+  log: (line: string) => void,
+): boolean {
+  if (allowBuilds === undefined) return false
+  const workspacePath = join(profileDir, 'pnpm-workspace.yaml')
+  const current = existsSync(workspacePath) ? readFileSync(workspacePath, 'utf8') : ''
+  const merged = planAllowBuildsAppend(current, allowBuilds)
+  if (merged === null) return false
+  log(`${BIN}: allowing native build scripts in ${workspacePath}`)
+  writeFileSync(workspacePath, merged)
+  return true
 }
 
 /** Run pnpm install inside the profile directory with inherited stdio. */
