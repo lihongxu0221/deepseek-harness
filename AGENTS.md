@@ -4,7 +4,11 @@ DeepSeek Harness is a plugin-based agent harness on vendored Cordis: **everythin
 
 ## Pre-release stance: foundation over blast radius
 
-**Remove this section at the first tagged release.** With no external consumers, prefer the correct foundation over compatibility shims: rename or repackage freely and update every reference together. Backends reject old on-disk formats. SQLite uses monotonic `SCHEMA_VERSION`; `dsh-session` keeps `SESSION_FORMAT_VERSION` at `0` with no compatibility promise.
+**Remove this section at the first tagged release.** With no external consumers, prefer the correct foundation over compatibility shims for on-disk and wire formats. Backends reject old on-disk formats. SQLite uses monotonic `SCHEMA_VERSION`; `dsh-session` keeps `SESSION_FORMAT_VERSION` at `0` with no compatibility promise.
+
+## Additive edits against master
+
+Keep `master` paths and identifier names; add methods and files ([rationale](.agents/notes/implemented/process/2026-08-23-additive-edits-against-master.md)).
 
 ## Repository layout
 
