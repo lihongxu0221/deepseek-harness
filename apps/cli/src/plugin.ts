@@ -15,6 +15,7 @@ import { existsSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import {
   DEFAULT_PROFILE_BUNDLES,
+  healProfileVirtualStoreDir,
   initProfile,
   PROFILE_TEMPLATES,
   readProfileManifest,
@@ -123,6 +124,7 @@ export function runPlugin(profile: string, args: readonly string[]): number {
     initProfile(dir, PROFILE_TEMPLATES[profile] ?? DEFAULT_PROFILE_BUNDLES)
     process.stderr.write(`${NAME}: initialized profile ${profile} at ${dir}\n`)
   }
+  healProfileVirtualStoreDir(dir)
   const before = readProfileManifest(NAME, dir)
   // Windows resolves pnpm through its .cmd shim, which spawn() refuses
   // without a shell since the CVE-2024-27980 hardening.

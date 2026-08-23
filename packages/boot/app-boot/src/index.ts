@@ -31,6 +31,7 @@ declare module '@deepseek-ai/cordis' {
 export {
   composeEntries,
   DEFAULT_PROFILE_BUNDLES,
+  healProfileVirtualStoreDir,
   healProfilesModuleFallback,
   initProfile,
   loadProfile,

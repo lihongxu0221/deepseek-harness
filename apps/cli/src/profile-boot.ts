@@ -20,6 +20,7 @@ import type { EntryOptions } from '@deepseek-ai/cordis-plugin-loader'
 import {
   boot,
   composeEntries,
+  healProfileVirtualStoreDir,
   healProfilesModuleFallback,
   installFailLoud,
   loadOptionalPatches,
@@ -83,8 +84,8 @@ export function resolveTelemetryPatch(disabledEnv: string | undefined, hasRow: b
 }
 
 /**
- * Load a resolved profile for `name`: heal the shared module fallback, then
- * (re)write the empty root config. The root is always rewritten: the whole
+ * Load a resolved profile for `name`: heal the shared module fallback, keep the
+ * profile pnpm layout portable, then (re)write the empty root config. The root is always rewritten: the whole
  * composition is patch layers, and the vendored Loader's tree write-back (a
  * plugin self-disposing persists the current tree) can bake composed rows
  * into this file — which would duplicate every bundle insert on the next
@@ -98,6 +99,7 @@ export function resolveTelemetryPatch(disabledEnv: string | undefined, hasRow: b
 export function prepareProfile(name: string, userLayer = true): Profile {
   healProfilesModuleFallback(INSTALL_ANCHOR)
   const profile = loadProfile(NAME, name, INSTALL_ANCHOR, undefined, { userLayer })
+  healProfileVirtualStoreDir(profile.dir)
   writeFileSync(join(profile.dir, PROFILE_ROOT_FILENAME), PROFILE_ROOT_CONFIG)
   return profile
 }

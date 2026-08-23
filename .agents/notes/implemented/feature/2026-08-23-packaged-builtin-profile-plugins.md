@@ -10,7 +10,7 @@ A packaged desktop folder ships without `.config`. First launch therefore boots 
 
 ## Decision
 
-`scripts/build-builtin-profile-plugins.ts` seeds `.config/profiles/web` after the staging deploy. Pins live in `scripts/builtin-profile-plugins.json` as exact semver versions. Missing bundle entries are appended; a present-but-different dependency spec stays user-owned unless `--refresh`. An already-satisfied profile is a no-op and skips pnpm. `allowBuilds` is appended to the profile `pnpm-workspace.yaml` so native install scripts the pins need (node-pty, ssh2, cloudflared, cpu-features) are not blocked. After `initProfile`, the seeder re-reads the manifest so the merge keeps the skeleton's `name` and `private` flag. An existing product folder's preserved `.config` still wins over a fresh seed.
+`scripts/build-builtin-profile-plugins.ts` seeds `.config/profiles/web` after the staging deploy. Pins live in `scripts/builtin-profile-plugins.json` as exact semver versions. Missing bundle entries are appended; a present-but-different dependency spec stays user-owned unless `--refresh`. An already-satisfied profile is a no-op and skips pnpm. `allowBuilds` is appended to the profile `pnpm-workspace.yaml` so native install scripts the pins need (node-pty, ssh2, cloudflared, cpu-features) are not blocked. After `initProfile`, the seeder re-reads the manifest so the merge keeps the skeleton's `name` and `private` flag. The seeder, boot, and `dsh plugin` write a relative `virtual-store-dir=node_modules/.pnpm` and drop `storeDir` so the shipped profile does not keep the packer's absolute pnpm layout. An existing product folder's preserved `.config` still wins over a fresh seed.
 
 ## Alternatives considered
 
@@ -22,4 +22,4 @@ A packaged desktop folder ships without `.config`. First launch therefore boots 
 
 ## Consequences
 
-A newly packed folder boots with the pinned plugins already resolvable. The winexe zip copies that seeded `profiles/web` tree and omits the rest of `.config`, so a published folder does not carry the builder's sessions or credentials. `scripts/build-builtin-profile-plugins.spec.ts` pins merge, first-seed identity, allowBuilds append, dry-run, and no-op. The packaged-desktop README records the seed.
+A newly packed folder boots with the pinned plugins already resolvable. The winexe zip copies that seeded `profiles/web` tree and omits the rest of `.config`, so a published folder does not carry the builder's sessions or credentials. The seeder, boot, and `dsh plugin` write a relative `virtual-store-dir=node_modules/.pnpm` and drop `storeDir`, so a published or moved folder does not keep the packer's absolute pnpm layout. `scripts/build-builtin-profile-plugins.spec.ts` pins merge, first-seed identity, allowBuilds append, dry-run, and no-op. The packaged-desktop README records the seed.

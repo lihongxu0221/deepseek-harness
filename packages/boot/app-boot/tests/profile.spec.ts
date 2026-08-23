@@ -10,6 +10,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
   composeEntries,
+  healProfileVirtualStoreDir,
   healProfilesModuleFallback,
   initProfile,
   loadProfile,
@@ -268,5 +269,98 @@ describe('healProfilesModuleFallback', () => {
     healProfilesModuleFallback(anchor, home) // second healer sees the correct link
     const fallback = join(home, 'profiles', 'node_modules')
     expect(lstatSync(join(fallback, 'dsh-app')).isSymbolicLink()).toBe(true)
+  })
+})
+
+describe('healProfileVirtualStoreDir', () => {
+  const writeLayout = (profileDir: string, body: string): string => {
+    const modules = join(profileDir, 'node_modules')
+    mkdirSync(modules, { recursive: true })
+    const path = join(modules, '.modules.yaml')
+    writeFileSync(path, body)
+    return path
+  }
+
+  it('is a no-op when the layout file is absent', () => {
+    const profileDir = tmp()
+    expect(() => { healProfileVirtualStoreDir(profileDir) }).not.toThrow()
+  })
+
+  it('is a no-op when the profile directory is missing', () => {
+    expect(() => { healProfileVirtualStoreDir(join(tmp(), 'missing')) }).not.toThrow()
+  })
+
+  it('writes a portable virtual-store-dir into .npmrc', () => {
+    const profileDir = tmp()
+    healProfileVirtualStoreDir(profileDir)
+    expect(readFileSync(join(profileDir, '.npmrc'), 'utf8')).toBe('virtual-store-dir=node_modules/.pnpm\n')
+    healProfileVirtualStoreDir(profileDir)
+    expect(readFileSync(join(profileDir, '.npmrc'), 'utf8')).toBe('virtual-store-dir=node_modules/.pnpm\n')
+  })
+
+  it('appends virtual-store-dir to an existing .npmrc without a trailing newline', () => {
+    const profileDir = tmp()
+    writeFileSync(join(profileDir, '.npmrc'), 'hoist=false')
+    healProfileVirtualStoreDir(profileDir)
+    expect(readFileSync(join(profileDir, '.npmrc'), 'utf8')).toBe('hoist=false\nvirtual-store-dir=node_modules/.pnpm\n')
+  })
+
+  it('rewrites a packer absolute path to the portable relative store and drops storeDir', () => {
+    const profileDir = tmp()
+    const path = writeLayout(profileDir, JSON.stringify({
+      virtualStoreDir: 'D:\\a\\deepseek-harness\\deepseek-harness\\dist-exe\\dsh-web-win-x64\\.config\\profiles\\web\\node_modules\\.pnpm',
+      storeDir: 'D:\\.pnpm-store\\v11',
+      keep: true,
+    }))
+    healProfileVirtualStoreDir(profileDir)
+    expect(JSON.parse(readFileSync(path, 'utf8'))).toEqual({
+      virtualStoreDir: 'node_modules/.pnpm',
+      keep: true,
+    })
+  })
+
+  it('treats a relative virtualStoreDir as already portable', () => {
+    const profileDir = tmp()
+    const path = writeLayout(profileDir, JSON.stringify({ virtualStoreDir: 'node_modules/.pnpm' }))
+    const before = readFileSync(path, 'utf8')
+    healProfileVirtualStoreDir(profileDir)
+    expect(readFileSync(path, 'utf8')).toBe(before)
+  })
+
+  it('treats a backslash relative virtualStoreDir as already portable', () => {
+    const profileDir = tmp()
+    const path = writeLayout(profileDir, JSON.stringify({ virtualStoreDir: 'node_modules\\.pnpm' }))
+    const before = readFileSync(path, 'utf8')
+    healProfileVirtualStoreDir(profileDir)
+    expect(readFileSync(path, 'utf8')).toBe(before)
+  })
+
+  it('leaves a non-JSON layout in place', () => {
+    const profileDir = tmp()
+    const path = writeLayout(profileDir, 'not-json')
+    healProfileVirtualStoreDir(profileDir)
+    expect(readFileSync(path, 'utf8')).toBe('not-json')
+  })
+
+  it('ignores a layout that is not an object or lacks virtualStoreDir', () => {
+    const profileDir = tmp()
+    const list = writeLayout(profileDir, '[]')
+    healProfileVirtualStoreDir(profileDir)
+    expect(readFileSync(list, 'utf8')).toBe('[]')
+    const empty = writeLayout(profileDir, '{}')
+    healProfileVirtualStoreDir(profileDir)
+    expect(readFileSync(empty, 'utf8')).toBe('{}')
+    const none = writeLayout(profileDir, 'null')
+    healProfileVirtualStoreDir(profileDir)
+    expect(readFileSync(none, 'utf8')).toBe('null')
+    const scalar = writeLayout(profileDir, '"x"')
+    healProfileVirtualStoreDir(profileDir)
+    expect(readFileSync(scalar, 'utf8')).toBe('"x"')
+    const typed = writeLayout(profileDir, JSON.stringify({ virtualStoreDir: 1 }))
+    healProfileVirtualStoreDir(profileDir)
+    expect(JSON.parse(readFileSync(typed, 'utf8'))).toEqual({ virtualStoreDir: 1 })
+    const storeOnly = writeLayout(profileDir, JSON.stringify({ storeDir: 'D:\\.pnpm-store\\v11' }))
+    healProfileVirtualStoreDir(profileDir)
+    expect(JSON.parse(readFileSync(storeOnly, 'utf8'))).toEqual({})
   })
 })

@@ -141,6 +141,7 @@ describe('seedBuiltinProfilePlugins', () => {
     expect(existsSync(join(profileDir, 'cordis.patch.yml'))).toBe(true)
     expect(existsSync(join(profileDir, 'pnpm-workspace.yaml'))).toBe(true)
     expect(readFileSync(join(profileDir, 'pnpm-workspace.yaml'), 'utf8')).toContain('allowBuilds:')
+    expect(readFileSync(join(profileDir, '.npmrc'), 'utf8')).toContain('virtual-store-dir=node_modules/.pnpm')
     const manifest = readProfileManifest('test', profileDir)
     expect(manifest.name).toBe('dsh-profile-web')
     expect((manifest as { private?: boolean }).private).toBe(true)

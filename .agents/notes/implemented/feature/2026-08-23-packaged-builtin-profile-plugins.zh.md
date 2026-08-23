@@ -10,7 +10,7 @@ Status: implemented
 
 ## Decision
 
-`scripts/build-builtin-profile-plugins.ts` 在 staging 部署之后种 `.config/profiles/web`。钉扎版本写在 `scripts/builtin-profile-plugins.json`，只接受精确 semver。缺失的 bundle 条目追加到末尾；已有但不同的依赖规格仍归用户，除非 `--refresh`。已经满足的 profile 是空操作，跳过 pnpm。`allowBuilds` 追加到 profile 的 `pnpm-workspace.yaml`，这样钉扎插件需要的原生安装脚本（node-pty、ssh2、cloudflared、cpu-features）不会被拦住。`initProfile` 之后 seeder 会重读 manifest，合并时保留骨架的 `name` 和 `private`。已有产品文件夹里被保留的 `.config` 仍然压过新的 seed。
+`scripts/build-builtin-profile-plugins.ts` 在 staging 部署之后种 `.config/profiles/web`。钉扎版本写在 `scripts/builtin-profile-plugins.json`，只接受精确 semver。缺失的 bundle 条目追加到末尾；已有但不同的依赖规格仍归用户，除非 `--refresh`。已经满足的 profile 是空操作，跳过 pnpm。`allowBuilds` 追加到 profile 的 `pnpm-workspace.yaml`，这样钉扎插件需要的原生安装脚本（node-pty、ssh2、cloudflared、cpu-features）不会被拦住。`initProfile` 之后 seeder 会重读 manifest，合并时保留骨架的 `name` 和 `private`。种子器、启动和 `dsh plugin` 会写入相对路径 `virtual-store-dir=node_modules/.pnpm` 并去掉 `storeDir`，这样随包发出的 profile 不会留下打包机的绝对 pnpm 布局。已有产品文件夹里被保留的 `.config` 仍然压过新的 seed。
 
 ## Alternatives considered
 
@@ -22,4 +22,4 @@ Status: implemented
 
 ## Consequences
 
-新打出来的文件夹启动时，钉扎插件已经可解析。winexe zip 只拷这份种好的 `profiles/web`，其余 `.config` 不进包，这样发布文件夹不会带上构建机的会话或凭据。`scripts/build-builtin-profile-plugins.spec.ts` 固定了合并、首次 seed 的身份字段、allowBuilds 追加、dry-run 和空操作。打包桌面 README 记录了这次 seed。
+新打出来的文件夹启动时，钉扎插件已经可解析。winexe zip 只拷这份种好的 `profiles/web`，其余 `.config` 不进包，这样发布文件夹不会带上构建机的会话或凭据。种子器、启动和 `dsh plugin` 会写入相对路径 `virtual-store-dir=node_modules/.pnpm` 并去掉 `storeDir`，这样发布或搬家后的文件夹不会留下打包机的绝对 pnpm 布局。`scripts/build-builtin-profile-plugins.spec.ts` 固定了合并、首次 seed 的身份字段、allowBuilds 追加、dry-run 和空操作。打包桌面 README 记录了这次 seed。

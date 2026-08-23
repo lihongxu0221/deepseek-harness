@@ -27,6 +27,7 @@ import { join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import {
   DEFAULT_PROFILE_BUNDLES,
+  healProfileVirtualStoreDir,
   initProfile,
   PROFILE_TEMPLATES,
   PROFILES_DIR,
@@ -312,6 +313,7 @@ export async function seedBuiltinProfilePlugins(
   const changed = plan.manifest !== existing
   const missingBefore = Object.keys(builtin.plugins).filter(name => !pluginResolvable(profileDir, name))
   if (!changed && missingBefore.length === 0) {
+    if (!dryRun) healProfileVirtualStoreDir(profileDir)
     log(`${BIN}: profile already up to date`)
     return {
       changed: false,
@@ -342,6 +344,7 @@ export async function seedBuiltinProfilePlugins(
   }
 
   log(`${BIN}: installing builtin plugins into ${profileDir}`)
+  healProfileVirtualStoreDir(profileDir)
   if (builtin.allowBuilds !== undefined) {
     const workspacePath = join(profileDir, 'pnpm-workspace.yaml')
     const current = existsSync(workspacePath) ? readFileSync(workspacePath, 'utf8') : ''
@@ -353,6 +356,7 @@ export async function seedBuiltinProfilePlugins(
   }
   const runInstall = options.runInstall ?? runPnpmInstall
   await runInstall(profileDir)
+  healProfileVirtualStoreDir(profileDir)
 
   const unresolved = Object.keys(builtin.plugins).filter(name => !pluginResolvable(profileDir, name))
   if (unresolved.length > 0) {

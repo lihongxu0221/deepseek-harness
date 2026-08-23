@@ -254,6 +254,63 @@ export function healProfilesModuleFallback(installAnchor: string, home: string =
   }
 }
 
+/** pnpm's layout file inside a profile `node_modules`. */
+const PROFILE_MODULES_YAML = '.modules.yaml'
+
+/** Relative virtual store so a shipped or moved profile stays portable. */
+const PORTABLE_VIRTUAL_STORE_DIR = 'node_modules/.pnpm'
+
+/** pnpm setting that records {@link PORTABLE_VIRTUAL_STORE_DIR} instead of an absolute path. */
+const VIRTUAL_STORE_NPMRC_LINE = `virtual-store-dir=${PORTABLE_VIRTUAL_STORE_DIR}`
+
+/**
+ * Keep a profile's pnpm layout portable: write `virtual-store-dir` in `.npmrc`,
+ * rewrite `.modules.yaml` `virtualStoreDir` to {@link PORTABLE_VIRTUAL_STORE_DIR},
+ * and drop `storeDir`. A shipped zip otherwise records the packer's absolute
+ * paths; unzipping or moving the folder then fails the next `pnpm add`.
+ * @param profileDir - the profile directory (`$DSH_HOME/profiles/<name>`).
+ */
+export function healProfileVirtualStoreDir(profileDir: string): void {
+  if (!existsSync(profileDir)) return
+  ensurePortableVirtualStoreNpmrc(profileDir)
+  const modulesYaml = join(profileDir, 'node_modules', PROFILE_MODULES_YAML)
+  if (!existsSync(modulesYaml)) return
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(readFileSync(modulesYaml, 'utf8'))
+  } catch (error) {
+    // A truncated or non-JSON layout is left in place; pnpm reports the same file.
+    void error
+    return
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return
+  const record = parsed as Record<string, unknown>
+  let dirty = false
+  if (typeof record.virtualStoreDir === 'string' && !isPortableVirtualStoreDir(record.virtualStoreDir)) {
+    record.virtualStoreDir = PORTABLE_VIRTUAL_STORE_DIR
+    dirty = true
+  }
+  if ('storeDir' in record) {
+    delete record.storeDir
+    dirty = true
+  }
+  if (dirty) writeFileSync(modulesYaml, `${JSON.stringify(record, null, 2)}\n`)
+}
+
+/** True when `value` already names the portable relative virtual store. */
+function isPortableVirtualStoreDir(value: string): boolean {
+  return value.replaceAll('\\', '/') === PORTABLE_VIRTUAL_STORE_DIR
+}
+
+/** Append `virtual-store-dir` to the profile `.npmrc` when that key is absent. */
+function ensurePortableVirtualStoreNpmrc(profileDir: string): void {
+  const npmrc = join(profileDir, '.npmrc')
+  const current = existsSync(npmrc) ? readFileSync(npmrc, 'utf8') : ''
+  if (/(?:^|\n)virtual-store-dir\s*=/.test(current)) return
+  const prefix = current === '' || current.endsWith('\n') ? current : `${current}\n`
+  writeFileSync(npmrc, `${prefix}${VIRTUAL_STORE_NPMRC_LINE}\n`)
+}
+
 /**
  * Read a profile's manifest.
  * @param binName - the diagnostic prefix on the thrown error.
