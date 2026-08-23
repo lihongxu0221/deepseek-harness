@@ -6,7 +6,9 @@
  * This is not the JSON-RPC agent and does not read a sidecar cordis.yml.
  * A first extra argument that names an existing .js/.cjs/.mjs file is
  * imported instead, so a packaged host that spawn()s this executable with
- * a worker script behaves like node. `-e`/`--eval` inline source runs the
+ * a worker script behaves like node. That import first rewrites argv to
+ * `[exe, script, ...scriptArgs]` so the worker's `process.argv.slice(2)`
+ * matches Node. `-e`/`--eval` inline source runs the
  * same way for helpers that spawn this executable as node. CLI heads such
  * as `plugin` and `--profile` run the on-disk CLI against `.config` instead
  * of claiming the GUI lock. The executable's directory is prepended to
@@ -31,6 +33,7 @@ import {
   prependPackagedBinToPath,
   resolvePackagedCliEntry,
   resolvePackagedScriptArg,
+  withPackagedScriptArgv,
 } from './packaged-web-entry.ts'
 import { applyPackagedWebHome } from './packaged-web-home.ts'
 import { runProfile } from './profile-boot.ts'
@@ -40,6 +43,7 @@ prependPackagedBinToPath(process.execPath, process.env)
 const script = resolvePackagedScriptArg(extra)
 const evalSource = packagedEvalSource(extra)
 if (script !== undefined) {
+  process.argv = withPackagedScriptArgv(process.execPath, script, extra)
   await import(pathToFileURL(script).href)
 } else if (evalSource !== undefined) {
   const evalPath = join(tmpdir(), `dsh-packaged-eval-${randomUUID()}.cjs`)

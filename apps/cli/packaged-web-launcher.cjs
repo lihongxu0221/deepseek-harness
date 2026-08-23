@@ -5,7 +5,9 @@
  * executable so profile module fallback can symlink real packages.
  * A first extra argument that names an existing .js/.cjs/.mjs file is
  * imported instead of the GUI entry, so spawn(process.execPath, [worker])
- * from a packaged host behaves like node.
+ * from a packaged host behaves like node. That import first rewrites
+ * process.argv to [execPath, script, ...scriptArgs] so the worker's
+ * process.argv.slice(2) matches Node.
  */
 
 'use strict'
@@ -97,7 +99,11 @@ function resolvePackagedScriptArg(args) {
   return resolve(candidate)
 }
 
-const script = resolvePackagedScriptArg(extraPackagedArgv(process.argv, __filename))
+const extra = extraPackagedArgv(process.argv, __filename)
+const script = resolvePackagedScriptArg(extra)
+if (script !== undefined) {
+  process.argv = [process.execPath, script, ...extra.slice(1)]
+}
 const entry = script ?? join(dirname(process.execPath), 'lib', 'packaged-web-bin.js')
 if (!existsSync(entry)) {
   throw new Error(

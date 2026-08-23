@@ -14,6 +14,7 @@ import {
   withPackagedMarketCliArgv,
   resolvePackagedScriptArg,
   resolvePackagedWebEntry,
+  withPackagedScriptArgv,
 } from '../src/packaged-web-entry.ts'
 
 describe('resolvePackagedWebEntry', () => {
@@ -31,6 +32,7 @@ describe('resolvePackagedWebEntry', () => {
     expect(launcher).toContain("join(dirname(process.execPath), 'lib', 'packaged-web-bin.js')")
     expect(launcher).toContain('Keep this executable inside the built folder')
     expect(launcher).toContain('resolvePackagedScriptArg')
+    expect(launcher).toContain('process.argv = [process.execPath, script, ...extra.slice(1)]')
     expect(launcher).toContain('isInvocationEcho(value, process.execPath)')
     expect(launcher).toContain("INVOCATION_STEMS = new Set(['dsh', 'dsh-web'])")
     expect(launcher).toContain("join(dirname(process.execPath), 'lib', 'bin.js')")
@@ -108,6 +110,23 @@ describe('resolvePackagedScriptArg', () => {
     expect(resolvePackagedScriptArg([worker], () => false)).toBeUndefined()
     expect(resolvePackagedScriptArg(['--port', '8080'], () => true)).toBeUndefined()
     expect(resolvePackagedScriptArg([], () => true)).toBeUndefined()
+  })
+})
+
+describe('withPackagedScriptArgv', () => {
+  it('puts the resolved script in argv[1] so slice(2) is only the worker flags', () => {
+    const exec = resolve('D:\\dist\\dsh-web.exe')
+    const runner = resolve('D:\\dist\\node_modules\\@deepseek-ai\\dsh-sandbox-windows-acl\\lib\\runner.js')
+    expect(withPackagedScriptArgv(exec, runner, [runner, '--workspace', 'D:\\ws', '--', 'pwsh'])).toEqual([
+      exec,
+      runner,
+      '--workspace',
+      'D:\\ws',
+      '--',
+      'pwsh',
+    ])
+    expect(withPackagedScriptArgv(exec, runner, ['relative\\runner.js', '--mode', 'workspace-write']).slice(2))
+      .toEqual(['--mode', 'workspace-write'])
   })
 })
 

@@ -256,3 +256,21 @@ export function resolvePackagedScriptArg(
   if (!exists(candidate)) return undefined
   return resolve(candidate)
 }
+
+/**
+ * Node-shaped argv for an imported worker script.
+ * The SEA otherwise leaves the invocation echo in argv[1], so a worker that
+ * reads `process.argv.slice(2)` would treat its own path as the first flag
+ * (`windows-acl-run: unknown argument: …/runner.js`).
+ * @param execPath - `process.execPath` of the packaged launcher.
+ * @param script - resolved worker path (argv[1] under Node).
+ * @param extra - extra argv after {@link extraPackagedArgv}; `extra[0]` is the script token.
+ * @returns `[execPath, script, ...scriptArgs]`.
+ */
+export function withPackagedScriptArgv(
+  execPath: string,
+  script: string,
+  extra: readonly string[],
+): string[] {
+  return [execPath, script, ...extra.slice(1)]
+}
