@@ -297,6 +297,45 @@ export function healProfileVirtualStoreDir(profileDir: string): void {
   if (dirty) writeFileSync(modulesYaml, `${JSON.stringify(record, null, 2)}\n`)
 }
 
+/** Host entry of `@mlgbnb/dsh-archive-manager` relative to a profile `node_modules`. */
+const ARCHIVE_MANAGER_HOST = join('@mlgbnb', 'dsh-archive-manager', 'lib', 'index.js')
+
+/** Fingerprint of the published `dshHome` that ignores `$DSH_HOME`. */
+const ARCHIVE_MANAGER_HARDCODED_HOME = /return join\(homedir\(\),\s*['"]\.dsh['"]\)/u
+
+/** Replacement that prefers the process home the packaged desktop already sets. */
+const ARCHIVE_MANAGER_PORTABLE_HOME = 'return process.env.DSH_HOME ?? join(homedir(), \'.dsh\')'
+
+/**
+ * Rewrite `@mlgbnb/dsh-archive-manager` so `dshHome()` honors `$DSH_HOME` before
+ * `~/.dsh`. The published host hardcodes `join(homedir(), '.dsh')`, so a packaged
+ * desktop whose sessions live under `<product>/.config` lists an empty archive.
+ * ESM keeps that call as a local binding, so the file must change before import.
+ * A missing package, an already-portable `dshHome`, or a write failure is a no-op.
+ * @param profileDir - the profile directory (`$DSH_HOME/profiles/<name>`).
+ */
+export function healArchiveManagerHome(profileDir: string): void {
+  const host = join(profileDir, 'node_modules', ARCHIVE_MANAGER_HOST)
+  if (!existsSync(host)) return
+  let source: string
+  try {
+    source = readFileSync(host, 'utf8')
+  } catch (error) {
+    // An unreadable host is treated as absent; boot continues without this heal.
+    void error
+    return
+  }
+  if (source.includes('process.env.DSH_HOME')) return
+  const next = source.replace(ARCHIVE_MANAGER_HARDCODED_HOME, ARCHIVE_MANAGER_PORTABLE_HOME)
+  if (next === source) return
+  try {
+    writeFileSync(host, next)
+  } catch (error) {
+    // A locked or read-only copy is retried on the next boot; start must proceed.
+    void error
+  }
+}
+
 /** True when `value` already names the portable relative virtual store. */
 function isPortableVirtualStoreDir(value: string): boolean {
   return value.replaceAll('\\', '/') === PORTABLE_VIRTUAL_STORE_DIR

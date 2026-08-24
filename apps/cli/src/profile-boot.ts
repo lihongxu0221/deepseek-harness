@@ -20,6 +20,7 @@ import type { EntryOptions } from '@deepseek-ai/cordis-plugin-loader'
 import {
   boot,
   composeEntries,
+  healArchiveManagerHome,
   healProfileVirtualStoreDir,
   healProfilesModuleFallback,
   installFailLoud,
@@ -100,6 +101,7 @@ export function prepareProfile(name: string, userLayer = true): Profile {
   healProfilesModuleFallback(INSTALL_ANCHOR)
   const profile = loadProfile(NAME, name, INSTALL_ANCHOR, undefined, { userLayer })
   healProfileVirtualStoreDir(profile.dir)
+  healArchiveManagerHome(profile.dir)
   writeFileSync(join(profile.dir, PROFILE_ROOT_FILENAME), PROFILE_ROOT_CONFIG)
   return profile
 }

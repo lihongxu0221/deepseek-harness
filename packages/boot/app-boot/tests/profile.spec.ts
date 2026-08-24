@@ -10,6 +10,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
   composeEntries,
+  healArchiveManagerHome,
   healProfileVirtualStoreDir,
   healProfilesModuleFallback,
   initProfile,
@@ -362,5 +363,57 @@ describe('healProfileVirtualStoreDir', () => {
     const storeOnly = writeLayout(profileDir, JSON.stringify({ storeDir: 'D:\\.pnpm-store\\v11' }))
     healProfileVirtualStoreDir(profileDir)
     expect(JSON.parse(readFileSync(storeOnly, 'utf8'))).toEqual({})
+  })
+})
+
+describe('healArchiveManagerHome', () => {
+  const hostOf = (profileDir: string): string =>
+    join(profileDir, 'node_modules', '@mlgbnb', 'dsh-archive-manager', 'lib', 'index.js')
+
+  const writeHost = (profileDir: string, body: string): string => {
+    const path = hostOf(profileDir)
+    mkdirSync(join(path, '..'), { recursive: true })
+    writeFileSync(path, body)
+    return path
+  }
+
+  it('is a no-op when the host file is absent', () => {
+    expect(() => { healArchiveManagerHome(tmp()) }).not.toThrow()
+  })
+
+  it('rewrites a hardcoded ~/.dsh home to honor DSH_HOME', () => {
+    const profileDir = tmp()
+    const path = writeHost(profileDir, [
+      'export function dshHome() {',
+      "  return join(homedir(), '.dsh')",
+      '}',
+      '',
+    ].join('\n'))
+    healArchiveManagerHome(profileDir)
+    expect(readFileSync(path, 'utf8')).toContain("return process.env.DSH_HOME ?? join(homedir(), '.dsh')")
+    expect(readFileSync(path, 'utf8')).not.toMatch(/return join\(homedir\(\),\s*['"]\.dsh['"]\)/u)
+  })
+
+  it('rewrites a double-quoted hardcoded home', () => {
+    const profileDir = tmp()
+    const path = writeHost(profileDir, 'return join(homedir(), ".dsh")\n')
+    healArchiveManagerHome(profileDir)
+    expect(readFileSync(path, 'utf8')).toBe("return process.env.DSH_HOME ?? join(homedir(), '.dsh')\n")
+  })
+
+  it('is idempotent once DSH_HOME is already consulted', () => {
+    const profileDir = tmp()
+    const body = "export function dshHome() {\n  return process.env.DSH_HOME ?? join(homedir(), '.dsh')\n}\n"
+    const path = writeHost(profileDir, body)
+    healArchiveManagerHome(profileDir)
+    expect(readFileSync(path, 'utf8')).toBe(body)
+  })
+
+  it('leaves an unrelated host file unchanged', () => {
+    const profileDir = tmp()
+    const body = 'export function apply() {}\n'
+    const path = writeHost(profileDir, body)
+    healArchiveManagerHome(profileDir)
+    expect(readFileSync(path, 'utf8')).toBe(body)
   })
 })
