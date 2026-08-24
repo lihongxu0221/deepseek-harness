@@ -26,7 +26,8 @@ import { createRequire } from 'node:module'
 import {
   existsSync, lstatSync, mkdirSync, readFileSync, readlinkSync, symlinkSync, unlinkSync, writeFileSync,
 } from 'node:fs'
-import { basename, dirname, join } from 'node:path'
+import { basename, dirname, join, relative, resolve } from 'node:path'
+import * as yaml from 'js-yaml'
 import type { EntryOptions } from '@deepseek-ai/cordis-plugin-loader'
 import { applyEntryPatches, type PatchOptions } from '@deepseek-ai/cordis-plugin-include'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
@@ -257,42 +258,48 @@ export function healProfilesModuleFallback(installAnchor: string, home: string =
 /** pnpm's layout file inside a profile `node_modules`. */
 const PROFILE_MODULES_YAML = '.modules.yaml'
 
-/** Relative virtual store so a shipped or moved profile stays portable. */
+/** Project-relative virtual store for the profile `.npmrc`. */
 const PORTABLE_VIRTUAL_STORE_DIR = 'node_modules/.pnpm'
+
+/**
+ * `.modules.yaml` `virtualStoreDir` is joined onto `node_modules`, so the portable
+ * value is `.pnpm`, not {@link PORTABLE_VIRTUAL_STORE_DIR}. Writing the npmrc path
+ * here makes pnpm read `node_modules/node_modules/.pnpm` and raise
+ * `ERR_PNPM_UNEXPECTED_VIRTUAL_STORE`.
+ */
+const PORTABLE_MODULES_VIRTUAL_STORE_DIR = '.pnpm'
 
 /** pnpm setting that records {@link PORTABLE_VIRTUAL_STORE_DIR} instead of an absolute path. */
 const VIRTUAL_STORE_NPMRC_LINE = `virtual-store-dir=${PORTABLE_VIRTUAL_STORE_DIR}`
 
 /**
  * Keep a profile's pnpm layout portable: write `virtual-store-dir` in `.npmrc`,
- * rewrite `.modules.yaml` `virtualStoreDir` to {@link PORTABLE_VIRTUAL_STORE_DIR},
- * and drop `storeDir`. A shipped zip otherwise records the packer's absolute
- * paths; unzipping or moving the folder then fails the next `pnpm add`.
+ * rewrite `.modules.yaml` `virtualStoreDir` to {@link PORTABLE_MODULES_VIRTUAL_STORE_DIR},
+ * and write `.modules.yaml` `storeDir` when the caller probed the current store.
+ * A shipped zip otherwise records the packer's absolute paths or, after an
+ * earlier heal, no `storeDir`; pnpm then rejects the next `pnpm add` with
+ * `ERR_PNPM_UNEXPECTED_STORE` because a missing `storeDir` is not "any store".
  * @param profileDir - the profile directory (`$DSH_HOME/profiles/<name>`).
+ * @param storeDir - the store `pnpm store path` reported for this profile; omitted on boot.
  */
-export function healProfileVirtualStoreDir(profileDir: string): void {
+export function healProfileVirtualStoreDir(profileDir: string, storeDir?: string): void {
   if (!existsSync(profileDir)) return
   ensurePortableVirtualStoreNpmrc(profileDir)
   const modulesYaml = join(profileDir, 'node_modules', PROFILE_MODULES_YAML)
   if (!existsSync(modulesYaml)) return
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(readFileSync(modulesYaml, 'utf8'))
-  } catch (error) {
-    // A truncated or non-JSON layout is left in place; pnpm reports the same file.
-    void error
-    return
-  }
-  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return
-  const record = parsed as Record<string, unknown>
+  const record = parseModulesLayout(readFileSync(modulesYaml, 'utf8'))
+  if (record === undefined) return
   let dirty = false
   if (typeof record.virtualStoreDir === 'string' && !isPortableVirtualStoreDir(record.virtualStoreDir)) {
-    record.virtualStoreDir = PORTABLE_VIRTUAL_STORE_DIR
+    record.virtualStoreDir = PORTABLE_MODULES_VIRTUAL_STORE_DIR
     dirty = true
   }
-  if ('storeDir' in record) {
-    delete record.storeDir
-    dirty = true
+  if (storeDir !== undefined) {
+    const wanted = resolve(profileDir, storeDir)
+    if (typeof record.storeDir !== 'string' || !sameStoreDir(record.storeDir, wanted)) {
+      record.storeDir = wanted
+      dirty = true
+    }
   }
   if (dirty) writeFileSync(modulesYaml, `${JSON.stringify(record, null, 2)}\n`)
 }
@@ -336,9 +343,29 @@ export function healArchiveManagerHome(profileDir: string): void {
   }
 }
 
-/** True when `value` already names the portable relative virtual store. */
+/** Parse pnpm's `.modules.yaml` as YAML or JSON; a truncated file is left in place. */
+function parseModulesLayout(raw: string): Record<string, unknown> | undefined {
+  let parsed: unknown
+  try {
+    parsed = yaml.load(raw)
+  } catch (error) {
+    // pnpm reports the same unreadable layout on the next install.
+    void error
+    return undefined
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return undefined
+  return parsed as Record<string, unknown>
+}
+
+/** True when `path.relative` treats both store paths as the same directory. */
+function sameStoreDir(left: string, right: string): boolean {
+  return relative(left, right) === ''
+}
+
+/** True when `value` already names the portable modules-relative virtual store. */
 function isPortableVirtualStoreDir(value: string): boolean {
-  return value.replaceAll('\\', '/') === PORTABLE_VIRTUAL_STORE_DIR
+  const normalized = value.replaceAll('\\', '/')
+  return normalized === PORTABLE_MODULES_VIRTUAL_STORE_DIR || normalized === './pnpm'
 }
 
 /** Append `virtual-store-dir` to the profile `.npmrc` when that key is absent. */

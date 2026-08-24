@@ -114,6 +114,23 @@ function anchorPathSpec(argument: string, cwd: string): string {
 }
 
 /**
+ * Ask the running pnpm which store this profile will use.
+ * @param profileDir - the profile directory (`cwd` for the probe).
+ * @returns the store path, or `undefined` when pnpm is missing or the probe fails.
+ */
+function probePnpmStorePath(profileDir: string): string | undefined {
+  const result = spawnSync('pnpm', ['store', 'path'], {
+    cwd: profileDir,
+    encoding: 'utf8',
+    shell: process.platform === 'win32',
+    windowsHide: true,
+  })
+  if (result.error !== undefined || result.status !== 0) return undefined
+  const value = result.stdout.trim()
+  return value === '' ? undefined : value
+}
+
+/**
  * Run one `dsh plugin` invocation: init if needed, forward to pnpm, reconcile.
  * @param profile - the profile name.
  * @param args - pnpm arguments with relative path specs anchored to the invoking directory.
@@ -125,7 +142,7 @@ export function runPlugin(profile: string, args: readonly string[]): number {
     initProfile(dir, PROFILE_TEMPLATES[profile] ?? DEFAULT_PROFILE_BUNDLES)
     process.stderr.write(`${NAME}: initialized profile ${profile} at ${dir}\n`)
   }
-  healProfileVirtualStoreDir(dir)
+  healProfileVirtualStoreDir(dir, probePnpmStorePath(dir))
   const before = readProfileManifest(NAME, dir)
   // Windows resolves pnpm through its .cmd shim, which spawn() refuses
   // without a shell since the CVE-2024-27980 hardening.
