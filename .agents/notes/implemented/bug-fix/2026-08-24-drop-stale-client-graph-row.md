@@ -15,15 +15,15 @@ Two caches made the stale row survive the fiber event that follows a plugin upda
 - `processOne` returned immediately when the name was already in the table, so a still-mounted host entry never lost its client row.
 - `pkgMeta` cached the previous `dsh.client` verdict for the process lifetime, so even a re-scan would have reused the old declaration.
 
-A fresh process already omitted the package from a newly composed graph. The packaged Chromium window could still boot the previous index, whose injected graph still named the removed `client.js`.
+Updating `@linxin666/dsh-web-ui-all` rewrites the nested `@linxin666/dsh-client-ui-community-plugins` package in place. That package stays mounted as a host loader entry, so `internal/plugin` does not fire. F5 then injects the previous graph, which still names `/plugins/@linxin666/dsh-client-ui-community-plugins/client.js`.
 
 ## Decision
 
-`ClientModuleRegistry.processOne` deletes the per-name `pkgMeta` entry on every dirty flush and re-reads `package.json`. If the package no longer qualifies as a web client row, the table deletes that name. An unchanged client row still keeps its revision; `rebuilt()` remains the only path that re-hashes bundle bytes.
+`ClientModuleRegistry.processOne` deletes the per-name `pkgMeta` entry on every dirty flush and re-reads `package.json`. If the package no longer qualifies as a web client row, or the advertised `client.js` is gone, the table deletes that name. An unchanged client row still keeps its revision; `rebuilt()` remains the only path that re-hashes bundle bytes.
 
-The activation scan uses the same function, so a process that starts against the host-only package never advertises a client URL.
+Each `webserver/index-inject` dirties every advertised name plus every live loader entry and flushes before writing `__DSH_BOOT__`. Updating a host bundle and pressing F5 therefore drops a nested package that lost `dsh.client` without remounting that entry.
 
-That is not enough for the packaged desktop. The index HTML embeds `window.__DSH_BOOT__` and was served with only `Content-Type`, so Chromium kept the pre-update graph after `dsh-web.exe` restarted. `frontend-static` now sends `Cache-Control: no-store` on every index response, and the desktop window URL carries `?boot=<graph.rev>` so a plugin-set change is a new navigation even against a disk cache that predates the header.
+`frontend-static` also sends `Cache-Control: no-store` on every index response, and the desktop window URL carries `?boot=<graph.rev>` so a stale disk cache cannot keep a removed `client.js` URL.
 
 ## Alternatives considered
 
@@ -33,12 +33,14 @@ That is not enough for the packaged desktop. The index HTML embeds `window.__DSH
 
 **Re-hash on every fiber event.** Unnecessary for a package that is still a client plugin; HMR already owns content changes through `rebuilt()`.
 
+**Dirty only on `internal/plugin`.** Updating `dsh-web-ui-all` rewrites the nested community-plugins package without remounting that loader entry. F5 would still inject the stale row.
+
 ## Consequences
 
-A live upgrade that removes `dsh.client` drops the row on the next `internal/plugin` flush. The next index request serves a graph without that URL and must not be answered from cache. A desktop window opened after that upgrade lands on `?boot=<new rev>`.
+A live upgrade that removes `dsh.client` drops the row on the next fiber flush or the next index request. F5 after updating `dsh-web-ui-all` no longer advertises the nested host-only `client.js`.
 
 A live upgrade that *adds* `dsh.client` to a previously host-only package also works, because the negative `pkgMeta` verdict is no longer permanent.
 
 ## Testing
 
-`packages/client/modules/tests/node-half.client.spec.ts` builds a client fixture, constructs the registry, rewrites the package to drop `dsh.client`, emits `internal/plugin`, and expects an empty graph after the microtask flush. `packages/host/frontend-static/tests/frontend-static.spec.ts` asserts index `Cache-Control: no-store` and that ordinary assets omit the header. `apps/cli/tests/packaged-web-desktop.spec.ts` asserts the window URL carries `?boot=<rev>`.
+`packages/client/modules/tests/node-half.client.spec.ts` rewrites a live fixture to drop `dsh.client` (or deletes `client.js`) and expects an empty graph after `internal/plugin` and after `webserver/index-inject` with no fiber event. `packages/host/frontend-static/tests/frontend-static.spec.ts` asserts index `Cache-Control: no-store`. `apps/cli/tests/packaged-web-desktop.spec.ts` asserts the window URL carries `?boot=<rev>`.

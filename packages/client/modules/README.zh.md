@@ -10,7 +10,7 @@ Host 会在 parser preload 运行前安装 `window.__ModuleLoader__`。其 queue
 
 解析分支顺序（`import(specifier)`）：平台种子词 → 外壳实例；记忆化记录 → 导出；模块图记录（`window.__DSH_BOOT__`）→ 登记其 classic-script factory；已登记 factory → 物化；其他情况一律抛出异常。这是构建时 bundle 纯度门禁的运行时镜像。交给 factory 的同步 `require` 采用相同顺序，但不含异步 graph-row 加载分支，并把观察到的边记录到模块记录中。`prefetch` 是第一阶段到达钩子（只加载脚本并登记 factory；并发调用共享一个进行中的任务）；`invalidate` 会丢弃非 bootstrap factory 与物化记录，使下一次 prefetch/import 重新加载脚本；它是 HMR（热模块替换）钩子。
 
-Node 侧会扫描已启用的 Loader 配置项以发现 web `dsh.client` 包，解析每个 `exports["./client"]`，把构建后的 bundle 哈希和包专属 `dsh.client.external` 请求写入启动图，把动态提供方排在消费者之前，并通过 `/plugins` 提供该文件及其 sourcemap。之后的 fiber 事件若仍挂着该包但已没有 `dsh.client`，会丢掉对应的图行。源码启动会把宿主侧导入映射到 TypeScript 源码，但仍消费这一构建后的客户端导出；缺失文件共享一条构建说明，随后以包／路径列表列出各项，而无关的文件系统错误仍是独立故障。
+Node 侧会扫描已启用的 Loader 配置项以发现 web `dsh.client` 包，解析每个 `exports["./client"]`，把构建后的 bundle 哈希和包专属 `dsh.client.external` 请求写入启动图，把动态提供方排在消费者之前，并通过 `/plugins` 提供该文件及其 sourcemap。之后的 fiber 事件或 index 请求若仍挂着该包但已没有 `dsh.client`（或 `client.js` 已不在），会丢掉对应的图行。源码启动会把宿主侧导入映射到 TypeScript 源码，但仍消费这一构建后的客户端导出；缺失文件共享一条构建说明，随后以包／路径列表列出各项，而无关的文件系统错误仍是独立故障。
 
 `dsh.client.external` 是统一基座之外的可选精确 specifier 请求列表。统一基座包括外壳播种的 React、Cordis 和静态 UI 库，以及由 HTML parser 预载的 runtime。请求由其命名的动态 package row 或精确静态表键回答；只有末尾 `/client` 会别名到 package row，并且不存在 provider 别名声明。纯类型 import 会被擦除，不产生请求。组合阶段会拒绝畸形请求、缺失提供方、自请求和同步请求环；import 与 prefetch 会在消费者物化前递归登记动态提供方。参见[共享模块与模块图](../AGENTS.md#shared-modules-and-the-module-graph)。
 

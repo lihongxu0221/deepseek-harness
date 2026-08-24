@@ -8,7 +8,7 @@ import { pathToFileURL } from 'node:url'
 import { runInNewContext } from 'node:vm'
 import { Context, type Fiber } from '@deepseek-ai/cordis'
 import { afterEach, describe, expect, it } from 'vitest'
-import { renderIndexInjections, type WebServer, type WebRoute } from '@deepseek-ai/dsh-host-webserver'
+import { renderIndexInjections, type IndexInjection, type WebServer, type WebRoute } from '@deepseek-ai/dsh-host-webserver'
 import * as modulesClient from '../src/client/index.ts'
 import { ClientModuleRegistry, bootInjections, orderByModuleGraph } from '../src/index.ts'
 import type { ClientModuleLoaderTarget, WebBootEntry, WebBootGraph } from '../src/client/index.ts'
@@ -220,6 +220,30 @@ describe('client bundle activation', () => {
     }))
     ctx.emit('internal/plugin', { entry: { options: { id: packageName, name: packageName } } } as Fiber)
     await new Promise<void>((resolve) => { queueMicrotask(resolve) })
+    expect(service.graph().entries.map(entry => entry.id)).toEqual([])
+  })
+
+  it('drops a graph row on index inject after a nested package loses dsh.client', () => {
+    const packageName = '@fixture/became-host-only-on-refresh'
+    writeBuiltPackage(packageName, {})
+    const { service, ctx } = constructWithRoute([packageName])
+    expect(service.graph().entries.map(entry => entry.id)).toEqual([packageName])
+    writeFileSync(join(root!, 'node_modules', ...packageName.split('/'), 'package.json'), JSON.stringify({
+      name: packageName,
+      exports: { './package.json': './package.json' },
+    }))
+    const injections: IndexInjection[] = []
+    ctx.emit('webserver/index-inject', injections)
+    expect(service.graph().entries.map(entry => entry.id)).toEqual([])
+    expect(injections.some(row => 'src' in row && String(row.src).includes(packageName))).toBe(false)
+  })
+
+  it('drops a graph row on index inject when the client bundle file is gone', () => {
+    const packageName = '@fixture/client-bundle-removed'
+    writeBuiltPackage(packageName, {})
+    const { service, ctx } = constructWithRoute([packageName])
+    rmSync(join(root!, 'node_modules', ...packageName.split('/'), 'lib', 'client.js'))
+    ctx.emit('webserver/index-inject', [])
     expect(service.graph().entries.map(entry => entry.id)).toEqual([])
   })
 

@@ -8,21 +8,20 @@
  * injection table, and provides the `clientModuleHost` service (the HMR node
  * half's registration/notification face).
  *
- * Scanning is incremental per package — there is no full-rescan code path.
- * Every cordis `internal/plugin` emission (fiber construction/disposal) marks
- * the fiber's entry name dirty; a microtask flush reconciles each dirty name
- * against the live loader entries. The activation pass seeds the same dirty
- * set with all current entries and flushes synchronously, so first scan and
- * steady state share one implementation. Package metadata (including the
- * negative "not a client package" verdict) is cached per name and never
- * expires — plugin-set changes take effect on restart; bundle content
- * changes reach the graph only through
+ * Scanning is incremental per package. Every cordis `internal/plugin`
+ * emission marks the fiber's entry name dirty; a microtask flush reconciles
+ * each dirty name against the live loader entries. The activation pass and
+ * each `webserver/index-inject` seed the same dirty set (activation: current
+ * entries; index: advertised names plus current entries) and flush
+ * synchronously, so a nested package that lost `dsh.client` without remounting
+ * its loader entry is dropped before the next `__DSH_BOOT__` is served.
+ * Bundle content changes still reach the graph only through
  * {@link ClientModuleRegistry.rebuilt}.
  * @module @deepseek-ai/dsh-client-modules
  */
 
 import { createHash } from 'node:crypto'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { createRequire } from 'node:module'
@@ -342,6 +341,10 @@ export class ClientModuleRegistry extends Service {
       'client-modules: bundle route',
     )
     ctx.on('webserver/index-inject', (table) => {
+      // Updating a host bundle can rewrite a nested package.json without
+      // remounting that loader entry, so `internal/plugin` never dirties it.
+      this.markAdvertisedDirty()
+      this.flush(err => ctx.logger.warn(err))
       table.push(...bootInjections(this.composed))
     })
   }
@@ -494,11 +497,22 @@ export class ClientModuleRegistry extends Service {
     this.pkgMeta.delete(entryName)
     const meta = this.resolveMeta(entryName)
     if (meta === null) return this.table.delete(entryName)
-    if (this.table.has(entryName)) return false
-    // An unchanged client row keeps its rev; only rebuilt() re-hashes bytes.
+    if (this.table.has(entryName)) {
+      // Keep the existing rev when the bundle is still on disk. A missing
+      // file after an in-place upgrade must drop the row so the next index
+      // does not advertise a 404.
+      if (existsSync(meta.clientPath)) return false
+      return this.table.delete(entryName)
+    }
     const rev = this.initialBundleRevision(entryName, meta.clientPath)
     this.table.set(entryName, { entry: graphRow(entryName, rev, meta), meta })
     return true
+  }
+
+  /** Mark every advertised name and every live loader entry for the next flush. */
+  private markAdvertisedDirty(): void {
+    for (const name of this.table.keys()) this.dirty.add(name)
+    for (const entry of this.ctx.loader.entries()) this.dirty.add(entry.options.name)
   }
 
   private flush(onError: (err: Error) => void): void {
