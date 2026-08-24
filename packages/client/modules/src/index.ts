@@ -285,7 +285,8 @@ export class ClientModuleRegistry extends Service {
   private readonly table = new Map<string, WebPluginRecord>()
   // Negative verdicts (unresolvable specifier — builtins like cordis:include,
   // subpath rows — or a package without a web `dsh.client` declaration) are
-  // cached as null and never expire: plugin-set changes take effect on restart.
+  // cached as null until the next dirty flush for that name. A live plugin
+  // update that drops `dsh.client` must drop the graph row without a restart.
   private readonly pkgMeta = new Map<string, PkgMeta | null>()
   private readonly rebuildListeners = new Set<(id: string, rev: string) => void>()
   private readonly graphListeners = new Set<() => void>()
@@ -488,11 +489,13 @@ export class ClientModuleRegistry extends Service {
       }
     }
     if (!qualifies) return this.table.delete(entryName)
-    if (this.table.has(entryName)) return false
+    // Re-read package.json on every dirty flush so a client package that
+    // becomes host-only (or the reverse) is not stuck on the previous verdict.
+    this.pkgMeta.delete(entryName)
     const meta = this.resolveMeta(entryName)
-    if (meta === null) return false
-    // The rev rides the row from here on: a fiber restart reuses the row (and
-    // its rev) untouched; only rebuilt() re-reads the bundle.
+    if (meta === null) return this.table.delete(entryName)
+    if (this.table.has(entryName)) return false
+    // An unchanged client row keeps its rev; only rebuilt() re-hashes bytes.
     const rev = this.initialBundleRevision(entryName, meta.clientPath)
     this.table.set(entryName, { entry: graphRow(entryName, rev, meta), meta })
     return true

@@ -302,6 +302,7 @@ export async function runPackagedWebDesktop(io: PackagedWebDesktopIo): Promise<v
   let opened: OpenedDesktopWindow | undefined
   let running = false
   let port: number | undefined
+  let bootRev: string | undefined
   let listen = io.loadListen()
   let chain = Promise.resolve()
   let finished!: () => void
@@ -361,9 +362,9 @@ export async function runPackagedWebDesktop(io: PackagedWebDesktopIo): Promise<v
   }
 
   const localUrl = (hash?: '#settings'): string => {
-    return hash === undefined
-      ? 'http://127.0.0.1:' + String(port)
-      : 'http://127.0.0.1:' + String(port) + '/#settings'
+    const query = bootRev === undefined ? '' : `?boot=${encodeURIComponent(bootRev)}`
+    if (hash === undefined) return 'http://127.0.0.1:' + String(port) + query
+    return 'http://127.0.0.1:' + String(port) + (query === '' ? '/#settings' : `${query}#settings`)
   }
 
   const start = async (hash?: '#settings'): Promise<void> => {
@@ -417,6 +418,8 @@ export async function runPackagedWebDesktop(io: PackagedWebDesktopIo): Promise<v
         return
       }
       port = nextPort
+      const modules = ctx.get('clientModules') as { graph(): { rev: string } } | undefined
+      bootRev = modules?.graph().rev
       send({ type: 'listen', host: listen.host, port: nextPort })
       send({ type: 'progress', text: 'Opening window…', zh: '正在打开窗口…', percent: 90 })
       try {
@@ -443,6 +446,7 @@ export async function runPackagedWebDesktop(io: PackagedWebDesktopIo): Promise<v
     await disposeCurrent()
     running = false
     port = undefined
+    bootRev = undefined
     send({ type: 'state', running: false })
   }
 

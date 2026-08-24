@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { runInNewContext } from 'node:vm'
-import { Context } from '@deepseek-ai/cordis'
+import { Context, type Fiber } from '@deepseek-ai/cordis'
 import { afterEach, describe, expect, it } from 'vitest'
 import { renderIndexInjections, type WebServer, type WebRoute } from '@deepseek-ai/dsh-host-webserver'
 import * as modulesClient from '../src/client/index.ts'
@@ -51,7 +51,7 @@ function writeBuiltPackage(packageName: string, client: Record<string, unknown>)
 }
 
 /** Construct the node-half service and capture its plugin-bundle route. */
-function constructWithRoute(packageNames: string[]): { service: ClientModuleRegistry; route: WebRoute } {
+function constructWithRoute(packageNames: string[]): { service: ClientModuleRegistry; route: WebRoute; ctx: Context } {
   const ctx = new Context()
   ctx.baseUrl = pathToFileURL(root!).href + '/'
   ctx.provide('loader', {
@@ -73,7 +73,7 @@ function constructWithRoute(packageNames: string[]): { service: ClientModuleRegi
   ctx.provide('webServer', webServer as WebServer)
   const service = new ClientModuleRegistry(ctx)
   if (route === undefined) throw new Error('client bundle route was not registered')
-  return { service, route }
+  return { service, route, ctx }
 }
 
 /** Construct the node-half service over the enabled fixture entries. */
@@ -207,6 +207,20 @@ describe('client bundle activation', () => {
     expect(String(thrown)).toContain('  other failures:')
     expect(String(thrown)).toContain('EISDIR')
     expect(String(thrown)).not.toContain('pnpm run build')
+  })
+
+  it('drops a graph row when a live package loses dsh.client', async () => {
+    const packageName = '@fixture/became-host-only'
+    writeBuiltPackage(packageName, {})
+    const { service, ctx } = constructWithRoute([packageName])
+    expect(service.graph().entries.map(entry => entry.id)).toEqual([packageName])
+    writeFileSync(join(root!, 'node_modules', ...packageName.split('/'), 'package.json'), JSON.stringify({
+      name: packageName,
+      exports: { './package.json': './package.json' },
+    }))
+    ctx.emit('internal/plugin', { entry: { options: { id: packageName, name: packageName } } } as Fiber)
+    await new Promise<void>((resolve) => { queueMicrotask(resolve) })
+    expect(service.graph().entries.map(entry => entry.id)).toEqual([])
   })
 
   it('serves the source map beside a registered client bundle', async () => {

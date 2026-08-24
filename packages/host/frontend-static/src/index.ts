@@ -92,7 +92,12 @@ export async function serveStatic(
     res.end()
     return
   }
-  res.writeHead(200, { 'content-type': type })
+  // The index body carries window.__DSH_BOOT__. Caching it across a plugin
+  // update makes the browser fetch /plugins/<id>/client.js rows that the new
+  // graph no longer serves.
+  const headers: Record<string, string> = { 'content-type': type }
+  if (type === HTML_MIME) headers['cache-control'] = 'no-store'
+  res.writeHead(200, headers)
   res.end(body)
 }
 

@@ -121,6 +121,12 @@ describe('real Loader composition', () => {
       expect(got.body).toContain('__T__')
       expect(got.body).toContain('shell')
     }
+    const indexHeaders = await fetch(`http://127.0.0.1:${String(port)}/`)
+    expect(indexHeaders.headers.get('cache-control')).toBe('no-store')
+    await indexHeaders.arrayBuffer()
+    const assetHeaders = await fetch(`http://127.0.0.1:${String(port)}/app.js`)
+    expect(assetHeaders.headers.get('cache-control')).toBeNull()
+    await assetHeaders.arrayBuffer()
     expect(await request(port, '/', { method: 'HEAD' })).toEqual({
       status: 200,
       type: 'text/html; charset=utf-8',

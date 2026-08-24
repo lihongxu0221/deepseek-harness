@@ -46,6 +46,7 @@ function fakeCtx(options: {
   port?: number
   dispose?: () => Promise<void>
   loaderReject?: boolean
+  bootRev?: string
 } = {}): Context {
   return {
     fiber: {
@@ -62,6 +63,9 @@ function fakeCtx(options: {
       if (name === 'webServer') {
         return options.port === undefined ? undefined : { port: options.port }
       }
+      if (name === 'clientModules' && options.bootRev !== undefined) {
+        return { graph: () => ({ rev: options.bootRev }) }
+      }
       return undefined
     },
   } as Context
@@ -72,6 +76,7 @@ function createHarness(overrides: {
   claimError?: Error
   boot?: PackagedWebDesktopIo['bootProfile']
   openWindow?: PackagedWebDesktopIo['openWindow']
+  bootRev?: string
 } = {}) {
   const messages: HostToShell[] = []
   const exits: number[] = []
@@ -102,6 +107,7 @@ function createHarness(overrides: {
       return fakeCtx({
         port: 3080,
         dispose: async () => { disposed.push(1) },
+        ...(overrides.bootRev === undefined ? {} : { bootRev: overrides.bootRev }),
       })
     },
     openWindow: overrides.openWindow ?? ((url) => {
@@ -271,6 +277,15 @@ describe('runPackagedWebDesktop', () => {
     harness.emit({ type: 'start' })
     await waitFor(() => harness.messages.filter(message => message.type === 'ready').length === 2)
     expect(harness.windows).toHaveLength(2)
+    harness.emit({ type: 'quit' })
+    await done
+  })
+
+  it('cache-busts the window URL with the client boot graph rev', async () => {
+    const harness = createHarness({ bootRev: '15f48add9eef' })
+    const done = runPackagedWebDesktop(harness.io)
+    await waitFor(() => harness.messages.some(message => message.type === 'ready'))
+    expect(harness.windows[0]?.url).toBe('http://127.0.0.1:3080?boot=15f48add9eef')
     harness.emit({ type: 'quit' })
     await done
   })
