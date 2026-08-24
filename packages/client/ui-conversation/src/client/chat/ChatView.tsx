@@ -11,9 +11,12 @@
 //
 // Render economics: order changes only when rows enter, leave or move. Each
 // ChatNodeSeat subscribes to one Node key, so Assistant deltas and Tool
-// lifecycle updates replace only their own row without remounting it.
+// lifecycle updates replace only their own row without remounting it. Past a
+// node threshold the column renders as a virtual ledger — viewport plus
+// overscan only — so a resident long-session window costs bounded layout.
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import type { ConversationTimelineSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
 import { Button, IconChevronDownOutline14, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ChatViewSlotProps, RenderMessageImages } from '../contract/slots.ts'
@@ -23,6 +26,28 @@ import { formatRunDuration } from './message-chrome.ts'
 import css from './ChatView.module.css'
 
 const FOLLOW_THRESHOLD = 24
+/** Plain flow below this many nodes; a virtual ledger above it. */
+const CHAT_VIRTUALIZATION_THRESHOLD = 48
+/** Rows rendered beyond the viewport (top and bottom) while virtualized. */
+const VIRTUAL_OVERSCAN_ROWS = 8
+/** Viewport seed before the scrollport reports its first rect (jsdom). */
+const VIRTUAL_INITIAL_VIEWPORT_HEIGHT_PX = 600
+
+/** Height seeds for unmeasured rows; measureElement corrects them on mount.
+ *  Keys mirror the view-node kinds this package projects today. */
+const ROW_HEIGHT_ESTIMATES: Record<string, number> = {
+  'assistant-step': 180,
+  'tool-call': 88,
+  user: 72,
+  steering: 72,
+  context: 72,
+  command: 72,
+}
+
+/** Height seed for one unmeasured row. */
+function estimateRowHeight(kind: string | undefined): number {
+  return kind === undefined ? 120 : ROW_HEIGHT_ESTIMATES[kind] ?? 120
+}
 
 /** Active column host when present; otherwise the view-local scroller. */
 function scrollerOf(from: HTMLElement): HTMLElement {
@@ -233,13 +258,58 @@ export function ChatView({
    *  scroll-driven at-bottom chrome re-render (which would snap inertial
    *  scrolls the rest of the way to the floor). */
   const followSigRef = useRef<string | null>(null)
+  /** Zero-height marker just above the rows; anchors the ledger's content offset. */
+  const flowStartRef = useRef<HTMLDivElement | null>(null)
+  const [flowStartOffset, setFlowStartOffset] = useState(0)
 
   const firstKey = order[0]
   const firstSeq = firstKey === undefined ? null : nodeStore.get(firstKey)?.anchorSeq ?? null
   const lastKey = order.at(-1) ?? null
   const lastNode = lastKey === null ? undefined : nodeStore.get(lastKey)
   const lastSteeringId = pendingSteering[pendingSteering.length - 1]?.id ?? null
-  const followSig = `${openState}:${firstSeq}:${lastKey}:${order.length}:${running ? 1 : 0}:${lastSteeringId ?? ''}`
+
+  // Render economics: past a threshold the column becomes a virtual ledger —
+  // only the viewport plus overscan mounts rows, so a resident long-session
+  // window costs bounded layout per step instead of growing with the log.
+  const virtualizationEnabled = order.length > CHAT_VIRTUALIZATION_THRESHOLD
+  const getScrollElement = useCallback(() => {
+    const local = listRef.current
+    /* v8 ignore next -- ref-null guard: the virtualizer resolves after mount. */
+    return local === null ? null : scrollerOf(local)
+  }, [])
+  const getItemKey = useCallback(
+    (index: number) => order[index] ?? index,
+    [order],
+  )
+  const estimateSize = useCallback(
+    (index: number) => estimateRowHeight(nodeStore.get(order[index] ?? '')?.kind),
+    [order, nodeStore],
+  )
+  const rowVirtualizer = useVirtualizer({
+    count: virtualizationEnabled ? order.length : 0,
+    enabled: virtualizationEnabled,
+    getScrollElement,
+    estimateSize,
+    getItemKey,
+    overscan: VIRTUAL_OVERSCAN_ROWS,
+    initialRect: { width: 0, height: VIRTUAL_INITIAL_VIEWPORT_HEIGHT_PX },
+    anchorTo: 'end',
+    scrollEndThreshold: FOLLOW_THRESHOLD,
+  })
+  const measureRow = useCallback((node: HTMLDivElement | null): void => {
+    if (node !== null) rowVirtualizer.measureElement(node)
+  }, [rowVirtualizer])
+  const virtualItems = virtualizationEnabled ? rowVirtualizer.getVirtualItems() : []
+  const virtualTop = Math.max(0, (virtualItems[0]?.start ?? 0) - flowStartOffset)
+  const virtualBottom = virtualItems.length === 0
+    ? 0
+    : Math.max(0, rowVirtualizer.getTotalSize() + flowStartOffset - (virtualItems.at(-1)?.end ?? 0))
+
+  const followSig = virtualizationEnabled
+    // The ledger follows appends through the column resize observer; counting
+    // rows here would force a floor write on every step.
+    ? `${openState}:${firstSeq}:${lastKey}:${running ? 1 : 0}:${lastSteeringId ?? ''}`
+    : `${openState}:${firstSeq}:${lastKey}:${order.length}:${running ? 1 : 0}:${lastSteeringId ?? ''}`
 
   const toBottom = (el: HTMLElement): void => {
     anchorRef.current = null
@@ -267,6 +337,12 @@ export function ChatView({
         el.scrollTop = saved.scrollTop
         const row = anchorElement(local, saved.anchorKey)
         if (row !== null) el.scrollTop += flowTop(row, el) - saved.anchorTop
+        else if (virtualizationEnabled) {
+          // The anchor may sit outside the initially estimated window; jump
+          // near it and let measurements settle the exact offset next frame.
+          const index = order.indexOf(saved.anchorKey)
+          if (index >= 0) rowVirtualizer.scrollToIndex(index, { align: 'start' })
+        }
         observedTopRef.current = el.scrollTop
         const isAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight <= FOLLOW_THRESHOLD + 1
         atBottomRef.current = isAtBottom
@@ -390,6 +466,19 @@ export function ChatView({
     return () => { observer.disconnect() }
   }, [])
 
+  // The ledger's content offset: everything rendered above the rows (hints,
+  // the older button) sits between the scrollport origin and item 0. Re-measured
+  // only when that chrome can change; overscan absorbs any residual drift.
+  useLayoutEffect(() => {
+    if (!virtualizationEnabled) return
+    const local = listRef.current
+    const start = flowStartRef.current
+    if (local === null || start === null) return
+    const el = scrollerOf(local)
+    const offset = start.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop
+    setFlowStartOffset(previous => Math.abs(previous - offset) > 0.5 ? offset : previous)
+  }, [virtualizationEnabled, openState, hasMore])
+
   // A failed/empty page leaves the head unchanged. Once the request leaves
   // its busy state there is no future prepend for the saved anchor to own.
   useEffect(() => {
@@ -399,7 +488,9 @@ export function ChatView({
   const loadOlderAnchored = (): void => {
     const local = listRef.current
     /* v8 ignore next -- ref-null guard: the paging button renders inside the list tree. */
-    if (local !== null) {
+    if (local !== null && !virtualizationEnabled) {
+      // On the virtual ledger the virtualizer's end-anchor owns prepend
+      // stability; a manual anchor here would correct twice.
       const el = scrollerOf(local)
       const row = pagingAnchor(local, el)
       if (row !== null && row.dataset.chatAnchorKey !== undefined) {
@@ -429,10 +520,25 @@ export function ChatView({
               </button>
             </div>
           )}
-          {order.map(nodeKey => (
+          <div ref={flowStartRef} className={css.flowStart} aria-hidden="true" />
+          {virtualizationEnabled && virtualTop > 0 && (
+            <div
+              className={css.virtualSpacer}
+              data-chat-virtual-spacer="top"
+              aria-hidden="true"
+              style={{ height: `${virtualTop}px` }}
+            />
+          )}
+          {(virtualizationEnabled
+            ? virtualItems.flatMap((item) => {
+              const key = order[item.index]
+              return key === undefined ? [] : [{ key, position: item.index }]
+            })
+            : order.map(key => ({ key, position: undefined as number | undefined }))
+          ).map(row => (
             <ChatNodeSeat
-              key={nodeKey}
-              nodeKey={nodeKey}
+              key={row.key}
+              nodeKey={row.key}
               useSession={useSession}
               selectedCallId={selectedCallId}
               cwd={cwd}
@@ -443,21 +549,32 @@ export function ChatView({
               fileMentions={fileMentions}
               renderSlot={renderSlot}
               t={t}
+              measureRef={virtualizationEnabled ? measureRow : undefined}
+              virtualPosition={row.position}
             />
           ))}
+          {virtualizationEnabled && virtualBottom > 0 && (
+            <div
+              className={css.virtualSpacer}
+              data-chat-virtual-spacer="bottom"
+              aria-hidden="true"
+              style={{ height: `${virtualBottom}px` }}
+            />
+          )}
           {/* No pending placeholders: questions (ui-user-questions) and approvals
               (ApprovalPanel) both take over the composer, so a flow card would
               double-render the same wait. */}
           {/* Turn-level loading signal: rides the whole running turn (first-token
               wait, tool execution, streaming) so it never flickers per step. */}
-          {running && <TurnStatus startTime={runningTurnStart} t={t} />}
+          {running && <div className={css.flowGap}><TurnStatus startTime={runningTurnStart} t={t} /></div>}
           {pendingSteering.map(item => (
-            <PendingSteeringBubble
-              key={item.id}
-              content={item.content}
-              renderMessageImages={renderMessageImages}
-              t={t}
-            />
+            <div key={item.id} className={css.flowGap}>
+              <PendingSteeringBubble
+                content={item.content}
+                renderMessageImages={renderMessageImages}
+                t={t}
+              />
+            </div>
           ))}
         </div>
         {!atBottom && (

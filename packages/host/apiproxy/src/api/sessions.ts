@@ -269,7 +269,9 @@ export interface SessionsApi {
    * Reads a window of history events; page boundaries align to append-origin message
    * boundaries: one page = all raw events owned by a whole number of such messages (including
    * their chunk / tool events), never cut mid-message. Model-only replacement copies consume no
-   * `maxMessages`, so a compaction's `compaction/summary` record stays on the page of its replacement. The tail
+   * `maxMessages`, so a compaction's `compaction/summary` record stays on the page of its replacement. An
+   * independent tool-event budget caps every page at 80 `tool/call`/`tool/result` events, cutting only between
+   * whole call/result exchanges so a long running turn cannot dominate one page. The tail
    * page (beforeSeq absent) additionally carries the in-flight
    * partial — chunk events already emitted for the last unfinalized message.
    * Each entry pairs the raw SessionEvent with the host-computed view (tool events whose

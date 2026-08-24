@@ -9,6 +9,10 @@ interface ChatNodeSeatProps extends ChatNodeOwnerProps {
   readonly useSession: ChatViewSlotProps['useSession']
   readonly renderSlot: ChatViewSlotProps['renderSlot']
   readonly t: ChatViewSlotProps['t']
+  /** Virtualizer measurement binding for the row box; absent on the plain path. */
+  readonly measureRef?: ((node: HTMLDivElement | null) => void) | undefined
+  /** Row position in the virtual ledger; also drives the measured data-index. */
+  readonly virtualPosition?: number | undefined
 }
 
 type RoutedChatNodeOwner = {
@@ -18,7 +22,7 @@ type RoutedChatNodeOwner = {
 /** Subscribe and dispatch one stable Context key without observing sibling Nodes. */
 export const ChatNodeSeat = memo(function ChatNodeSeat({
   nodeKey, selectedCallId, cwd, openFile, inspectCall, forkAt,
-  renderMessageImages, fileMentions, useSession, renderSlot, t,
+  renderMessageImages, fileMentions, useSession, renderSlot, t, measureRef, virtualPosition,
 }: ChatNodeSeatProps) {
   const node = useSession(snapshot => snapshot.chat.nodes.get(nodeKey))
   const routedNode = node as ChatNode | undefined
@@ -42,10 +46,13 @@ export const ChatNodeSeat = memo(function ChatNodeSeat({
   const routedOwner = { ...owner, node: routedNode } as RoutedChatNodeOwner
   return (
     <div
+      ref={measureRef}
       className={css.flowItem}
+      {...virtualPosition === undefined ? {} : { 'data-index': virtualPosition }}
       data-chat-anchor-key={routedNode.key}
       data-chat-flow-key={routedNode.key}
       data-chat-flow-kind={routedNode.kind}
+      data-chat-virtual-position={virtualPosition}
     >
       {renderSlot('conversation.chat.node', routedOwner, {
         entryKey: routedNode.kind,

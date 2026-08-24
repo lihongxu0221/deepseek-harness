@@ -31,6 +31,25 @@ import { SessionQueueMirror } from './queue-mirror.ts'
 /** Messages requested per history page. */
 export const PAGE_MESSAGES = 50
 
+/** Raw events retained in a resident Session window before prefix eviction. */
+const WINDOW_EVENT_BUDGET = 800
+
+/**
+ * First retained index once the window outgrows the event budget: the
+ * earliest `turn/start` at or after the budget line, else the earliest
+ * `step/start` there (one turn can outgrow the budget alone), else -1 when
+ * no lifecycle boundary can move the window under the budget.
+ */
+function evictionCutIndex(events: readonly SessionEvent[]): number {
+  const limit = events.length - WINDOW_EVENT_BUDGET
+  for (const type of ['turn/start', 'step/start'] as const) {
+    for (let i = Math.max(0, limit); i < events.length; i++) {
+      if (events[i]?.type === type) return i
+    }
+  }
+  return -1
+}
+
 /** Manager-owned observers of a Session object's local state edges. */
 export interface SessionOptions {
   /** Catalog-discovered address selecting non-activating subagent transport. */
@@ -698,6 +717,30 @@ export class Session implements SessionFace {
       return
     }
     this.scheduleConversation(this.appendLive(event, view))
+    this.evictWindowPrefix()
+  }
+
+  /**
+   * Drop the oldest history once the resident window outlives its event
+   * budget: the retained suffix restarts at a lifecycle boundary and hasMore
+   * reopens so loadOlder can page the dropped range back in. Definitions
+   * already tolerate windows that begin mid-story through their windowGap
+   * dependency — the same contract that serves a mid-turn tail page.
+   */
+  private evictWindowPrefix(): void {
+    if (this.events.length <= WINDOW_EVENT_BUDGET) return
+    const cut = evictionCutIndex(this.events)
+    /* v8 ignore next -- -1 arm: no qualifying boundary leaves the oversized window untouched. */
+    if (cut <= 0) return
+    this.events = this.events.slice(cut)
+    this.views = this.views.slice(cut)
+    this.baseSeq = this.events[0]?.seq ?? this.baseSeq
+    this.hasMore = true
+    this.conversation.replaceWindow(
+      this.events.map((event, index) => ({ event, view: this.views[index] })),
+      true,
+    )
+    this.notifier.markDirty()
   }
 
   /** Route assembler cadence into the Session's existing microtask/RAF notifier. */

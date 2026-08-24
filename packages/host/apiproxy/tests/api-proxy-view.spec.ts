@@ -285,6 +285,98 @@ describe('mux live view computation', () => {
     expect(page.map(event => event.seq)).toEqual(page.map((_event, index) => third.seq + index))
   })
 
+  it('caps one turn of tool exchanges with the heavy-event budget and cuts only between whole pairs', async () => {
+    const { ctx } = await harness()
+    const api = createApiProxy(ctx, { defaultModelSelection: () => ({ provider: 'p', model: 'm' }), cwd: '/tmp' })
+    const session = ctx.sessions.create()
+    ctx.agents.register({ id: session.id, session, status: 'idle', ctx } as Agent)
+    session.append('turn/start', { turn: 1 })
+    appendUserText(session, 'run the batch')
+    for (let index = 0; index < 60; index++) {
+      session.append('tool/call', { turn: 1, step: index + 1, callId: CallId(`c-${index}`), name: 'gen', arguments: '{}' })
+      session.append('tool/result', { turn: 1, step: index + 1,
+        message: createToolResultMessage({
+          callId: CallId(`c-${index}`),
+          content: [{ type: 'text', text: 'ok' }],
+          isError: false,
+        }),
+      }, { surfaceOp: 'append' })
+    }
+
+    const tail = await api.sessions.history({
+      rpcId: RpcId('t-hist-heavy-tail'),
+      payload: { sessionId: session.id, maxMessages: 50 },
+    })
+    if (!tail.result.ok) throw new Error('unreachable')
+    const tailEvents = tail.result.value.events.map(entry => entry.event)
+    const heavyTypes = tailEvents.filter(event => event.type === 'tool/call' || event.type === 'tool/result')
+    // 60 exchanges = 120 heavy events; the quota carries only the newest 40.
+    expect(heavyTypes).toHaveLength(80)
+    const callIds = new Set(heavyTypes.filter(e => e.type === 'tool/call').map(e => (e.data as { callId: string }).callId))
+    for (const result of heavyTypes.filter(e => e.type === 'tool/result')) {
+      expect(callIds.has((result.data as { message: { source: { callId?: string } } }).message.source.callId ?? '')).toBe(true)
+    }
+    expect(tail.result.value.hasMore).toBe(true)
+    expect(tailEvents.map(event => event.seq)).toEqual(tailEvents.map((_e, i) => (tailEvents[0] as SessionEvent).seq + i))
+
+    const older = await api.sessions.history({
+      rpcId: RpcId('t-hist-heavy-older'),
+      payload: { sessionId: session.id, beforeSeq: (tailEvents[0] as SessionEvent).seq, maxMessages: 50 },
+    })
+    if (!older.result.ok) throw new Error('unreachable')
+    // The remaining 40 exchanges sit under the quota, so the older page
+    // carries the whole rest of the window: turn/start + prompt + 40 pairs.
+    expect(older.result.value.events.map(entry => entry.event)).toHaveLength(42)
+    expect(older.result.value.hasMore).toBe(false)
+  })
+
+  it('walks past the heavy-event budget rather than cutting between a call and its unscanned result', async () => {
+    const { ctx } = await harness()
+    const api = createApiProxy(ctx, { defaultModelSelection: () => ({ provider: 'p', model: 'm' }), cwd: '/tmp' })
+    const session = ctx.sessions.create()
+    ctx.agents.register({ id: session.id, session, status: 'idle', ctx } as Agent)
+    session.append('turn/start', { turn: 1 })
+    appendUserText(session, 'batch with a late pairing')
+    // The late exchange spans the whole round: its call is the oldest heavy
+    // event and its result the newest, so the backward scan reaches the
+    // budget while c-late's result still waits for its call.
+    session.append('tool/call', { turn: 1, step: 40, callId: CallId('c-late'), name: 'gen', arguments: '{}' })
+    for (let index = 0; index < 39; index++) {
+      session.append('tool/call', { turn: 1, step: index + 1, callId: CallId(`c-${index}`), name: 'gen', arguments: '{}' })
+      session.append('tool/result', {
+        turn: 1, step: index + 1,
+        message: createToolResultMessage({
+          callId: CallId(`c-${index}`),
+          content: [{ type: 'text', text: 'ok' }],
+          isError: false,
+        }),
+      }, { surfaceOp: 'append' })
+    }
+    session.append('tool/result', {
+      turn: 1, step: 40,
+      message: createToolResultMessage({
+        callId: CallId('c-late'),
+        content: [{ type: 'text', text: 'late' }],
+        isError: false,
+      }),
+    }, { surfaceOp: 'append' })
+
+    const response = await api.sessions.history({
+      rpcId: RpcId('t-hist-heavy-guard'),
+      payload: { sessionId: session.id, maxMessages: 50 },
+    })
+    if (!response.result.ok) throw new Error('unreachable')
+    const events = response.result.value.events.map(entry => entry.event)
+    const heavy = events.filter(event => event.type === 'tool/call' || event.type === 'tool/result')
+    // The safe cut walks past the budget to c-late's own call, so the pair
+    // ships whole on one page.
+    expect(heavy).toHaveLength(80)
+    expect(heavy.some(event => event.type === 'tool/call' && (event.data as { callId: string }).callId === 'c-late')).toBe(true)
+    expect(heavy.some(event => event.type === 'tool/result'
+      && (event.data as { message: { source: { callId?: string } } }).message.source.callId === 'c-late')).toBe(true)
+    expect(response.result.value.hasMore).toBe(true)
+  })
+
   it('paginates a message with many provenance sources without variadic argument expansion', async () => {
     const { ctx } = await harness()
     const api = createApiProxy(ctx, { defaultModelSelection: () => ({ provider: 'p', model: 'm' }), cwd: '/tmp' })

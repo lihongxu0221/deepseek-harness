@@ -1458,3 +1458,127 @@ describe('ChatView', () => {
     expect(failedView.container.querySelector('[data-state="error"]')).not.toBeNull()
   })
 })
+
+// Virtual-ledger behavior: past the row threshold the column mounts only the
+// viewport window plus overscan, the reader can still reach both ends, and
+// plain tail appends no longer force a floor write on every step.
+describe('ChatView virtual ledger', () => {
+  function installVirtualLayout(): ReturnType<typeof vi.fn> {
+    // jsdom has no boxes: every measured row reports one uniform height, and
+    // scrollTo exists only as a spy for the virtualizer's programmatic writes.
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(600)
+    const scrollTo = vi.fn()
+    Object.defineProperty(HTMLElement.prototype, 'scrollTo', { configurable: true, value: scrollTo })
+    return scrollTo
+  }
+
+  /** Workable scroll geometry for one scroller plus the raw scrollTop ledger. */
+  function installScrollerMetrics(element: HTMLDivElement): { writes: number[] } {
+    let top = 0
+    const writes: number[] = []
+    Object.defineProperty(element, 'scrollHeight', { configurable: true, get: () => 40_000 })
+    Object.defineProperty(element, 'clientHeight', { configurable: true, get: () => 600 })
+    Object.defineProperty(element, 'scrollTop', {
+      configurable: true,
+      get: () => top,
+      set: (value: number) => {
+        writes.push(value)
+        top = Math.max(0, Math.min(value, 40_000 - 600))
+      },
+    })
+    return { writes }
+  }
+
+  function longConversation(count: number) {
+    return Array.from({ length: count }, (_unused, index) => user(index + 1, `u${index + 1}`))
+  }
+
+  function scrollerOf(view: { container: HTMLElement }): HTMLDivElement {
+    return view.container.querySelector('[class*="scroll"]') as HTMLDivElement
+  }
+
+  it('mounts only a bounded window for a long conversation', async () => {
+    installVirtualLayout()
+    const h = makeHarness({ nodes: longConversation(60) })
+    const view = render(<h.ChatView {...h.props} />)
+    await waitFor(() => {
+      expect(view.container.querySelectorAll('[data-chat-virtual-position]').length).toBeGreaterThan(0)
+    })
+    expect(view.container.querySelectorAll('[data-chat-flow-key]').length).toBeLessThan(60)
+    expect(view.getByText('u1')).toBeTruthy()
+    expect(view.queryByText('u60')).toBeNull()
+    expect(view.container.querySelector('[data-chat-virtual-spacer="bottom"]')).toBeTruthy()
+  })
+
+  it('keeps both ledger ends reachable through reader scroll', async () => {
+    installVirtualLayout()
+    const h = makeHarness({ nodes: longConversation(60) })
+    const view = render(<h.ChatView {...h.props} />)
+    await waitFor(() => {
+      expect(view.container.querySelectorAll('[data-chat-virtual-position]').length).toBeGreaterThan(0)
+    })
+    installScrollerMetrics(scrollerOf(view))
+    readerScroll(scrollerOf(view), 30_000)
+    await waitFor(() => {
+      expect(view.getByText('u60')).toBeTruthy()
+    })
+    expect(view.queryByText('u1')).toBeNull()
+    expect(view.container.querySelector('[data-chat-virtual-spacer="top"]')).toBeTruthy()
+  })
+
+  it('does not force a floor write when plain nodes append while reading above the floor', async () => {
+    const scrollTo = installVirtualLayout()
+    const h = makeHarness({ nodes: longConversation(60) })
+    const view = render(<h.ChatView {...h.props} />)
+    await waitFor(() => {
+      expect(view.container.querySelectorAll('[data-chat-virtual-position]').length).toBeGreaterThan(0)
+    })
+    const { writes } = installScrollerMetrics(scrollerOf(view))
+    readerScroll(scrollerOf(view), 5_000)
+    expect(scrollerOf(view).scrollTop).toBe(5_000)
+    scrollTo.mockClear()
+    writes.length = 0 // the reader's own move is not a follow write
+    act(() => { h.set({ nodes: [...longConversation(60), assistant(61, '稍后的回复', 2)] }) })
+    await Promise.resolve()
+    expect(scrollTo).not.toHaveBeenCalled()
+    expect(writes).toEqual([])
+    expect(scrollerOf(view).scrollTop).toBe(5_000)
+  })
+
+  it('still forces the floor when the appended node is the reader\'s own user message', async () => {
+    installVirtualLayout()
+    const h = makeHarness({ nodes: longConversation(60) })
+    const view = render(<h.ChatView {...h.props} />)
+    await waitFor(() => {
+      expect(view.container.querySelectorAll('[data-chat-virtual-position]').length).toBeGreaterThan(0)
+    })
+    const { writes } = installScrollerMetrics(scrollerOf(view))
+    act(() => { h.set({ nodes: [...longConversation(60), user(61, '我自己说的')] }) })
+    await Promise.resolve()
+    expect(writes).toEqual([40_000])
+    expect(scrollerOf(view).scrollTop).toBe(39_400)
+  })
+
+  it('jumps near a saved anchor outside the initial window on remount', async () => {
+    const scrollTo = installVirtualLayout()
+    const h = makeHarness({ nodes: longConversation(60) })
+    h.chatScroll.save({ anchorKey: 'fixture:user:55', anchorTop: 80, scrollTop: 1_400 })
+    render(<h.ChatView {...h.props} />)
+    await waitFor(() => {
+      // The exact anchor row is unmounted at first paint; the restore path
+      // routes through the virtualizer instead of a raw pixel write.
+      expect(scrollTo).toHaveBeenCalled()
+    })
+  })
+
+  it('hands prepend stability to the virtualizer and still requests older pages', async () => {
+    installVirtualLayout()
+    const h = makeHarness({ nodes: longConversation(60), hasMore: true })
+    const view = render(<h.ChatView {...h.props} />)
+    await waitFor(() => {
+      expect(view.container.querySelectorAll('[data-chat-virtual-position]').length).toBeGreaterThan(0)
+    })
+    fireEvent.click(view.getByText('加载更早'))
+    expect(h.loadOlder).toHaveBeenCalledTimes(1)
+  })
+})

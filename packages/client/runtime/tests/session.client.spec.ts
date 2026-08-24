@@ -1014,3 +1014,60 @@ describe('reference stability (the memo contract)', () => {
     expect(session.getSnapshot()).not.toBe(resolved)
   })
 })
+
+describe('resident window budget', () => {
+  async function openedEmpty() {
+    const { api, session } = makeSession()
+    api.onHistory = () => histResponse([])
+    await session.open()
+    return { api, session }
+  }
+
+  const feed = (session: Session, event: SessionEvent): void => {
+    session.handleMuxEnvelope('r' as never, { type: 'session/event', sessionId: SID, event })
+  }
+
+  it('evicts the prefix at the newest qualifying turn boundary and reopens hasMore', async () => {
+    const { api, session } = await openedEmpty()
+    feed(session, ev.turnStart(1, 1))
+    for (let seq = 2; seq <= 500; seq++) feed(session, ev.chunkText(seq, 1, 'x'))
+    feed(session, ev.turnStart(501, 2))
+    for (let seq = 502; seq <= 810; seq++) feed(session, ev.chunkText(seq, 2, 'y'))
+    await Promise.resolve()
+    const snapshot = session.getSnapshot()
+    // The window crossed 800 events mid-second-turn; the retained suffix
+    // restarts at turn 2's start and loadOlder owns everything before it.
+    expect(snapshot.hasMore).toBe(true)
+    expect(chatSeqs(snapshot)[0]).toBe(501)
+    // Eviction is local bookkeeping: no refetch behind the reader's back.
+    expect(api.callsOf('session.history')).toHaveLength(1)
+    feed(session, ev.chunkText(811, 2, 'z'))
+    expect(chatSeqs(session.getSnapshot())).toHaveLength(311)
+  })
+
+  it('falls back to a step boundary when one turn alone outgrows the budget', async () => {
+    const { session } = await openedEmpty()
+    let seq = 1
+    feed(session, ev.turnStart(seq++, 1))
+    for (let block = 0; block < 9; block++) {
+      feed(session, ev.stepStart(seq++, 1))
+      for (let i = 0; i < 95; i++) feed(session, ev.chunkText(seq++, 1, 'x'))
+    }
+    await Promise.resolve()
+    const snapshot = session.getSnapshot()
+    const firstKey = snapshot.chat.order[0]
+    const firstEvent = firstKey === undefined ? undefined : (snapshot.chat.nodes.get(firstKey)?.data as TestEventState).event
+    expect(snapshot.hasMore).toBe(true)
+    expect(firstEvent?.type).toBe('step/start')
+  })
+
+  it('leaves an oversized boundary-free window untouched (fail-soft)', async () => {
+    const { session } = await openedEmpty()
+    feed(session, ev.turnStart(1, 1))
+    for (let seq = 2; seq <= 860; seq++) feed(session, ev.chunkText(seq, 1, 'x'))
+    await Promise.resolve()
+    const snapshot = session.getSnapshot()
+    expect(snapshot.hasMore).toBe(false)
+    expect(chatSeqs(snapshot)[0]).toBe(1)
+  })
+})

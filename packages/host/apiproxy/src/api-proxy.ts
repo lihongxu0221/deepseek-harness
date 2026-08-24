@@ -216,6 +216,13 @@ function isAborted(signal: AbortSignal): boolean {
   return signal.aborted
 }
 
+/** Tool exchanges are the heavy payload of an agent turn: one per step, each
+ *  pairing a `tool/call` with its later `tool/result`. */
+const HEAVY_EVENT_TYPES = new Set(['tool/call', 'tool/result'])
+
+/** Tool events allowed on one history page beyond the message quota. */
+const DEFAULT_MAX_HEAVY_EVENTS = 80
+
 /**
  * Message-boundary pagination: count maxMessages append-origin messages
  * backwards from the window tail. Replacement copies never entered the
@@ -225,31 +232,55 @@ function isAborted(signal: AbortSignal): boolean {
  * replacement. The cut is the starting seq of the oldest message group (chunks
  * group via sourceEventSeqs — never cut mid-message). The tail page naturally
  * includes the in-progress partial.
+ *
+ * A tool-event budget bounds pages independently of the message quota: one
+ * running turn can hold hundreds of tool exchanges, and a message-counted
+ * page would still carry them whole. When maxHeavyEvents heavy events fit,
+ * the scan keeps walking until the next pair-safe boundary — a cut never
+ * lands between a `tool/call` and its not-yet-scanned `tool/result`, so every
+ * result on a page can pair with its own call.
  */
 function paginate(
   events: readonly SessionEvent[],
   beforeSeq: number | undefined,
   maxMessages: number,
+  maxHeavyEvents: number = DEFAULT_MAX_HEAVY_EVENTS,
 ): { events: SessionEvent[]; hasMore: boolean } {
   const window = beforeSeq === undefined ? [...events] : events.filter(event => event.seq < beforeSeq)
-  let count = 0
-  let cut = 0
+  let messages = 0
+  let heavy = 0
+  let messageCut = 0
+  let heavyCut = 0
+  /** Results scanned whose pairing call sits deeper than the scan front. */
+  const openCalls = new Set<string>()
   for (let i = window.length - 1; i >= 0; i--) {
     const event = window[i] as SessionEvent
-    if (!MESSAGE_TYPES.has(event.type) || !isAppendSurfaceEvent(event)) continue
-    count++
-    const sources = (event as { sourceEventSeqs?: number[] }).sourceEventSeqs
-    let groupStart = event.seq
-    if (sources !== undefined) {
-      for (const source of sources) {
-        if (source < groupStart) groupStart = source
+    if (MESSAGE_TYPES.has(event.type) && isAppendSurfaceEvent(event)) messages++
+    if (HEAVY_EVENT_TYPES.has(event.type)) {
+      heavy++
+      const callId = event.type === 'tool/call'
+        ? (event.data as { callId: string }).callId
+        : (event.data as { message: { source: { callId?: string } } }).message.source.callId
+      if (event.type === 'tool/call') {
+        if (callId !== undefined) openCalls.delete(callId)
+      } else if (callId !== undefined) openCalls.add(callId)
+    }
+    if (messages >= maxMessages && messageCut === 0) {
+      const sources = (event as { sourceEventSeqs?: number[] }).sourceEventSeqs
+      let groupStart = event.seq
+      if (sources !== undefined) {
+        for (const source of sources) {
+          if (source < groupStart) groupStart = source
+        }
       }
+      messageCut = groupStart
     }
-    if (count >= maxMessages) {
-      cut = groupStart
-      break
-    }
+    // Pair-safe point: no in-page result is waiting for an older call, so
+    // cutting directly above this event cannot split an exchange.
+    if (heavy >= maxHeavyEvents && heavyCut === 0 && openCalls.size === 0) heavyCut = event.seq
+    if (messageCut !== 0 && heavyCut !== 0) break
   }
+  const cut = Math.max(messageCut, heavyCut)
   const page = window.filter(event => event.seq >= cut)
   return { events: page, hasMore: cut > 0 }
 }
