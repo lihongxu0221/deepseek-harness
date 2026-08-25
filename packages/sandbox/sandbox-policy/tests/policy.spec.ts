@@ -87,7 +87,7 @@ describe('SandboxPolicyService', () => {
   it('adds extra workspace folders as write roots for a matching session cwd', async () => {
     const ctx = await mounted({ mode: 'workspace-write', workspaceRoot: '/fallback' })
     ctx.provide('workspaceRegistry', {
-      list: () => [{ path: resolve('/projects/first'), folders: [resolve('/projects/extra')] }],
+      list: () => [{ path: resolve('/projects/first'), folders: [resolve('/projects/extra')], sessionIds: [] }],
     })
     expect(ctx.sandboxPolicy.resolve({ session: session('sess-multi', '/projects/first') })).toEqual({
       mode: 'workspace-write',
@@ -99,7 +99,7 @@ describe('SandboxPolicyService', () => {
     await prompt.plugin(SystemPrompt)
     await prompt.plugin(SandboxPolicyService, { mode: 'workspace-write', workspaceRoot: '/fallback' })
     prompt.provide('workspaceRegistry', {
-      list: () => [{ path: resolve('/projects/first'), folders: [resolve('/projects/extra')] }],
+      list: () => [{ path: resolve('/projects/first'), folders: [resolve('/projects/extra')], sessionIds: [] }],
     })
     const listed = `${JSON.stringify(resolve('/projects/first'))}, ${JSON.stringify(resolve('/projects/extra'))}`
     expect(await policyContext(prompt, session('sess-multi-prompt', '/projects/first'))).toBe(
@@ -110,7 +110,7 @@ describe('SandboxPolicyService', () => {
   it('adds the primary path as a write root when the session cwd is an extra folder', async () => {
     const ctx = await mounted({ mode: 'workspace-write', workspaceRoot: '/fallback' })
     ctx.provide('workspaceRegistry', {
-      list: () => [{ path: resolve('/projects/first'), folders: [resolve('/projects/extra')] }],
+      list: () => [{ path: resolve('/projects/first'), folders: [resolve('/projects/extra')], sessionIds: [] }],
     })
     expect(ctx.sandboxPolicy.resolve({ session: session('sess-extra-cwd', '/projects/extra') })).toEqual({
       mode: 'workspace-write',
@@ -118,6 +118,39 @@ describe('SandboxPolicyService', () => {
       extraRoots: [resolve('/projects/first')],
       sessionId: 'sess-extra-cwd',
     })
+  })
+
+  it('picks the accounted workspace when several own the session cwd', async () => {
+    const shared = resolve('/projects/shared')
+    const ctx = await mounted({ mode: 'workspace-write', workspaceRoot: '/fallback' })
+    ctx.provide('workspaceRegistry', {
+      list: () => [
+        { path: resolve('/projects/one'), folders: [shared], sessionIds: ['sess-one'] },
+        { path: shared, folders: [resolve('/projects/two')], sessionIds: [] },
+        { path: resolve('/projects/three'), folders: [shared], sessionIds: ['sess-three'] },
+      ],
+    })
+    expect(ctx.sandboxPolicy.resolve({ session: session('sess-one', '/projects/shared') }).extraRoots)
+      .toEqual([resolve('/projects/one')])
+    expect(ctx.sandboxPolicy.resolve({ session: session('sess-three', '/projects/shared') }).extraRoots)
+      .toEqual([resolve('/projects/three')])
+    expect(ctx.sandboxPolicy.resolve({ session: session('sess-loose', '/projects/shared') }).extraRoots)
+      .toEqual([resolve('/projects/two')])
+  })
+
+  it('falls back to the first owning workspace and stays single-root when none owns the cwd', async () => {
+    const shared = resolve('/projects/shared')
+    const ctx = await mounted({ mode: 'workspace-write', workspaceRoot: '/fallback' })
+    ctx.provide('workspaceRegistry', {
+      list: () => [
+        { path: resolve('/projects/one'), folders: [shared], sessionIds: [] },
+        { path: resolve('/projects/three'), folders: [shared], sessionIds: [] },
+      ],
+    })
+    expect(ctx.sandboxPolicy.resolve({ session: session('sess-loose', '/projects/shared') }).extraRoots)
+      .toEqual([resolve('/projects/one')])
+    expect(ctx.sandboxPolicy.resolve({ session: session('sess-outside', '/projects/elsewhere') }).extraRoots)
+      .toBeUndefined()
   })
 
   it.skipIf(process.platform === 'win32')('resolves a symlink-sensitive session cwd with POSIX component semantics', async () => {
@@ -184,6 +217,25 @@ describe('sandbox:policy request context', () => {
     await ctx.plugin(SandboxPolicyService, config)
     return ctx
   }
+
+  it('names extra folders in read-only and danger-full-access prompts', async () => {
+    const extra = resolve('/projects/extra')
+    const listed = JSON.stringify(extra)
+    const ctx = await promptMounted({ mode: 'read-only', workspaceRoot: '/fallback' })
+    ctx.provide('workspaceRegistry', {
+      list: () => [{ path: resolve('/projects/current'), folders: [extra], sessionIds: [] }],
+    })
+    expect(await policyContext(ctx, session('sess-ro-extra', '/projects/current'))).toBe(
+      'Current DSH file policy: read-only. Any available operation enforced by the DSH file sandbox cannot modify files in the standing mode. Do not refuse a required modification from this policy alone: try an available tool normally and follow any denial and escalation guidance it returns.'
+      + ` The session workspace also includes ${listed}.`,
+    )
+    const danger = session('sess-danger-extra', '/projects/current')
+    setSandboxMode(danger, 'danger-full-access')
+    expect(await policyContext(ctx, danger)).toBe(
+      'Current DSH file policy: danger-full-access. The DSH file sandbox does not restrict file modifications by available operations.'
+      + ` The session workspace also includes ${listed}.`,
+    )
+  })
 
   it.each(['read-only', 'workspace-write', 'danger-full-access'] as const)('renders the exact %s policy without a capability inventory', async (mode) => {
     const ctx = await promptMounted({ mode, workspaceRoot: '/fallback' })

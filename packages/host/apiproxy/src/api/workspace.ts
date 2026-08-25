@@ -24,7 +24,9 @@ export interface WorkspaceView {
   path: string
   /**
    * Extra canonical directories this workspace also owns. Empty when the
-   * workspace is single-folder. Does not include {@link path}.
+   * workspace is single-folder. Several workspaces may list the same extra
+   * directory, and an extra directory may be another workspace's {@link path}.
+   * Does not include {@link path}.
    */
   folders?: string[]
   /** Display title (defaults to the path basename at create). */
@@ -53,8 +55,11 @@ export interface WorkspaceApi {
   /**
    * Creates (or idempotently resolves) a workspace over an EXISTING directory
    * (no mkdir — a missing or non-directory path fails with
-   * `workspace-invalid-path`). A path resolving to a directory already owned
-   * by a workspace returns that workspace (`created: false`). Adoption allows
+   * `workspace-invalid-path`). A path resolving to a directory that is already
+   * a workspace's PRIMARY returns that workspace (`created: false`); a
+   * directory that other workspaces merely hold as an extra folder still
+   * creates a new workspace (`created: true`) and keeps those extra folders.
+   * Adoption allows
    * distinct canonical paths whose basenames produce the same display title;
    * the registry's basename title default names the new workspace.
    */
@@ -81,8 +86,8 @@ export interface WorkspaceApi {
   /**
    * Adds an extra directory to an existing workspace. A missing or
    * non-directory path fails with `workspace-invalid-path`. A path this
-   * workspace already owns is a no-op success. A path owned by another
-   * workspace fails with `workspace-folder-conflict`. An unknown id fails
+   * workspace already owns is a no-op success. A path another workspace owns —
+   * as its extra folder or as its primary — is accepted. An unknown id fails
    * with `workspace-not-found`.
    */
   addFolder(request: RpcRequest<{ workspaceId: WorkspaceId; path: string }>):
@@ -100,7 +105,9 @@ export interface WorkspaceApi {
    * Makes an owned extra folder the primary directory (new-session cwd).
    * The previous primary becomes an extra folder. Naming the current primary
    * is a no-op success. An unknown extra folder fails with
-   * `workspace-folder-unknown`. An unknown id fails with `workspace-not-found`.
+   * `workspace-folder-unknown`; a folder that is already another workspace's
+   * primary fails with `workspace-folder-conflict`. An unknown id fails with
+   * `workspace-not-found`.
    */
   setPrimaryFolder(request: RpcRequest<{ workspaceId: WorkspaceId; path: string }>):
   Promise<RpcResponse<{ workspace: WorkspaceView }>>

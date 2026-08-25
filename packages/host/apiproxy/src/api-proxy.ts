@@ -2797,13 +2797,6 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         try {
           await workspace.addFolder(path)
         } catch (error: unknown) {
-          if (error instanceof WorkspaceFolderConflictError) {
-            return err(request, {
-              code: 'workspace-folder-conflict',
-              message: error.message,
-              details: { path: error.path, workspaceId: error.ownerId },
-            })
-          }
           return err(request, {
             code: 'workspace-invalid-path',
             message: `cannot add folder "${path}": ${error instanceof Error ? error.message : String(error)}`,
@@ -2844,6 +2837,13 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
               code: 'workspace-folder-unknown',
               message: error.message,
               details: { path: error.path },
+            })
+          }
+          if (error instanceof WorkspaceFolderConflictError) {
+            return err(request, {
+              code: 'workspace-folder-conflict',
+              message: error.message,
+              details: { path: error.path, workspaceId: error.ownerId },
             })
           }
           throw error

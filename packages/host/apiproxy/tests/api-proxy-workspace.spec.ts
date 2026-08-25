@@ -321,7 +321,7 @@ describe('workspace.create', () => {
 })
 
 describe('workspace.addFolder / removeFolder', () => {
-  it('adds an extra folder, rejects a foreign claim, and refuses to drop the primary', async () => {
+  it('shares an extra folder across Workspaces and refuses to drop the primary', async () => {
     const { api, root } = await harness()
     const primary = stageDir(root, 'multi-primary')
     const extra = stageDir(root, 'multi-extra')
@@ -332,15 +332,16 @@ describe('workspace.addFolder / removeFolder', () => {
       path: extra,
     })))
     expect(added.workspace.folders).toEqual([extra])
-    const foreign = expectOk(await api.workspace.create(request({ path: other }))).workspace
-    const conflict = await api.workspace.addFolder(request({
-      workspaceId: foreign.workspaceId,
+    const second = expectOk(await api.workspace.create(request({ path: other }))).workspace
+    const shared = expectOk(await api.workspace.addFolder(request({
+      workspaceId: second.workspaceId,
       path: extra,
-    }))
-    expect(conflict.result).toMatchObject({
-      ok: false,
-      error: { code: 'workspace-folder-conflict', details: { path: extra } },
-    })
+    })))
+    expect(shared.workspace.folders).toEqual([extra])
+    const adopted = expectOk(await api.workspace.create(request({ path: extra })))
+    expect(adopted).toMatchObject({ created: true, workspace: { path: extra, folders: [] } })
+    expect(adopted.workspace.workspaceId).not.toBe(workspace.workspaceId)
+    expect(adopted.workspace.workspaceId).not.toBe(second.workspaceId)
     const primaryRemove = await api.workspace.removeFolder(request({
       workspaceId: workspace.workspaceId,
       path: primary,
@@ -377,6 +378,24 @@ describe('workspace.setPrimaryFolder', () => {
     expect(unknown.result).toMatchObject({
       ok: false,
       error: { code: 'workspace-folder-unknown' },
+    })
+  })
+
+  it('maps a promotion onto another Workspace primary to workspace-folder-conflict', async () => {
+    const { api, root } = await harness()
+    const owned = stageDir(root, 'conflict-owned')
+    const assisting = stageDir(root, 'conflict-assisting')
+    const owner = expectOk(await api.workspace.create(request({ path: owned }))).workspace
+    const helper = expectOk(await api.workspace.create(request({ path: assisting }))).workspace
+    expectOk(await api.workspace.addFolder(request({ workspaceId: helper.workspaceId, path: owned })))
+
+    const conflict = await api.workspace.setPrimaryFolder(request({
+      workspaceId: helper.workspaceId,
+      path: owned,
+    }))
+    expect(conflict.result).toMatchObject({
+      ok: false,
+      error: { code: 'workspace-folder-conflict', details: { path: owned, workspaceId: owner.workspaceId } },
     })
   })
 })

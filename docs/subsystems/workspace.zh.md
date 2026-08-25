@@ -27,7 +27,9 @@ type WorkspaceId = Branded<'WorkspaceId'>
  * One workspace: a stable id over an existing primary directory, optional
  * extra folders, a display title, and an ordered candidate account of
  * sessions. Membership requires both an id in that account and a session
- * header whose canonical cwd equals the primary path or one extra folder.
+ * header whose canonical cwd equals the primary path or one extra folder;
+ * because an extra folder may be shared, the account — not the cwd — decides
+ * which workspace owns a session.
  * Consumers only see this interface; the implementation stays private.
  */
 interface Workspace {
@@ -37,14 +39,18 @@ interface Workspace {
   /**
    * Canonical primary directory: the `fs.realpath` of the path given at
    * create time (trailing slashes, `..`, and symlinks all resolved). New
-   * sessions use this as cwd. Never rewritten afterwards, even when the
-   * directory disappears (see {@link status}).
+   * sessions use this as cwd, so agent instructions (`AGENTS.md` and the
+   * rest of the instruction walk) start here. {@link setPrimaryFolder}
+   * rewrites it among owned directories; a missing directory never rewrites
+   * it (see {@link status}).
    */
   readonly path: string
 
   /**
-   * Extra canonical directories this workspace also owns. A path appears in
-   * at most one workspace (as primary or extra). Does not include {@link path}.
+   * Extra canonical directories this workspace also owns. A path may be an
+   * extra folder of several workspaces and may also be another workspace's
+   * primary; only {@link path} is unique across the registry. Does not include
+   * {@link path}.
    */
   readonly folders: readonly string[]
 
@@ -77,9 +83,11 @@ interface Workspace {
   /**
    * Add an extra directory to this workspace. The path is canonicalized
    * through `fs.realpath`; a nonexistent or non-directory path rejects. A
-   * path this workspace already owns resolves without writing. A path owned
-   * by another workspace rejects. Extra folders expand session membership
-   * and workspace-write roots; they do not change {@link path}.
+   * path this workspace already owns resolves without writing. A path another
+   * workspace owns — as its extra folder or as its primary — is accepted.
+   * Extra folders expand session membership and workspace-write roots; they
+   * do not change {@link path}. The first folder added to a workspace is the
+   * primary from create; later extras stay extras until {@link setPrimaryFolder}.
    * @param path - Existing directory to own, in any path spelling.
    * @returns resolution after durability.
    */
@@ -95,13 +103,25 @@ interface Workspace {
   removeFolder(path: string): Promise<void>
 
   /**
+   * Make an owned extra folder the primary directory (new-session cwd).
+   * The previous primary becomes an extra folder. Naming {@link path} is a
+   * no-op success. An unknown path rejects, and so does a path that is
+   * already another workspace's primary. Existing session header cwds
+   * stay unchanged.
+   * @param path - Owned extra folder to promote, in any path spelling.
+   * @returns resolution after durability.
+   */
+  setPrimaryFolder(path: string): Promise<void>
+
+  /**
    * Prepend a session to this workspace's candidate account. An already
    * accounted id resolves without writing, aside from the durable
    * filtered-candidate prune every accepted mutation performs. A new id's
    * live or persisted
    * header cwd must resolve to an existing directory equal to {@link path}
    * or one extra folder; unknown ids, missing or invalid cwd values, and
-   * mismatches reject without writing.
+   * mismatches reject without writing. A session another workspace already
+   * accounts also rejects.
    * @param sessionId - The session to record.
    * @returns resolution after durability.
    */
@@ -141,11 +161,11 @@ interface Workspace {
 }
 ```
 
-所有权的真源是记录中有序的 `sessionIds`，绝不从会话 cwd 派生——但成员资格要求两者同时成立：账本上有其 id，且 header 的规范 cwd 等于工作区主路径或任一额外文件夹，因此一个会话在结构上至多属于一个工作区。失败的写入会拒绝（`insertSessionBefore` 的账本错误以 `WorkspaceMoveInvalidError` 拒绝，存储失败以普通错误拒绝）；每次被接受的变更都盖上 `updatedAt` 时间戳，并持久修剪不再通过成员资格检查的候选项。额外文件夹的归属见 [Workspace extra folders](../../.agents/notes/implemented/feature/2026-08-19-workspace-extra-folders.zh.md)。
+所有权的真源是记录中有序的 `sessionIds`，绝不从会话 cwd 派生——但成员资格要求两者同时成立：账本上有其 id，且 header 的规范 cwd 等于工作区主路径或任一额外文件夹。额外文件夹可以共享，因此由账本——而不是 cwd——决定会话归属哪个工作区；`attachSession` 会拒绝已被其他工作区记账的会话（`WorkspaceSessionAccountedError`）。失败的写入会拒绝（`insertSessionBefore` 的账本错误以 `WorkspaceMoveInvalidError` 拒绝，存储失败以普通错误拒绝）；每次被接受的变更都盖上 `updatedAt` 时间戳，并持久修剪不再通过成员资格检查的候选项。额外文件夹共享见 [Workspace shared extra folders](../../.agents/notes/implemented/feature/2026-08-24-workspace-shared-extra-folders.zh.md)。
 
 ## 注册表：`ctx.workspaceRegistry`
 
-`WorkspaceRegistry`（[签名](#ctxworkspaceregistry--workspaceregistry)）拥有注册与解析。`create(path, title?)` 规范化路径，拒绝不存在的路径（原样传出原始 `ENOENT`）或非目录；当规范路径已被拥有时原样返回既有实体；否则创建一条标题为 `title ?? basename(path)` 的记录并前插到持久的注册表顺序中——新记录不得与既有显示标题重复（`WorkspaceNameConflictError`）。`get(id)` 与有序的 `list()` 是同步缓存读取；`resolveByPath(path)` 应用同一套 realpath 规范但不创建。`delete(id)` 只移除注册记录、顺序条目和会话账本——目录、用户文件、实时会话和已持久化日志一概不动，因此这些会话变为 Ungrouped（[决策](../../.agents/notes/implemented/feature/2026-07-27-workspace-registration-deletion.zh.md)）；未知 id 返回 `false`。create 与 delete 会在其两次写入（记录 + 顺序）可能分叉之前先持久写入一个待定变更标记；启动时恰好解决被标记的那次变更——通过删除被标记的表行：这会补完被中断的 delete，并回滚被中断的 create（注册可以重建，因此回滚是安全方向）——而没有标记的顺序/表不一致则作为损坏大声失败。
+`WorkspaceRegistry`（[签名](#ctxworkspaceregistry--workspaceregistry)）拥有注册与解析。`create(path, title?)` 规范化路径，拒绝不存在的路径（原样传出原始 `ENOENT`）或非目录；当规范路径已是某条记录的主目录时原样返回既有实体；否则创建一条标题为 `title ?? basename(path)` 的记录并前插到持久的注册表顺序中——新记录不得与既有显示标题重复（`WorkspaceNameConflictError`）。`get(id)` 与有序的 `list()` 是同步缓存读取；`resolveByPath(path)` 应用同一套 realpath 规范但不创建。`delete(id)` 只移除注册记录、顺序条目和会话账本——目录、用户文件、实时会话和已持久化日志一概不动，因此这些会话变为 Ungrouped（[决策](../../.agents/notes/implemented/feature/2026-07-27-workspace-registration-deletion.zh.md)）；未知 id 返回 `false`。create 与 delete 会在其两次写入（记录 + 顺序）可能分叉之前先持久写入一个待定变更标记；启动时恰好解决被标记的那次变更——通过删除被标记的表行：这会补完被中断的 delete，并回滚被中断的 create（注册可以重建，因此回滚是安全方向）——而没有标记的顺序/表不一致则作为损坏大声失败。
 
 会话的 cwd 在创建时由创建者赋予，而不是由本注册表赋予——API 网关从所选工作区的 `path` 解析新会话的 cwd（回退到显式或默认 cwd），先创建会话使 cwd 落入其不可变的 [`SessionHeader`](persistence.zh.md#sessionheader--metadata-beside-the-log)，再调用 `attachSession`，后者会把已存储的 header cwd 与工作区路径重新校验一遍。首次成功启动时，注册表仅凭已持久化的 header（`id`、`cwd`、`createdAt`——绝不读事件正文）引导历史：把规范 cwd 有效的会话按目录分组为工作区，最新的排在最前；「已初始化」标记最后写入，因此被中断的引导可以安全续跑。引导只发生这一次：没有 cwd 的历史遗留会话保持 Ungrouped，此后创建的会话只能通过 `attachSession` 加入工作区。
 
@@ -241,11 +261,14 @@ insertBefore(id: WorkspaceId, beforeId?: WorkspaceId): Promise<readonly Workspac
 archiveSession(sessionId: SessionId): Promise<void>
 
 /**
- * Resolve by canonical directory path without creating or mutating a
- * workspace. A missing path rejects during `realpath`; an existing unowned
- * directory returns `undefined`.
+ * Resolve the workspace whose PRIMARY directory is this canonical path,
+ * without creating or mutating anything. Extra folders are deliberately not
+ * matched: several workspaces may hold one path as an extra folder, so only
+ * a primary claim identifies a single registration. A missing path rejects
+ * during `realpath`; a directory held only as an extra folder returns
+ * `undefined`.
  * @param path - Existing directory path in any spelling.
- * @returns the workspace owning the canonical path, when one exists.
+ * @returns the workspace whose primary is the canonical path, when one exists.
  */
 async resolveByPath(path: string): Promise<Workspace | undefined>
 ```

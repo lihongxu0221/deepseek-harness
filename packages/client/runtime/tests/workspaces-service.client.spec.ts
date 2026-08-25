@@ -372,9 +372,9 @@ describe('WorkspaceRuntime', () => {
     await expect(workspaces.removeFolder(wid('alpha'), '/w/extra')).resolves.toMatchObject({ folders: [] })
     expect(api.callsOf('workspace.removeFolder')).toEqual([{ workspaceId: 'alpha', path: '/w/extra' }])
     api.onWorkspaceAddFolder = () => Promise.resolve(err({
-      code: 'workspace-folder-conflict', message: 'owned', details: { path: '/w/extra', workspaceId: 'other' },
+      code: 'workspace-invalid-path', message: 'not a directory', details: { path: '/w/extra' },
     }))
-    await expect(workspaces.addFolder(wid('alpha'), '/w/extra')).rejects.toThrow(/workspace-folder-conflict: owned/)
+    await expect(workspaces.addFolder(wid('alpha'), '/w/extra')).rejects.toThrow(/workspace-invalid-path: not a directory/)
     api.onWorkspaceRemoveFolder = () => Promise.resolve(err({
       code: 'workspace-folder-primary', message: 'primary', details: { path: '/w/alpha' },
     }))
@@ -385,6 +385,10 @@ describe('WorkspaceRuntime', () => {
       code: 'workspace-folder-unknown', message: 'unknown', details: { path: '/w/missing' },
     }))
     await expect(workspaces.setPrimaryFolder(wid('alpha'), '/w/missing')).rejects.toThrow(/workspace-folder-unknown: unknown/)
+    api.onWorkspaceSetPrimaryFolder = () => Promise.resolve(err({
+      code: 'workspace-folder-conflict', message: 'owned', details: { path: '/w/extra', workspaceId: 'other' },
+    }))
+    await expect(workspaces.setPrimaryFolder(wid('alpha'), '/w/extra')).rejects.toThrow(/workspace-folder-conflict: owned/)
   })
 
   it('deletes a Workspace or preserves it when the Host rejects deletion', async () => {

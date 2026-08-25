@@ -10,7 +10,7 @@ A Workspace was one canonical directory. Users who keep related repositories sid
 
 ## Decision
 
-A Workspace keeps a primary `path` (new-session cwd) and an extra `folders` list. The first folder added at create is primary; later extras stay extras until `setPrimaryFolder`. A canonical directory belongs to at most one Workspace, as primary or extra. `Workspace.addFolder` / `removeFolder` / `setPrimaryFolder` and the matching RPCs mutate that list. Removing the primary path fails with `workspace-folder-primary`; promoting an unknown path fails with `workspace-folder-unknown`; claiming a path another Workspace already owns fails with `workspace-folder-conflict`. Records written before `folders` existed parse as an empty extra list.
+A Workspace keeps a primary `path` (new-session cwd) and an extra `folders` list. The first folder added at create is primary; later extras stay extras until `setPrimaryFolder`. Only the primary directory is unique across the registry; extras are shareable, including as another Workspace's primary ([shared extra folders](2026-08-24-workspace-shared-extra-folders.md)). `Workspace.addFolder` / `removeFolder` / `setPrimaryFolder` and the matching RPCs mutate that list. Removing the primary path fails with `workspace-folder-primary`; promoting an unknown path fails with `workspace-folder-unknown`; promoting a path that is already another Workspace's primary fails with `workspace-folder-conflict`. Records written before `folders` existed parse as an empty extra list.
 
 Session membership matches a header cwd against the primary path or any extra folder. New sessions created from a Workspace use the current primary as cwd, so agent instructions (`AGENTS.md` and the rest of the instruction walk) start there. Existing session header cwds stay unchanged. `workspace-write` policy resolution reads the mounted workspace registry and sets `SandboxExecutionPolicy.extraRoots` to every other owned directory, so a session whose cwd is an extra folder still writes the primary. `writableRoots`, Seatbelt, Landlock, bwrap, and Windows ACL standing grants all consume that list; a later `addFolder` receives an ACE on the next confine, and a later `removeFolder` drops that ACE on the next confine. The primary-root ACE stays as the reuse cache.
 
@@ -26,7 +26,7 @@ The sidebar Workspace row menu keeps **Edit project**, **Remove folder**, **Rena
 
 ## Consequences
 
-Workspace-write sessions in a multi-folder Workspace can modify every owned directory without switching sandbox mode. New sessions start in the current primary directory; extra folders are additional roots until promoted. Promoting a folder does not rewrite existing session cwds. One path cannot sit in two Workspaces, so adding a folder that is already another Workspace's primary is a conflict rather than a merge.
+Workspace-write sessions in a multi-folder Workspace can modify every owned directory without switching sandbox mode. New sessions start in the current primary directory; extra folders are additional roots until promoted. Promoting a folder does not rewrite existing session cwds. Sharing extras and creating a Workspace over an extra folder are recorded in [shared extra folders](2026-08-24-workspace-shared-extra-folders.md).
 
 ## Testing
 

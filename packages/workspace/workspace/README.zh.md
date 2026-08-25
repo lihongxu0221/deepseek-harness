@@ -8,15 +8,15 @@ DeepSeek Harness 的 Workspace 实体注册表（`ctx.workspaceRegistry`）：�
 
 ## 结构
 
-- `ctx.workspaceRegistry.create(path, title?)`：规范化 `path` 时使用 `fs.realpath`，拒绝不存在或非目录的路径，每个规范路径（主目录或额外文件夹）最多创建一条记录，并将新记录前置到持久 workspace 顺序。对同一路径重复调用会返回现有 workspace，且不改变其标题；不同路径可以共用显示标题。
-- `ctx.workspaceRegistry.get(id)`/`list()`/`resolveByPath(path)`：由缓存提供的查找。`list()` 为同步操作，并遵循持久注册表顺序；`resolveByPath` 为异步操作，因为它采用相同的 `realpath` 规范化方式，并会拒绝缺失路径，而不是创建路径。解析会匹配主路径或任一额外文件夹。
-- `Workspace.addFolder(path)`/`removeFolder(path)`/`setPrimaryFolder(path)`：接纳或移除一个额外目录，或把已拥有的额外目录升为主路径（新建会话 cwd）。`addFolder` 的规范化规则与 create 相同，拒绝缺失或非目录路径；本 workspace 已拥有该路径时直接完成；路径已被其他 workspace 拥有时拒绝。`removeFolder` 拒绝移除主路径，对未知额外文件夹直接完成，且绝不删除目录。`setPrimaryFolder` 用指定额外目录替换 `path`，对当前主路径直接完成，对未知路径拒绝。额外文件夹会扩大会话归属和 workspace-write 可写根；新建会话和 `AGENTS.md` 查找以当前主路径为 cwd。已有会话 header cwd 不变。
+- `ctx.workspaceRegistry.create(path, title?)`：规范化 `path` 时使用 `fs.realpath`，拒绝不存在或非目录的路径，每个主目录最多创建一条记录，并将新记录前置到持久 workspace 顺序。对同一主目录重复调用会返回现有 workspace，且不改变其标题；仅作为额外文件夹持有的路径仍会创建新 workspace。不同路径可以共用显示标题。
+- `ctx.workspaceRegistry.get(id)`/`list()`/`resolveByPath(path)`：由缓存提供的查找。`list()` 为同步操作，并遵循持久注册表顺序；`resolveByPath` 为异步操作，因为它采用相同的 `realpath` 规范化方式，并会拒绝缺失路径，而不是创建路径。解析只匹配主路径。
+- `Workspace.addFolder(path)`/`removeFolder(path)`/`setPrimaryFolder(path)`：接纳或移除一个额外目录，或把已拥有的额外目录升为主路径（新建会话 cwd）。`addFolder` 的规范化规则与 create 相同，拒绝缺失或非目录路径；本 workspace 已拥有该路径时直接完成；其他 workspace 以额外文件夹或主目录持有该路径时仍接受。`removeFolder` 拒绝移除主路径，对未知额外文件夹直接完成，且绝不删除目录。`setPrimaryFolder` 用指定额外目录替换 `path`，对当前主路径直接完成，对未知路径拒绝，对已是其他 workspace 主目录的路径拒绝。额外文件夹会扩大会话归属和 workspace-write 可写根；新建会话和 `AGENTS.md` 查找以当前主路径为 cwd。已有会话 header cwd 不变。
 - `ctx.workspaceRegistry.insertBefore(id, before?)`：在持久注册表顺序内移动一个已注册 Workspace，语义类似 DOM 的 insertBefore：插到锚点之前，省略锚点则追加到末尾。来源或锚点不在注册表中时拒绝且不写入；以自身为锚点或移动到当前位置时直接完成且不写入。返回的 id 列表是完整的已提交顺序。
 - `ctx.workspaceRegistry.delete(id)`：只移除 Workspace 注册记录、对应的持久顺序条目及会话归属记录。未知 id 返回 `false`，成功移除记录则返回 `true`。目录、用户文件、活跃会话和持久化会话日志绝不受影响，因此相关会话会进入 Ungrouped。表写入失败时会恢复原顺序和此前发布的实体。
-- `Workspace.attachSession(id)`：对照主路径或任一额外文件夹验证实时或已持久化的会话头 cwd，并将新 id 前置。未知会话、缺失／无法解析／非目录的 cwd 值和不匹配情况都会在不写入的前提下被拒绝。`detachSession` 只移除候选索引条目。
+- `Workspace.attachSession(id)`：对照主路径或任一额外文件夹验证实时或已持久化的会话头 cwd，并将新 id 前置。未知会话、缺失／无法解析／非目录的 cwd 值、不匹配情况，以及已被其他 workspace 记账的会话，都会在不写入的前提下被拒绝。`detachSession` 只移除候选索引条目。
 - `Workspace.insertSessionBefore(id, before?)`：在手动顺序内移动一个已记账的会话，语义类似 DOM 的 insertBefore：插到锚点之前，省略锚点则追加到末尾。会话或锚点不在记账中时拒绝且不写入；移动到当前位置时直接完成且不写入。注册表中的 Workspace 顺序绝不改变。
 - `ctx.workspaceRegistry.archiveSession(id)`/`archivedSessionIds`：覆盖在 workspace 记账之上的注册表级全局归档集合：被归档的会话从各分组视图中消失，但其会话日志和 `sessionIds` 席位保持不变，未来取消归档时可恢复原位置。归档接受任何实时或已持久化的会话（无论已记账还是 Ungrouped），对已归档的 id 直接完成而不写入，并拒绝未知 id。在该字段出现之前写入的状态解析为一个空集合。
-- `Workspace.sessionIds`：按持久候选顺序提供同步 id 加规范 cwd 成员投影。缺失头部、无效 cwd 值和不匹配情况都被过滤；下一次 workspace 变更会剪除它们。如果同一存储介质将一个会话索引到两个 workspace 下、用两条记录声明同一路径，或偏离持久 workspace 顺序，启动会被拒绝。
+- `Workspace.sessionIds`：按持久候选顺序提供同步 id 加规范 cwd 成员投影。缺失头部、无效 cwd 值和不匹配情况都被过滤；下一次 workspace 变更会剪除它们。如果同一存储介质将一个会话索引到两个 workspace 下、用两条记录声明同一主路径、同一记录声明同一路径两次，或偏离持久 workspace 顺序，启动会被拒绝。
 - `Workspace.status()`：未缓存的目录检查，返回 `'ok' | 'missing-dir'`；目录缺失绝不会改动记录。
 
 `storageDomain` 和 `sessionPersistence` 是启动必需依赖。任一依赖服务不可用时，插件保持待处理，且不能提交空的已初始化标记。首次成功启动时，注册表调用 `SessionPersistence.list()`，仅使用头部 `id`、`cwd` 和 `createdAt` 对有效历史目录分组并持久化初始顺序；它绝不读取事件正文。已初始化标记最后写入，因此重启后可安全复用引导初始化期间的部分写入。后续仅能通过 cwd 识别的会话仍属于 Ungrouped。
@@ -41,5 +41,6 @@ DeepSeek Harness 的 Workspace 实体注册表（`ctx.workspaceRegistry`）：�
 
 ## 已知限制与暂缓事项
 
+- 额外文件夹不会扩大 `AGENTS.md` 指令查找、`@` 提及搜索或 `fs-search` 默认根；这些仍只使用会话 cwd（参见[决策记录](../../../.agents/notes/implemented/feature/2026-08-24-workspace-shared-extra-folders.zh.md)）。
 - 会话删除与破坏性的文件夹移除是彼此独立且尚未提供的功能；删除 Workspace 注册记录绝不能替代二者（参见[决策记录](../../../.agents/notes/implemented/feature/2026-07-27-workspace-registration-deletion.zh.md)）。
 - 头部索引会在启动时刷新，也会在 attach 必须解析未缓存持久 id 时刷新；另一进程执行的删除或造成的 cwd 损坏会在下次刷新或重启后被发现。

@@ -27,7 +27,9 @@ Consumers see only the `Workspace` interface; the implementation stays package-p
  * One workspace: a stable id over an existing primary directory, optional
  * extra folders, a display title, and an ordered candidate account of
  * sessions. Membership requires both an id in that account and a session
- * header whose canonical cwd equals the primary path or one extra folder.
+ * header whose canonical cwd equals the primary path or one extra folder;
+ * because an extra folder may be shared, the account — not the cwd — decides
+ * which workspace owns a session.
  * Consumers only see this interface; the implementation stays private.
  */
 interface Workspace {
@@ -37,14 +39,18 @@ interface Workspace {
   /**
    * Canonical primary directory: the `fs.realpath` of the path given at
    * create time (trailing slashes, `..`, and symlinks all resolved). New
-   * sessions use this as cwd. Never rewritten afterwards, even when the
-   * directory disappears (see {@link status}).
+   * sessions use this as cwd, so agent instructions (`AGENTS.md` and the
+   * rest of the instruction walk) start here. {@link setPrimaryFolder}
+   * rewrites it among owned directories; a missing directory never rewrites
+   * it (see {@link status}).
    */
   readonly path: string
 
   /**
-   * Extra canonical directories this workspace also owns. A path appears in
-   * at most one workspace (as primary or extra). Does not include {@link path}.
+   * Extra canonical directories this workspace also owns. A path may be an
+   * extra folder of several workspaces and may also be another workspace's
+   * primary; only {@link path} is unique across the registry. Does not include
+   * {@link path}.
    */
   readonly folders: readonly string[]
 
@@ -77,9 +83,11 @@ interface Workspace {
   /**
    * Add an extra directory to this workspace. The path is canonicalized
    * through `fs.realpath`; a nonexistent or non-directory path rejects. A
-   * path this workspace already owns resolves without writing. A path owned
-   * by another workspace rejects. Extra folders expand session membership
-   * and workspace-write roots; they do not change {@link path}.
+   * path this workspace already owns resolves without writing. A path another
+   * workspace owns — as its extra folder or as its primary — is accepted.
+   * Extra folders expand session membership and workspace-write roots; they
+   * do not change {@link path}. The first folder added to a workspace is the
+   * primary from create; later extras stay extras until {@link setPrimaryFolder}.
    * @param path - Existing directory to own, in any path spelling.
    * @returns resolution after durability.
    */
@@ -95,13 +103,25 @@ interface Workspace {
   removeFolder(path: string): Promise<void>
 
   /**
+   * Make an owned extra folder the primary directory (new-session cwd).
+   * The previous primary becomes an extra folder. Naming {@link path} is a
+   * no-op success. An unknown path rejects, and so does a path that is
+   * already another workspace's primary. Existing session header cwds
+   * stay unchanged.
+   * @param path - Owned extra folder to promote, in any path spelling.
+   * @returns resolution after durability.
+   */
+  setPrimaryFolder(path: string): Promise<void>
+
+  /**
    * Prepend a session to this workspace's candidate account. An already
    * accounted id resolves without writing, aside from the durable
    * filtered-candidate prune every accepted mutation performs. A new id's
    * live or persisted
    * header cwd must resolve to an existing directory equal to {@link path}
    * or one extra folder; unknown ids, missing or invalid cwd values, and
-   * mismatches reject without writing.
+   * mismatches reject without writing. A session another workspace already
+   * accounts also rejects.
    * @param sessionId - The session to record.
    * @returns resolution after durability.
    */
@@ -141,11 +161,11 @@ interface Workspace {
 }
 ```
 
-Ownership truth is the record's ordered `sessionIds`, never derived from session cwd — but membership requires both: an id on the account and a header whose canonical cwd equals the workspace primary path or one extra folder, so one session structurally belongs to at most one workspace. Failed writes reject (`insertSessionBefore` account errors as `WorkspaceMoveInvalidError`, storage failures as plain errors); every accepted mutation stamps `updatedAt` and durably prunes candidates that no longer pass the membership check. Extra-folder ownership is recorded in [Workspace extra folders](../../.agents/notes/implemented/feature/2026-08-19-workspace-extra-folders.md).
+Ownership truth is the record's ordered `sessionIds`, never derived from session cwd — but membership requires both: an id on the account and a header whose canonical cwd equals the workspace primary path or one extra folder. Extra folders may be shared, so the account — not the cwd — decides which workspace owns a session; `attachSession` rejects a session another workspace already accounts (`WorkspaceSessionAccountedError`). Failed writes reject (`insertSessionBefore` account errors as `WorkspaceMoveInvalidError`, storage failures as plain errors); every accepted mutation stamps `updatedAt` and durably prunes candidates that no longer pass the membership check. Extra-folder sharing is recorded in [Workspace shared extra folders](../../.agents/notes/implemented/feature/2026-08-24-workspace-shared-extra-folders.md).
 
 ## The registry: `ctx.workspaceRegistry`
 
-`WorkspaceRegistry` ([signatures](#ctxworkspaceregistry--workspaceregistry)) owns registration and resolution. `create(path, title?)` canonicalizes the path, rejects a nonexistent path (the original `ENOENT`) or a non-directory, returns the existing entity unchanged when the canonical path is already owned, and otherwise creates a record with `title ?? basename(path)` prepended to the durable registry order — a new record cannot duplicate an existing display title (`WorkspaceNameConflictError`). `get(id)` and the ordered `list()` are synchronous cache reads; `resolveByPath(path)` applies the same realpath canon without creating. `delete(id)` removes only the registration, order entry, and session account — the directory, user files, live sessions, and persisted logs are never touched, so those sessions become Ungrouped ([decision](../../.agents/notes/implemented/feature/2026-07-27-workspace-registration-deletion.md)); unknown ids return `false`. Create and delete persist a pending-mutation marker before their two writes (record + order) can diverge; startup resolves exactly the marked mutation — by deleting the marked table row, which completes an interrupted delete and rolls back an interrupted create (the registration is re-creatable, so rollback is the safe direction) — and an unmarked order/table mismatch fails loud as corruption.
+`WorkspaceRegistry` ([signatures](#ctxworkspaceregistry--workspaceregistry)) owns registration and resolution. `create(path, title?)` canonicalizes the path, rejects a nonexistent path (the original `ENOENT`) or a non-directory, returns the existing entity unchanged when the canonical path is already a primary, and otherwise creates a record with `title ?? basename(path)` prepended to the durable registry order — a new record cannot duplicate an existing display title (`WorkspaceNameConflictError`). `get(id)` and the ordered `list()` are synchronous cache reads; `resolveByPath(path)` applies the same realpath canon without creating. `delete(id)` removes only the registration, order entry, and session account — the directory, user files, live sessions, and persisted logs are never touched, so those sessions become Ungrouped ([decision](../../.agents/notes/implemented/feature/2026-07-27-workspace-registration-deletion.md)); unknown ids return `false`. Create and delete persist a pending-mutation marker before their two writes (record + order) can diverge; startup resolves exactly the marked mutation — by deleting the marked table row, which completes an interrupted delete and rolls back an interrupted create (the registration is re-creatable, so rollback is the safe direction) — and an unmarked order/table mismatch fails loud as corruption.
 
 Sessions get their cwd at create time from whoever creates them, not from this registry — the API gateway resolves a new session's cwd from the chosen workspace's `path` (falling back to an explicit or default cwd), creates the session so the cwd lands in its immutable [`SessionHeader`](persistence.md#sessionheader--metadata-beside-the-log), then calls `attachSession`, which re-validates that stored header cwd against the workspace path. On the first successful start, the registry bootstraps history from persisted headers alone (`id`, `cwd`, `createdAt` — never event bodies), grouping sessions with a valid canonical cwd into per-directory workspaces, newest first; the initialized marker is written last so an interrupted bootstrap resumes safely. The bootstrap is one-time: cwd-less legacy sessions stay Ungrouped, and sessions created afterwards join a workspace only through `attachSession`.
 
@@ -241,11 +261,14 @@ insertBefore(id: WorkspaceId, beforeId?: WorkspaceId): Promise<readonly Workspac
 archiveSession(sessionId: SessionId): Promise<void>
 
 /**
- * Resolve by canonical directory path without creating or mutating a
- * workspace. A missing path rejects during `realpath`; an existing unowned
- * directory returns `undefined`.
+ * Resolve the workspace whose PRIMARY directory is this canonical path,
+ * without creating or mutating anything. Extra folders are deliberately not
+ * matched: several workspaces may hold one path as an extra folder, so only
+ * a primary claim identifies a single registration. A missing path rejects
+ * during `realpath`; a directory held only as an extra folder returns
+ * `undefined`.
  * @param path - Existing directory path in any spelling.
- * @returns the workspace owning the canonical path, when one exists.
+ * @returns the workspace whose primary is the canonical path, when one exists.
  */
 async resolveByPath(path: string): Promise<Workspace | undefined>
 ```

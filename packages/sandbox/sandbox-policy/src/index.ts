@@ -36,7 +36,7 @@ function resolveWorkspaceRoot(path: string): string {
 
 /** Workspace registry face used only for extra write-root lookup. */
 interface WorkspaceFolderSource {
-  list(): readonly { path: string; folders: readonly string[] }[]
+  list(): readonly { path: string; folders: readonly string[]; sessionIds: readonly string[] }[]
 }
 
 /**
@@ -45,21 +45,46 @@ interface WorkspaceFolderSource {
  * yields an empty list so agentless and ungrouped sessions stay single-root.
  * The session cwd may be the primary path or an extra folder; every other
  * owned directory is returned so workspace-write covers the whole workspace.
+ *
+ * One directory may be an extra folder of several workspaces, so a cwd can
+ * match more than one. Exactly one is chosen — never the union: the workspace
+ * whose account holds this session, else the workspace whose primary the cwd
+ * is, else the first match in registry order.
  * @param ctx - host context that may carry `workspaceRegistry`.
  * @param workspaceRoot - already-canonical session cwd or fallback root.
- * @returns every other owned workspace directory besides `workspaceRoot`.
+ * @param sessionId - calling session, when the call carries one.
+ * @returns every other owned directory of the one selected workspace.
  */
-function extraWorkspaceRoots(ctx: Context, workspaceRoot: string): string[] {
+function extraWorkspaceRoots(ctx: Context, workspaceRoot: string, sessionId?: string): string[] {
   const registry = (ctx as { get(name: string): unknown }).get('workspaceRegistry') as
     | WorkspaceFolderSource
     | undefined
   if (registry === undefined) return []
+  let primaryMatch: string[] | undefined
+  let firstMatch: string[] | undefined
   for (const workspace of registry.list()) {
-    const folders = [workspace.path, ...workspace.folders ?? []].map(resolveWorkspaceRoot)
+    const primaryRoot = resolveWorkspaceRoot(workspace.path)
+    const folders = [primaryRoot, ...workspace.folders.map(resolveWorkspaceRoot)]
     if (!folders.includes(workspaceRoot)) continue
-    return folders.filter(folder => folder !== workspaceRoot)
+    const others = folders.filter(folder => folder !== workspaceRoot)
+    if (sessionId !== undefined && workspace.sessionIds.includes(sessionId)) return others
+    if (primaryRoot === workspaceRoot) primaryMatch = others
+    firstMatch ??= others
   }
-  return []
+  return primaryMatch ?? firstMatch ?? []
+}
+
+/**
+ * Name the session workspace's other directories. `workspace-write` already
+ * lists them as writable roots; the other two modes describe no roots at all,
+ * so without this an extra folder would never reach the model.
+ * @param policy - the resolved policy whose extra roots are described.
+ * @returns a leading-space sentence, or an empty string for a single-directory workspace.
+ */
+function renderWorkspaceFolders(policy: SandboxExecutionPolicy): string {
+  const extras = policy.extraRoots ?? []
+  if (extras.length === 0) return ''
+  return ` The session workspace also includes ${extras.map(root => JSON.stringify(root)).join(', ')}.`
 }
 
 /** Render the policy without claiming which capabilities are mounted. */
@@ -67,6 +92,7 @@ function renderPolicyContext(policy: SandboxExecutionPolicy): string {
   switch (policy.mode) {
     case 'read-only':
       return 'Current DSH file policy: read-only. Any available operation enforced by the DSH file sandbox cannot modify files in the standing mode. Do not refuse a required modification from this policy alone: try an available tool normally and follow any denial and escalation guidance it returns.'
+        + renderWorkspaceFolders(policy)
     case 'workspace-write': {
       const roots = [policy.workspaceRoot, ...policy.extraRoots ?? []]
       const listed = roots.length === 1
@@ -76,6 +102,7 @@ function renderPolicyContext(policy: SandboxExecutionPolicy): string {
     }
     case 'danger-full-access':
       return 'Current DSH file policy: danger-full-access. The DSH file sandbox does not restrict file modifications by available operations.'
+        + renderWorkspaceFolders(policy)
     /* v8 ignore next 4 -- SandboxMode is a typed same-process closed union; this branch is only the static exhaustiveness guard. */
     default: {
       const mode: never = policy.mode
@@ -168,7 +195,7 @@ export class SandboxPolicyService extends Service {
   resolve(request: SandboxPolicyRequest = {}): SandboxExecutionPolicy {
     const { session } = request
     const workspaceRoot = resolveWorkspaceRoot(session?.header.cwd ?? this.workspaceRoot)
-    const extraRoots = extraWorkspaceRoots(this.ctx, workspaceRoot)
+    const extraRoots = extraWorkspaceRoots(this.ctx, workspaceRoot, session?.id)
     return {
       mode: request.mode ?? (session === undefined ? undefined : this.overrideOf(session)) ?? this.defaultMode,
       workspaceRoot,

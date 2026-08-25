@@ -18,7 +18,9 @@ export type WorkspaceId = Branded<'WorkspaceId'>
  * One workspace: a stable id over an existing primary directory, optional
  * extra folders, a display title, and an ordered candidate account of
  * sessions. Membership requires both an id in that account and a session
- * header whose canonical cwd equals the primary path or one extra folder.
+ * header whose canonical cwd equals the primary path or one extra folder;
+ * because an extra folder may be shared, the account — not the cwd — decides
+ * which workspace owns a session.
  * Consumers only see this interface; the implementation stays private.
  */
 export interface Workspace {
@@ -36,8 +38,10 @@ export interface Workspace {
   readonly path: string
 
   /**
-   * Extra canonical directories this workspace also owns. A path appears in
-   * at most one workspace (as primary or extra). Does not include {@link path}.
+   * Extra canonical directories this workspace also owns. A path may be an
+   * extra folder of several workspaces and may also be another workspace's
+   * primary; only {@link path} is unique across the registry. Does not include
+   * {@link path}.
    */
   readonly folders: readonly string[]
 
@@ -70,11 +74,11 @@ export interface Workspace {
   /**
    * Add an extra directory to this workspace. The path is canonicalized
    * through `fs.realpath`; a nonexistent or non-directory path rejects. A
-   * path this workspace already owns resolves without writing. A path owned
-   * by another workspace rejects. Extra folders expand session membership
-   * and workspace-write roots; they do not change {@link path}. The first
-   * folder added to a workspace is the primary from create; later extras stay
-   * extras until {@link setPrimaryFolder}.
+   * path this workspace already owns resolves without writing. A path another
+   * workspace owns — as its extra folder or as its primary — is accepted.
+   * Extra folders expand session membership and workspace-write roots; they
+   * do not change {@link path}. The first folder added to a workspace is the
+   * primary from create; later extras stay extras until {@link setPrimaryFolder}.
    * @param path - Existing directory to own, in any path spelling.
    * @returns resolution after durability.
    */
@@ -92,7 +96,8 @@ export interface Workspace {
   /**
    * Make an owned extra folder the primary directory (new-session cwd).
    * The previous primary becomes an extra folder. Naming {@link path} is a
-   * no-op success. An unknown path rejects. Existing session header cwds
+   * no-op success. An unknown path rejects, and so does a path that is
+   * already another workspace's primary. Existing session header cwds
    * stay unchanged.
    * @param path - Owned extra folder to promote, in any path spelling.
    * @returns resolution after durability.
@@ -106,7 +111,8 @@ export interface Workspace {
    * live or persisted
    * header cwd must resolve to an existing directory equal to {@link path}
    * or one extra folder; unknown ids, missing or invalid cwd values, and
-   * mismatches reject without writing.
+   * mismatches reject without writing. A session another workspace already
+   * accounts also rejects.
    * @param sessionId - The session to record.
    * @returns resolution after durability.
    */

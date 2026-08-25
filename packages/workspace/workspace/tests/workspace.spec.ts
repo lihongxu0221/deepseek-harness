@@ -874,10 +874,9 @@ describe('workspace mutation and status', () => {
 })
 
 describe('workspace extra folders', () => {
-  it('adds extra folders, matches attach by extra cwd, and rejects a foreign or primary remove', async () => {
+  it('adds extra folders, matches attach by extra cwd, and rejects removing the primary', async () => {
     const primary = await makeDir('multi-primary')
     const extra = await makeDir('multi-extra')
-    const other = await makeDir('multi-other')
     const { registry } = await harness({
       sessions: [header('in-primary', primary, 200)],
       liveSessions: [header('in-extra', extra, 100), header('in-primary', primary, 200)],
@@ -888,13 +887,9 @@ describe('workspace extra folders', () => {
     expect(workspace.folders).toEqual([extra])
     await workspace.addFolder(extra)
     expect(workspace.folders).toEqual([extra])
-    expect(await registry.resolveByPath(extra)).toBe(workspace)
-    expect((await registry.create(extra)).id).toBe(workspace.id)
     await workspace.attachSession(SessionId('in-extra'))
     expect(workspace.sessionIds).toEqual(['in-extra', 'in-primary'])
 
-    const foreign = await registry.create(other)
-    await expect(foreign.addFolder(extra)).rejects.toMatchObject({ name: 'WorkspaceFolderConflictError' })
     await expect(workspace.removeFolder(primary)).rejects.toMatchObject({ name: 'WorkspaceFolderPrimaryError' })
     await workspace.removeFolder(extra)
     expect(workspace.folders).toEqual([])
@@ -918,6 +913,99 @@ describe('workspace extra folders', () => {
     await expect(workspace.setPrimaryFolder(await makeDir('promote-foreign')))
       .rejects.toMatchObject({ name: 'WorkspaceFolderUnknownError' })
     await expect(workspace.removeFolder(extra)).rejects.toMatchObject({ name: 'WorkspaceFolderPrimaryError' })
+  })
+
+  it('shares one extra folder across workspaces and resolves only its primary owner', async () => {
+    const first = await makeDir('share-first')
+    const second = await makeDir('share-second')
+    const shared = await makeDir('share-common')
+    const { registry } = await harness()
+    const alpha = await registry.create(first)
+    const beta = await registry.create(second)
+
+    await alpha.addFolder(shared)
+    await beta.addFolder(shared)
+    expect(alpha.folders).toEqual([shared])
+    expect(beta.folders).toEqual([shared])
+    await beta.addFolder(first)
+    expect(beta.folders).toEqual([shared, first])
+    expect(await registry.resolveByPath(first)).toBe(alpha)
+    expect(await registry.resolveByPath(shared)).toBeUndefined()
+
+    const owner = await registry.create(shared)
+    expect(owner.id).not.toBe(alpha.id)
+    expect(owner.id).not.toBe(beta.id)
+    expect(owner.path).toBe(shared)
+    expect(await registry.resolveByPath(shared)).toBe(owner)
+    expect(alpha.folders).toEqual([shared])
+    expect(beta.folders).toEqual([shared, first])
+    expect((await registry.create(shared)).id).toBe(owner.id)
+  })
+
+  it('rejects promoting a folder that is already another workspace primary', async () => {
+    const first = await makeDir('promote-conflict-first')
+    const second = await makeDir('promote-conflict-second')
+    const { registry } = await harness()
+    const alpha = await registry.create(first)
+    const beta = await registry.create(second)
+    await beta.addFolder(first)
+
+    await expect(beta.setPrimaryFolder(first)).rejects.toMatchObject({
+      name: 'WorkspaceFolderConflictError',
+      ownerId: alpha.id,
+    })
+    expect(beta.path).toBe(second)
+    expect(beta.folders).toEqual([first])
+
+    expect(await registry.delete(alpha.id)).toBe(true)
+    await beta.setPrimaryFolder(first)
+    expect(beta.path).toBe(first)
+    expect(beta.folders).toEqual([second])
+  })
+
+  it('keeps a session in one account when several workspaces own its cwd', async () => {
+    const first = await makeDir('account-first')
+    const shared = await makeDir('account-shared')
+    const { registry } = await harness({ liveSessions: [header('in-shared', shared, 100)] })
+    const alpha = await registry.create(first)
+    const beta = await registry.create(shared)
+    await alpha.addFolder(shared)
+
+    await alpha.attachSession(SessionId('in-shared'))
+    expect(alpha.sessionIds).toEqual(['in-shared'])
+    await expect(beta.attachSession(SessionId('in-shared'))).rejects.toMatchObject({
+      name: 'WorkspaceSessionAccountedError',
+      ownerId: alpha.id,
+    })
+    expect(beta.sessionIds).toEqual([])
+
+    await alpha.detachSession(SessionId('in-shared'))
+    await beta.attachSession(SessionId('in-shared'))
+    expect(beta.sessionIds).toEqual(['in-shared'])
+  })
+
+  it('loads shared extra folders and rejects a record claiming one path twice', async () => {
+    const first = await makeDir('stored-first')
+    const second = await makeDir('stored-second')
+    const shared = await makeDir('stored-shared')
+    const firstId = '00000000-0000-4000-8000-000000000010'
+    const secondId = '00000000-0000-4000-8000-000000000011'
+
+    const sharedExtras = storedPool(
+      [
+        [firstId, { ...record(first, []), folders: [shared] }],
+        [secondId, { ...record(second, []), folders: [shared] }],
+      ],
+      { initialized: true, workspaceIds: [WorkspaceId(firstId), WorkspaceId(secondId)] },
+    )
+    const loaded = await harness({ pool: sharedExtras })
+    expect(loaded.registry.list().map(workspace => workspace.folders)).toEqual([[shared], [shared]])
+
+    const selfDuplicate = storedPool(
+      [[firstId, { ...record(first, []), folders: [first] }]],
+      { initialized: true, workspaceIds: [WorkspaceId(firstId)] },
+    )
+    await expect(harness({ pool: selfDuplicate })).rejects.toThrow(/claims path .* twice/)
   })
 })
 

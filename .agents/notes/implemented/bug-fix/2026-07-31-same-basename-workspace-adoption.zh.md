@@ -10,13 +10,13 @@ Workspace 的身份由其稳定 id 和规范目录路径确定，标题则是可
 
 ## 决策
 
-`ctx.workspaceRegistry.create(path, title?)` 仅以规范路径作为唯一性键。重复传入同一路径仍保持幂等，并保留已注册的标题。不同的规范路径会创建不同的 Workspace 记录，且可以共用标题；未提供标题时，每条记录仍从 `basename(path)` 派生标题，不添加后缀，也不改写标题。
+`ctx.workspaceRegistry.create(path, title?)` 仅以规范主目录作为唯一性键。仅作为额外文件夹持有的目录仍会创建新 Workspace（[共享额外文件夹](../feature/2026-08-24-workspace-shared-extra-folders.zh.md)）。重复传入同一路径仍保持幂等，并保留已注册的标题。不同的规范路径会创建不同的 Workspace 记录，且可以共用标题；未提供标题时，每条记录仍从 `basename(path)` 派生标题，不添加后缀，也不改写标题。
 
 Host 的 `workspace.create({ path })` 接纳入口沿用该规则。Workspace 管理器、选择器、分组树、选择、重命名、删除和 Session 创建仍使用 `WorkspaceId`，因此相同标签既不会合并记录，也不会把操作指向其他记录。需要区分相同标签时，侧边栏悬停详情卡会显示各自的规范路径。
 
 显式命名仍采用更严格的规则。`workspace.rename` 仍会拒绝已注册的标题，具体见[手动 Workspace 命名](../feature/2026-07-25-session-list-browsing-and-manual-order.zh.md)。这既防止用户主动引入另一个难以区分的标签，又允许既有目录名称造成的重名。路径接纳规则仅取代 [Workspace 产品流](../feature/2026-07-25-workspace-ui-product-flow.zh.md)和[原生目录选择器](../feature/2026-07-27-native-workspace-directory-picker.zh.md)中的标题冲突条款。
 
-持久化 schema 未变：Workspace 记录本就分别存储 id、path 和 title，引导初始化可以派生出相同的 basename，启动校验检查的是重复路径而非重复标题。
+持久化 schema 未变：Workspace 记录本就分别存储 id、path 和 title，引导初始化可以派生出相同的 basename，启动校验检查的是重复主路径而非重复标题。
 
 ## 验证
 

@@ -2718,16 +2718,6 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
         if (path === workspace.path || folders.includes(path)) {
           return ok(request, { workspace: { ...workspace, folders: [...folders] } })
         }
-        const owner = workspaces.find(other =>
-          other.workspaceId !== workspaceId
-          && (other.path === path || (other.folders ?? []).includes(path)))
-        if (owner !== undefined) {
-          return err(request, {
-            code: 'workspace-folder-conflict',
-            message: `cannot add folder '${path}': already owned by workspace '${owner.workspaceId}'`,
-            details: { path, workspaceId: owner.workspaceId },
-          })
-        }
         workspace.folders = [...folders, path]
         workspace.updatedAt = new Date().toISOString()
         emitHost({ type: 'host/workspace-changed', workspace: { ...workspace } })
@@ -2777,6 +2767,15 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
             code: 'workspace-folder-unknown',
             message: `cannot set primary folder '${path}': it is not owned by this workspace`,
             details: { path },
+          })
+        }
+        const primaryHolder = workspaces.find(other =>
+          other.workspaceId !== workspaceId && other.path === path)
+        if (primaryHolder !== undefined) {
+          return err(request, {
+            code: 'workspace-folder-conflict',
+            message: `cannot set primary folder '${path}': it is already the primary directory of workspace '${primaryHolder.workspaceId}'`,
+            details: { path, workspaceId: primaryHolder.workspaceId },
           })
         }
         const previous = workspace.path

@@ -16,14 +16,14 @@ import type { Workspace, WorkspaceId } from './types.ts'
 import { extraFolders, ownsPath } from './folders.ts'
 import { realpathNormalize } from './paths.ts'
 
-/** addFolder named a directory already owned by another workspace. */
+/** setPrimaryFolder named a directory that is already another workspace's primary. */
 export class WorkspaceFolderConflictError extends Error {
   /**
-   * @param path - Canonical directory that is already owned.
-   * @param ownerId - Workspace that already owns the path.
+   * @param path - Canonical directory that is already another workspace's primary.
+   * @param ownerId - Workspace that already holds the path as its primary.
    */
   constructor(readonly path: string, readonly ownerId: WorkspaceId) {
-    super(`cannot add folder '${path}': already owned by workspace '${ownerId}'`)
+    super(`cannot set primary folder '${path}': it is already the primary directory of workspace '${ownerId}'`)
     this.name = 'WorkspaceFolderConflictError'
   }
 }
@@ -47,6 +47,18 @@ export class WorkspaceFolderPrimaryError extends Error {
   constructor(readonly path: string) {
     super(`cannot remove folder '${path}': it is the workspace primary directory`)
     this.name = 'WorkspaceFolderPrimaryError'
+  }
+}
+
+/** attachSession named a session another workspace already accounts. */
+export class WorkspaceSessionAccountedError extends Error {
+  /**
+   * @param sessionId - Session that is already accounted elsewhere.
+   * @param ownerId - Workspace whose durable account holds the session.
+   */
+  constructor(readonly sessionId: SessionId, readonly ownerId: WorkspaceId) {
+    super(`cannot attach session '${sessionId}': already accounted by workspace '${ownerId}'`)
+    this.name = 'WorkspaceSessionAccountedError'
   }
 }
 
@@ -97,16 +109,24 @@ export interface WorkspaceEntityHost {
   rememberSessionPath(id: SessionId, path: string): void
 
   /**
-   * Reject when another workspace already owns this canonical directory.
-   * @param owner - Workspace that wants to claim the path.
+   * Reject when another workspace already holds this canonical directory as
+   * its PRIMARY. Extra folders are shareable, so only a primary claim conflicts.
+   * @param owner - Workspace that wants to hold the path as its primary.
    * @param canonical - Already-canonical directory path.
    */
   assertFolderAvailable(owner: WorkspaceId, canonical: string): void
 
   /**
-   * Run `operation` on the registry write queue. Folder claims are
-   * cross-workspace uniqueness checks and must not interleave with
-   * create/delete or another addFolder. Must not be called from another
+   * Reject when another workspace's durable account already holds this session.
+   * @param owner - Workspace that wants to account the session.
+   * @param sessionId - Session about to be attached.
+   */
+  assertSessionUnaccounted(owner: WorkspaceId, sessionId: SessionId): void
+
+  /**
+   * Run `operation` on the registry write queue. Primary claims and session
+   * accounting are cross-workspace checks and must not interleave with
+   * create/delete or another folder mutation. Must not be called from another
    * queued registry operation: the queue is not reentrant.
    * @param operation - Work that claims or drops a folder.
    * @returns the operation result.
@@ -172,10 +192,8 @@ export class WorkspaceEntity implements Workspace {
     }
     await this.host.enqueue(async () => {
       if (ownsPath(this.record, canonical)) return
-      this.host.assertFolderAvailable(this.id, canonical)
       await this.mutate((record) => {
         if (ownsPath(record, canonical)) return record
-        this.host.assertFolderAvailable(this.id, canonical)
         return { ...record, folders: [...extraFolders(record), canonical] }
       })
     })
@@ -216,6 +234,7 @@ export class WorkspaceEntity implements Workspace {
       if (!folders.includes(canonical) && !folders.includes(path)) {
         throw new WorkspaceFolderUnknownError(canonical)
       }
+      this.host.assertFolderAvailable(this.id, folders.includes(canonical) ? canonical : path)
       await this.mutate((record) => {
         if (canonical === record.path || path === record.path) return record
         const extras = extraFolders(record)
@@ -267,9 +286,14 @@ export class WorkspaceEntity implements Workspace {
       }
       this.host.rememberSessionPath(sessionId, cwd)
     }
-    await this.mutate(record => record.sessionIds.includes(sessionId)
-      ? record
-      : { ...record, sessionIds: [sessionId, ...record.sessionIds] })
+    await this.host.enqueue(async () => {
+      if (!this.record.sessionIds.includes(sessionId)) {
+        this.host.assertSessionUnaccounted(this.id, sessionId)
+      }
+      await this.mutate(record => record.sessionIds.includes(sessionId)
+        ? record
+        : { ...record, sessionIds: [sessionId, ...record.sessionIds] })
+    })
   }
 
   async insertSessionBefore(sessionId: SessionId, beforeSessionId?: SessionId): Promise<void> {
