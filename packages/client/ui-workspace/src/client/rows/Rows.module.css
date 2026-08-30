@@ -1,8 +1,3 @@
-/* Tree rows: project 34px, session 32px, radius 8, indent step 22px
-   (16px slot + 6px gap). Hover swaps are pure CSS: project rows keep the
-   folder and reveal the chevron plus action buttons; session time ->
-   ellipsis button. */
-
 .projectRow,
 .sessionRow {
   display: flex;
@@ -149,11 +144,10 @@
 }
 
 
-/* Project leading slots: expand arrow, then folder. The arrow is out of flow
-   while idle so it does not reserve space. */
+/* Project leading slot: folder by default, expand arrow on row hover. */
 .projectRow .chevron { display: none; }
-.projectRow:hover .chevron,
-.projectRow.menuOpen .chevron { display: inline-flex; }
+.projectRow:hover .chevron { display: inline-flex; }
+.projectRow:hover .folder { display: none; }
 
 /* Expand arrow (filled triangle): points right closed, rotates to point down open. */
 .arrow {
@@ -179,6 +173,18 @@
   white-space: nowrap;
   font-size: 14px;
   line-height: 20px;
+}
+
+.renameInput {
+  min-width: 0;
+  font-size: 14px;
+  line-height: 20px;
+  padding: 0 2px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 4px;
+  background: var(--dsw-alias-button-elevated-fill);
+  color: inherit;
+  outline: none;
 }
 
 .sessionRow .title {
@@ -276,90 +282,24 @@
 }
 
 /* Hover-card body (figma 169:16903): dark surface, fixed colors both themes. */
-.hoverCard {
-  width: min(320px, calc(100vw - 24px));
-}
-
 .hoverContent {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
-.hoverHead,
-.hoverMeta,
-.hoverPath,
-.hoverEdit {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  color: #FFFFFF;
-}
-
 .hoverTitle {
-  flex: 1;
-  min-width: 0;
   font-size: 14px;
   line-height: 20px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.hoverPin,
-.hoverEdit {
-  flex: none;
-  border: none;
-  padding: 0;
-  background: transparent;
-  cursor: pointer;
   color: #FFFFFF;
+  overflow-wrap: break-word;
 }
 
-.hoverPin {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  border-radius: 6px;
-}
-
-.hoverPin:hover,
-.hoverEdit:hover {
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.hoverPinActive {
-  color: #FFFFFF;
-}
-
-.hoverMeta,
-.hoverPath,
-.hoverEdit {
+.hoverPath {
   font-size: 12px;
   line-height: 16px;
   color: #CFD3D6;
-}
-
-.hoverPath span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.hoverRule {
-  height: 1px;
-  background: rgba(255, 255, 255, 0.12);
-}
-
-.hoverEdit {
-  width: 100%;
-  min-height: 24px;
-  border-radius: 6px;
-  text-align: left;
+  word-break: break-all;
 }
 
 .hoverTime {

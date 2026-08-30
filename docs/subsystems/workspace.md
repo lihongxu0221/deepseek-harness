@@ -24,35 +24,21 @@ Consumers see only the `Workspace` interface; the implementation stays package-p
 
 ```ts type-equiv
 /**
- * One workspace: a stable id over an existing primary directory, optional
- * extra folders, a display title, and an ordered candidate account of
- * sessions. Membership requires both an id in that account and a session
- * header whose canonical cwd equals the primary path or one extra folder;
- * because an extra folder may be shared, the account — not the cwd — decides
- * which workspace owns a session.
- * Consumers only see this interface; the implementation stays private.
+ * One workspace: a stable id over an existing directory, a display title, and
+ * an ordered candidate account of sessions. Membership requires both an id in
+ * that account and a session header whose canonical cwd equals the workspace
+ * path. Consumers only see this interface; the implementation stays private.
  */
 interface Workspace {
   /** Stable record id (generated uuid). */
   readonly id: WorkspaceId
 
   /**
-   * Canonical primary directory: the `fs.realpath` of the path given at
-   * create time (trailing slashes, `..`, and symlinks all resolved). New
-   * sessions use this as cwd, so agent instructions (`AGENTS.md` and the
-   * rest of the instruction walk) start here. {@link setPrimaryFolder}
-   * rewrites it among owned directories; a missing directory never rewrites
-   * it (see {@link status}).
+   * Canonical directory path: the `fs.realpath` of the path given at create
+   * time (trailing slashes, `..`, and symlinks all resolved). Never rewritten
+   * afterwards, even when the directory disappears (see {@link status}).
    */
   readonly path: string
-
-  /**
-   * Extra canonical directories this workspace also owns. A path may be an
-   * extra folder of several workspaces and may also be another workspace's
-   * primary; only {@link path} is unique across the registry. Does not include
-   * {@link path}.
-   */
-  readonly folders: readonly string[]
 
   /** Display title. Defaults to `basename(path)` at create; duplicates are allowed. */
   readonly title: string
@@ -81,47 +67,13 @@ interface Workspace {
   setTitle(title: string): Promise<void>
 
   /**
-   * Add an extra directory to this workspace. The path is canonicalized
-   * through `fs.realpath`; a nonexistent or non-directory path rejects. A
-   * path this workspace already owns resolves without writing. A path another
-   * workspace owns — as its extra folder or as its primary — is accepted.
-   * Extra folders expand session membership and workspace-write roots; they
-   * do not change {@link path}. The first folder added to a workspace is the
-   * primary from create; later extras stay extras until {@link setPrimaryFolder}.
-   * @param path - Existing directory to own, in any path spelling.
-   * @returns resolution after durability.
-   */
-  addFolder(path: string): Promise<void>
-
-  /**
-   * Remove an extra directory from this workspace. Removing {@link path}
-   * rejects. An unknown extra folder resolves without writing. The directory
-   * itself is never deleted.
-   * @param path - Extra folder to drop, in any path spelling.
-   * @returns resolution after durability.
-   */
-  removeFolder(path: string): Promise<void>
-
-  /**
-   * Make an owned extra folder the primary directory (new-session cwd).
-   * The previous primary becomes an extra folder. Naming {@link path} is a
-   * no-op success. An unknown path rejects, and so does a path that is
-   * already another workspace's primary. Existing session header cwds
-   * stay unchanged.
-   * @param path - Owned extra folder to promote, in any path spelling.
-   * @returns resolution after durability.
-   */
-  setPrimaryFolder(path: string): Promise<void>
-
-  /**
    * Prepend a session to this workspace's candidate account. An already
    * accounted id resolves without writing, aside from the durable
    * filtered-candidate prune every accepted mutation performs. A new id's
    * live or persisted
-   * header cwd must resolve to an existing directory equal to {@link path}
-   * or one extra folder; unknown ids, missing or invalid cwd values, and
-   * mismatches reject without writing. A session another workspace already
-   * accounts also rejects.
+   * header cwd must resolve to an existing directory equal to {@link path};
+   * unknown ids, missing or invalid cwd values, and mismatches reject without
+   * writing.
    * @param sessionId - The session to record.
    * @returns resolution after durability.
    */
@@ -161,17 +113,17 @@ interface Workspace {
 }
 ```
 
-Ownership truth is the record's ordered `sessionIds`, never derived from session cwd — but membership requires both: an id on the account and a header whose canonical cwd equals the workspace primary path or one extra folder. Extra folders may be shared, so the account — not the cwd — decides which workspace owns a session; `attachSession` rejects a session another workspace already accounts (`WorkspaceSessionAccountedError`). Failed writes reject (`insertSessionBefore` account errors as `WorkspaceMoveInvalidError`, storage failures as plain errors); every accepted mutation stamps `updatedAt` and durably prunes candidates that no longer pass the membership check. Extra-folder sharing is recorded in [Workspace shared extra folders](../../.agents/notes/implemented/feature/2026-08-24-workspace-shared-extra-folders.md).
+Ownership truth is the record's ordered `sessionIds`, never derived from session cwd — but membership requires both: an id on the account and a header whose canonical cwd equals the workspace path, so one session structurally belongs to at most one workspace. Failed writes reject (`insertSessionBefore` account errors as `WorkspaceMoveInvalidError`, storage failures as plain errors); every accepted mutation stamps `updatedAt` and durably prunes candidates that no longer pass the membership check.
 
 ## The registry: `ctx.workspaceRegistry`
 
-`WorkspaceRegistry` ([signatures](#ctxworkspaceregistry--workspaceregistry)) owns registration and resolution. `create(path, title?)` canonicalizes the path, rejects a nonexistent path (the original `ENOENT`) or a non-directory, returns the existing entity unchanged when the canonical path is already a primary, and otherwise creates a record with `title ?? basename(path)` prepended to the durable registry order — a new record cannot duplicate an existing display title (`WorkspaceNameConflictError`). `get(id)` and the ordered `list()` are synchronous cache reads; `resolveByPath(path)` applies the same realpath canon without creating. `delete(id)` removes only the registration, order entry, and session account — the directory, user files, live sessions, and persisted logs are never touched, so those sessions become Ungrouped ([decision](../../.agents/notes/implemented/feature/2026-07-27-workspace-registration-deletion.md)); unknown ids return `false`. Create and delete persist a pending-mutation marker before their two writes (record + order) can diverge; startup resolves exactly the marked mutation — by deleting the marked table row, which completes an interrupted delete and rolls back an interrupted create (the registration is re-creatable, so rollback is the safe direction) — and an unmarked order/table mismatch fails loud as corruption.
+`WorkspaceRegistry` ([signatures](#ctxworkspaceregistry--workspaceregistry)) owns registration and resolution. `create(path, title?)` canonicalizes the path, rejects a nonexistent path (the original `ENOENT`) or a non-directory, returns the existing entity unchanged when the canonical path is already owned, and otherwise creates a record with `title ?? basename(path)` prepended to the durable registry order (different canonical paths may share a display title). `get(id)` and the ordered `list()` are synchronous cache reads; `resolveByPath(path)` applies the same realpath canon without creating. `delete(id)` removes only the registration, order entry, and session account — the directory, user files, live sessions, and persisted logs are never touched, so those sessions become Ungrouped ([decision](../../.agents/notes/implemented/feature/2026-07-27-workspace-registration-deletion.md)); unknown ids return `false`. Create and delete persist a pending-mutation marker before their two writes (record + order) can diverge; startup resolves exactly the marked mutation — by deleting the marked table row, which completes an interrupted delete and rolls back an interrupted create (the registration is re-creatable, so rollback is the safe direction) — and an unmarked order/table mismatch fails loud as corruption.
 
 Sessions get their cwd at create time from whoever creates them, not from this registry — the API gateway resolves a new session's cwd from the chosen workspace's `path` (falling back to an explicit or default cwd), creates the session so the cwd lands in its immutable [`SessionHeader`](persistence.md#sessionheader--metadata-beside-the-log), then calls `attachSession`, which re-validates that stored header cwd against the workspace path. On the first successful start, the registry bootstraps history from persisted headers alone (`id`, `cwd`, `createdAt` — never event bodies), grouping sessions with a valid canonical cwd into per-directory workspaces, newest first; the initialized marker is written last so an interrupted bootstrap resumes safely. The bootstrap is one-time: cwd-less legacy sessions stay Ungrouped, and sessions created afterwards join a workspace only through `attachSession`.
 
 ## Consumers
 
-[dsh-host-apiproxy](../../packages/host/apiproxy) is the product consumer: it serves workspace CRUD to GUI clients over `ctx.workspaceRegistry` and performs the create-session-then-attach flow above. [dsh-agent-instructions](../../packages/context/agent-instructions) is **not** a consumer despite the name: it discovers AGENTS.md-style instruction files under an agent's own cwd and never touches `ctx.workspaceRegistry` — the shared word refers to the user's working directory, not to this registry's entities.
+[`dsh-workspace-controller`](../../packages/api/workspace-controller) serves workspace CRUD to GUI clients over `ctx.workspaceRegistry`, and [`dsh-session-controller`](../../packages/api/session-controller) performs the create-session-then-attach flow above. [dsh-agent-instructions](../../packages/context/agent-instructions) is **not** a consumer despite the name: it discovers AGENTS.md-style instruction files under an agent's own cwd and never touches `ctx.workspaceRegistry` — the shared word refers to the user's working directory, not to this registry's entities.
 
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 
@@ -196,6 +148,99 @@ abstract capability(): DirectoryPickerCapability
 ```
 
 Source: [`packages/host/directory-picker/src/index.ts`](../../packages/host/directory-picker/src/index.ts)
+
+<a id="ctxdirectorypickercontroller--directorypickercontroller"></a>
+
+### `ctx.directoryPickerController` — `DirectoryPickerController`
+
+Host service backing the generated `ctx.remote.directoryPicker` namespace. The seam it exports is abstract and therefore never a Loader entry of its own, so this controller carries the wire verbs: one composed backend serves either the native chooser or the browse primitives, and a verb the composition cannot serve is refused rather than approximated.
+
+```ts cordis-catalog
+/**
+ * Open the host's OS chooser for a Remote caller.
+ * @param signal - caller lifetime; abort terminates the chooser.
+ * @returns the chosen absolute path, or null when the operator cancels.
+ */
+@Remote('pick') async pick(signal: AbortSignal): Promise<string | null>
+
+/**
+ * List one directory level for a Remote caller's in-app browser.
+ * @param path - absolute directory to list; absent lists the home directory.
+ * @param signal - caller lifetime; abort stops the backend's scan instead of
+ *   letting it outlive a disconnected caller.
+ * @returns the level's listing with its ancestry.
+ */
+@Remote('list') async list(path: string | undefined, signal: AbortSignal): Promise<DirectoryListing>
+
+/**
+ * Create one child directory for a Remote caller's in-app browser.
+ * @param path - absolute existing parent directory.
+ * @param name - single non-blank path segment.
+ * @returns the created directory's absolute path.
+ */
+@Remote('createDirectory') async createDirectory(path: string, name: string): Promise<string>
+```
+
+Source: [`packages/api/workspace-controller/src/directory-picker.ts`](../../packages/api/workspace-controller/src/directory-picker.ts)
+
+<a id="ctxworkspacecontroller--workspacecontroller"></a>
+
+### `ctx.workspaceController` — `WorkspaceController`
+
+Host service backing the generated `ctx.remote.workspace` namespace.
+
+```ts cordis-catalog
+/**
+ * Create or idempotently resolve one Workspace over an existing directory.
+ * @param request - directory path to register.
+ * @returns the Workspace and whether this call created it.
+ */
+@Remote('create') create(request: WorkspaceCreateRequest): Promise<WorkspaceCreateValue>
+
+/**
+ * Rename one Workspace to a unique non-blank title.
+ * @param request - Workspace identity and proposed title.
+ * @returns the updated Workspace projection.
+ */
+@Remote('rename') rename(request: WorkspaceRenameRequest): Promise<WorkspaceValue>
+
+/**
+ * Remove one Workspace registration while retaining files and Sessions.
+ * @param request - Workspace identity to remove.
+ * @returns deletion confirmation.
+ */
+@Remote('delete') delete(request: WorkspaceDeleteRequest): Promise<WorkspaceDeleteValue>
+
+/**
+ * Move one Workspace within the registry display order.
+ * @param request - moved Workspace and optional anchor.
+ * @returns the complete resulting Workspace order.
+ */
+@Remote('insertBefore') insertBefore(request: WorkspaceInsertBeforeRequest): Promise<WorkspaceOrderValue>
+
+/**
+ * Move one accounted Session within a Workspace.
+ * @param request - Workspace, Session, and optional anchor identities.
+ * @returns the updated Workspace projection.
+ */
+@Remote('insertSessionBefore') insertSessionBefore(request: WorkspaceInsertSessionBeforeRequest): Promise<WorkspaceValue>
+
+/**
+ * Hide one known Session from Workspace grouping surfaces.
+ * @param request - Session identity to archive.
+ * @returns the complete resulting archive set.
+ */
+@Remote('archiveSession') archiveSession(request: WorkspaceArchiveSessionRequest): Promise<WorkspaceArchiveValue>
+
+/**
+ * Stream a complete Workspace baseline followed by ordered increments.
+ * @param signal - generation cancellation.
+ * @returns baseline followed by ordered Workspace increments.
+ */
+@Remote({ mode: 'stream' }) follow(signal: AbortSignal): AsyncIterable<WorkspaceFollowFrame>
+```
+
+Source: [`packages/api/workspace-controller/src/index.ts`](../../packages/api/workspace-controller/src/index.ts)
 
 <a id="ctxworkspaceregistry--workspaceregistry"></a>
 
@@ -261,14 +306,11 @@ insertBefore(id: WorkspaceId, beforeId?: WorkspaceId): Promise<readonly Workspac
 archiveSession(sessionId: SessionId): Promise<void>
 
 /**
- * Resolve the workspace whose PRIMARY directory is this canonical path,
- * without creating or mutating anything. Extra folders are deliberately not
- * matched: several workspaces may hold one path as an extra folder, so only
- * a primary claim identifies a single registration. A missing path rejects
- * during `realpath`; a directory held only as an extra folder returns
- * `undefined`.
+ * Resolve by canonical directory path without creating or mutating a
+ * workspace. A missing path rejects during `realpath`; an existing unowned
+ * directory returns `undefined`.
  * @param path - Existing directory path in any spelling.
- * @returns the workspace whose primary is the canonical path, when one exists.
+ * @returns the workspace owning the canonical path, when one exists.
  */
 async resolveByPath(path: string): Promise<Workspace | undefined>
 ```

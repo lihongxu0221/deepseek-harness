@@ -23,6 +23,10 @@ const SEAT_CONTENT: Record<string, string> = {
   'settings.close': 'Close',
 }
 
+type AttentionSnapshot = Parameters<Parameters<SettingsRootComponentProps['useSessionPendingInteraction']>[0]>[0]
+const noAttention: AttentionSnapshot = new Map()
+const useSessionPendingInteraction: SettingsRootComponentProps['useSessionPendingInteraction'] = selector => selector(noAttention)
+
 function mount({
   wide = true,
   onboardingActive = true,
@@ -56,6 +60,7 @@ function mount({
   const unusedHook = (() => { throw new Error('unused by SettingsRoot') }) as never
   const props: SettingsRootComponentProps = {
     useSessions,
+    useSessionPendingInteraction,
     useWorkspaces: unusedHook,
     wide,
     useOnboardingSteps: select => select(steps),
