@@ -3,9 +3,14 @@ import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vite'
 import type { Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
-import { clientBuildEnvironmentDefines } from '../../scripts/client-build-environment.ts'
+import {
+  bundlerClientBuildEnvironment,
+  clientBuildEnvironmentDefines,
+  clientBuildProcessEnvironment,
+} from '../../scripts/client-build-environment.ts'
 
 const src = (rel: string): string => fileURLToPath(new URL(rel, import.meta.url))
+const REPOSITORY_ROOT = fileURLToPath(new URL('../..', import.meta.url))
 const STANDALONE_ERROR = 'apps/web is not a standalone application: bare Vite cannot inject window.__DSH_BOOT__. '
   + 'From a repository checkout, run `pnpm dsh web`; an installed package uses `dsh web`. '
   + 'For client-plugin HMR, run `pnpm dsh web` together with `pnpm run dev:web`.'
@@ -217,7 +222,12 @@ export default defineConfig({
     ],
   },
   define: {
-    ...clientBuildEnvironmentDefines(process.env),
+    ...clientBuildEnvironmentDefines(
+      clientBuildProcessEnvironment(
+        process.env,
+        bundlerClientBuildEnvironment(REPOSITORY_ROOT, process.env),
+      ),
+    ),
     // vendored loader internal.ts: fromInternal() probes the Node major —
     // "0.0.0" takes neither branch, returning undefined (exactly the empty
     // internal slot the shell boot fills with the client module loader).

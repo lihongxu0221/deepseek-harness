@@ -250,6 +250,22 @@ export function assertClientBuildEnvironment(
 }
 
 /**
+ * Public client environment for a bundler invoked outside `pnpm run build`.
+ * Complete builds already export these values; a lone tsdown or Vite process
+ * still stamps the repository version so the local-build badge is not blank.
+ * @param root - repository root supplying version and Git metadata.
+ * @param environment - parent process environment, including an optional profile selector.
+ * @returns the same public values a complete default or official build would embed.
+ */
+export function bundlerClientBuildEnvironment(
+  root: string,
+  environment: NodeJS.ProcessEnv = process.env,
+): ClientBuildEnvironment {
+  const repositoryEnvironment = repositoryClientBuildEnvironment(root, environment)
+  return resolveClientBuildEnvironment(repositoryEnvironment, environment[CLIENT_BUILD_PROFILE_SELECTOR])
+}
+
+/**
  * Create bundler substitutions for public client build environment variables.
  *
  * The empty `process.env` fallback makes an unset static property read

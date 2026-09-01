@@ -6,6 +6,7 @@ import yaml from 'js-yaml'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   assertClientBuildEnvironment,
+  bundlerClientBuildEnvironment,
   clientBuildEnvironmentDefines,
   clientBuildProcessEnvironment,
   officialClientBuildEnvironment,
@@ -227,6 +228,24 @@ describe('client build environment', () => {
       'process.env.DSH_CLIENT_EMPTY': '""',
       'process.env.DSH_CLIENT_VARIANT': '"quoted \\"value\\""',
     })
+  })
+
+  it('stamps the repository version into bundler defines when the process omits it', () => {
+    const previous = process.env.DSH_CLIENT_VERSION
+    Reflect.deleteProperty(process.env, 'DSH_CLIENT_VERSION')
+    try {
+      expect(bundlerClientBuildEnvironment(root).DSH_CLIENT_VERSION).toBe(repositoryVersion(root))
+      const configs = clientBundle('@deepseek-ai/dsh-client-ui-sidebar', [
+        'lib/types/index.js',
+        'lib/types/invariant.js',
+      ])({ env: { DSH_BUILD_FACE: 'client' } })
+      if (!Array.isArray(configs)) throw new TypeError('client bundle config must be an array')
+      const dynamic = configs.find(config => config.name === '@deepseek-ai/dsh-client-ui-sidebar/client')
+      expect(dynamic?.define?.['process.env.DSH_CLIENT_VERSION']).toBe(JSON.stringify(repositoryVersion(root)))
+    } finally {
+      if (previous === undefined) Reflect.deleteProperty(process.env, 'DSH_CLIENT_VERSION')
+      else process.env.DSH_CLIENT_VERSION = previous
+    }
   })
 
   it('feeds the same build-process value to dynamic tsdown bundles and the Vite shell', async () => {
