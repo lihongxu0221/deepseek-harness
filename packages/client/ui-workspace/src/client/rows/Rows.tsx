@@ -1,16 +1,17 @@
 /**
  * Workspace browser tree row components (figma Cell set 14:3080): pure presentational —
  * all data and callbacks arrive via props. Hover swaps (folder->chevron,
- * time->ellipsis, action buttons) are CSS-only. Row ... menus are visual-only
- * except workspace Rename/Delete and session Rename/Fork/Archive; the session
- * and workspace hover cards are suppressed while a menu is open.
+ * time->ellipsis, action buttons) are CSS-only. The workspace row menu keeps
+ * Edit project, Remove folder, Rename, and Delete; session Rename/Fork/Archive
+ * stay on the row. Hover cards are suppressed while a menu is open.
  */
 import { useState } from 'react'
 import clsx from 'clsx'
 import {
   HoverCard, IconAlarmClockOutline16, IconArchiveOutline20, IconBranchOutline16,
-  IconEditOutline16, IconEllipsisOutline16, IconFolderClose16, IconFolderOpen16,
-  IconPlusOutline16, IconTrashOutline16, IconTriangleRightFill14, Menu, relativeTime,
+  IconChecklistOutline14, IconEditOutline16, IconEllipsisOutline16, IconFolderClose16,
+  IconFolderOpen16, IconGoalOutline16, IconPlusOutline16, IconSettingsOutline16,
+  IconTrashOutline16, IconTriangleRightFill14, Menu, relativeTime,
   StateDot,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { StateDotState } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -51,18 +52,54 @@ function createdLabel(createdAt: number, t: RowTranslate): string {
   return t('hover.created', { time: `${date} ${pad2(d.getHours())}:${pad2(d.getMinutes())}` })
 }
 
-/** Hover-card body: workspace title, display directory path, absolute creation time. */
-function WorkspaceHoverContent({ label, cwd, createdAt, t }: {
+/** Hover-card body: title + pin, session count, owned paths, Edit project. */
+function WorkspaceHoverContent({
+  label, cwd, folders, sessionCount, pinned, createdAt, home, onPin, onEdit, t,
+}: {
   label: string
   cwd: string | undefined
+  folders: readonly string[]
+  sessionCount: number
+  pinned: boolean
   createdAt: number
+  home: string | undefined
+  onPin: () => void
+  onEdit: () => void
   t: RowTranslate
 }) {
+  const paths = cwd === undefined ? folders : [cwd, ...folders]
   return (
     <div className={css.hoverContent}>
-      <div className={css.hoverTitle}>{label}</div>
-      <div className={css.hoverPath}>{cwd}</div>
+      <div className={css.hoverHead}>
+        <IconFolderClose16 />
+        <span className={css.hoverTitle}>{label}</span>
+        <button
+          type="button"
+          className={clsx(css.hoverPin, pinned && css.hoverPinActive)}
+          aria-label={pinned ? t('hover.unpin') : t('hover.pin')}
+          aria-pressed={pinned}
+          onClick={onPin}
+        >
+          <IconGoalOutline16 size={14} />
+        </button>
+      </div>
+      <div className={css.hoverMeta}>
+        <IconChecklistOutline14 />
+        <span>{t(sessionCount === 1 ? 'hover.sessions.one' : 'hover.sessions.other', { n: sessionCount })}</span>
+      </div>
+      <div className={css.hoverRule} />
+      {paths.map(folder => (
+        <div key={folder} className={css.hoverPath}>
+          <IconFolderClose16 />
+          <span>{abbreviateHomePath(folder, home)}</span>
+        </div>
+      ))}
       <div className={css.hoverTime}>{createdLabel(createdAt, t)}</div>
+      <div className={css.hoverRule} />
+      <button type="button" className={css.hoverEdit} onClick={onEdit}>
+        <IconSettingsOutline16 size={14} />
+        {t('menu.editProject')}
+      </button>
     </div>
   )
 }
@@ -114,7 +151,13 @@ export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, home,
   onToggle: () => void
   onCreate: () => void
   /** Real-Workspace actions; absent for the ungrouped bucket (no menu shown). */
-  actions?: { rename: () => void; delete: () => void } | undefined
+  actions?: {
+    edit: () => void
+    rename: () => void
+    delete: () => void
+    removeFolder?: (path: string) => void
+    pin: () => void
+  } | undefined
   /** Present only for real Workspace rows in the grouped view. */
   drag?: WorkspaceRowDragProps | undefined
   /** Host account home; POSIX home-rooted hover paths display as `~`. */
@@ -126,7 +169,16 @@ export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, home,
   const label = row.workspaceId === undefined ? t('group.ungrouped') : row.label
   const active = group.expanded && group.containsCurrent
   const [menuOpen, setMenuOpen] = useState(false)
+  const extraFolders = group.folders
   const workspaceMenuItems = [
+    { id: 'edit', label: t('menu.editProject'), icon: <IconEditOutline16 /> },
+    ...actions?.removeFolder === undefined || extraFolders.length === 0
+      ? []
+      : [{
+        id: 'remove-folder',
+        label: t('menu.removeFolder'),
+        submenu: extraFolders.map(folder => ({ id: `remove:${folder}`, label: folder })),
+      }],
     { id: 'rename', label: t('rename'), icon: <IconEditOutline16 /> },
     { id: 'delete', label: t('delete.workspace'), icon: <IconTrashOutline16 />, danger: true },
   ]
@@ -165,7 +217,15 @@ export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, home,
               setMenuOpen(false)
               // Unknown ids leave before the dispatch: a future menu row must
               // not inherit the destructive branch as an else fallback.
-              /* v8 ignore next -- Menu can emit only the rename and delete rows supplied above. */
+              if (id === 'edit') {
+                actions.edit()
+                return
+              }
+              if (id.startsWith('remove:')) {
+                actions.removeFolder?.(id.slice('remove:'.length))
+                return
+              }
+              /* v8 ignore next -- remaining rows are the rename/delete pair. */
               if (id !== 'rename' && id !== 'delete') return
               if (id === 'rename') actions.rename()
               else actions.delete()
@@ -202,14 +262,21 @@ export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, home,
       anchor={ownRow}
       content={<WorkspaceHoverContent
         label={row.label}
-        cwd={row.cwd === undefined ? undefined : abbreviateHomePath(row.cwd, home)}
+        cwd={row.cwd}
+        folders={row.folders}
+        sessionCount={row.sessionCount}
+        pinned={row.pinned}
         createdAt={row.createdAt}
+        home={home}
+        onPin={() => { actions?.pin() }}
+        onEdit={() => { actions?.edit() }}
         t={t}
       />}
       disabled={menuOpen}
       copyText={row.cwd}
       copyLabel={t('copy')}
       copiedLabel={t('hover.copied')}
+      {...(css.hoverCard === undefined ? {} : { className: css.hoverCard })}
     />
   )
 }

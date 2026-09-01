@@ -18,7 +18,7 @@ Web 的 Appearance、Language 和繁忙态 Enter 偏好原本存在浏览器 `lo
 
 用户变更会同步更新实时服务，并经 `scope.set` 将一项 `settings.mutate` 路径操作排入队列。scope 会串行处理手势，以最新已知 namespace revision 作为 `expectedRevision` 发送，记录每次成功写入的 revision，并且只允许最新写入的结算结果重新发布实时状态。最新写入被拒或失败时，scope 会重新加载 Host 状态。插件释放会拒绝新工作、跳过已排队操作、抑制运行中操作发布状态，并等待该操作结算后才让插件达到完全停稳。
 
-Client 在非 loopback 页面禁用 Host 持久化，因此这些页面的偏好仍只保留在进程内，尽管 Connection 认证完整 API。动态第三方主题 id 仍是内置 Host schema 之外的进程内扩展；移除其中一个会重置实时注册表，但不会替换上一个持久化的内置偏好。
+Client 在受信任 LAN 源与回环上都使用 Host 持久化（[受信任 LAN 配置](../architecture/2026-08-20-trusted-lan-configuration-plane.zh.md)）。动态第三方主题 id 仍是内置 Host schema 之外的进程内扩展；移除其中一个会重置实时注册表，但不会替换上一个持久化的内置偏好。
 
 ## 曾考虑的替代方案
 
@@ -36,7 +36,7 @@ Client 在非 loopback 页面禁用 Host 持久化，因此这些页面的偏好
 
 ## 后果
 
-Appearance、Language 和繁忙态 Enter 选择会跟随 DSH 用户 home，跨越重新加载、端口与回环 origin。直接编辑 `settings.yaml` 所产生的变更会通过现有失效流收敛，而旧的 `dsh.theme`、`dsh.locale` 和 `dsh.conversation.busyEnter` 条目既不会被读取，也不会被写入。
+Appearance、Language 和繁忙态 Enter 选择会跟随 DSH 用户 home，跨越重新加载、端口、回环 origin 与受信任 LAN origin。直接编辑 `settings.yaml` 所产生的变更会通过现有失效流收敛，而旧的 `dsh.theme`、`dsh.locale` 和 `dsh.conversation.busyEnter` 条目既不会被读取，也不会被写入。
 
 启动时可能会在后台读取结算前短暂显示领域默认值。短暂的读取失败会保留该默认值或上一个正确的进程内值；重连时会重试。写入被拒时，界面可能会在本地值立即变化后明显恢复为持久化偏好。
 

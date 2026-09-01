@@ -15,6 +15,7 @@ import { spawn, type ChildProcess } from 'node:child_process'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import { networkInterfaces } from 'node:os'
+import { basename } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
@@ -178,15 +179,46 @@ function resolveDistIndex(): string {
   }
 }
 
+const NODE_BASENAMES = new Set(['node', 'node.exe'])
+
+/** Spawn spec for the default-browser helper. */
+export interface BrowserOpenerArgv {
+  /** Executable to spawn. */
+  file: string
+  /** Arguments after the executable. */
+  args: string[]
+  /** Hide a Windows console for OS openers; Node helpers keep the default. */
+  windowsHide: boolean
+}
+
+/**
+ * Choose the default-browser helper. A packaged product exe is not Node, so
+ * `--eval` against `process.execPath` would relaunch the GUI as a guest.
+ * @param execPath - `process.execPath` of the host.
+ * @param platform - `process.platform`.
+ * @param url - canonical local URL to open.
+ * @returns the spawn file, args, and Windows hide flag.
+ */
+export function browserOpenerArgv(execPath: string, platform: NodeJS.Platform, url: string): BrowserOpenerArgv {
+  if (!NODE_BASENAMES.has(basename(execPath).toLowerCase())) {
+    if (platform === 'win32') return { file: 'cmd.exe', args: ['/c', 'start', '', url], windowsHide: true }
+    if (platform === 'darwin') return { file: 'open', args: [url], windowsHide: false }
+    return { file: 'xdg-open', args: [url], windowsHide: false }
+  }
+  return {
+    file: execPath,
+    args: ['--input-type=module', '--eval', BROWSER_OPENER_PROGRAM, '--', url],
+    windowsHide: false,
+  }
+}
+
 /** Start the maintained platform opener without forwarding Harness credentials. */
 function spawnBrowserLauncher(url: string): ChildProcess {
-  return spawn(process.execPath, [
-    '--input-type=module',
-    '--eval', BROWSER_OPENER_PROGRAM,
-    '--', url,
-  ], {
+  const opener = browserOpenerArgv(process.execPath, process.platform, url)
+  return spawn(opener.file, opener.args, {
     env: scrubbedParentEnv(),
     stdio: ['ignore', 'inherit', 'pipe'],
+    windowsHide: opener.windowsHide,
   })
 }
 

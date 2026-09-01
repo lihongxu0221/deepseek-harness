@@ -24,6 +24,13 @@ import css from './SettingsRoot.module.css'
 const RECOVERY_CONFIRMATION_MS = 2_000
 
 /** Nav glyph by section id; unknown ids fall back to the settings gear. */
+/** Tray and other hosts open the panel by launching with this hash. */
+const SETTINGS_HASH = '#settings'
+
+function settingsHashRequested(): boolean {
+  return window.location.hash === SETTINGS_HASH
+}
+
 function navIcon(id: string) {
   if (id === 'models') return <IconDataOutline16 className={css.navIcon} size={16} />
   if (id === 'agent-presets') return <IconAgentPresetOutline16 className={css.navIcon} size={16} />
@@ -109,7 +116,7 @@ export function SettingsRoot(props: SettingsRootComponentProps) {
   const {
     wide, reconnect, useConnectionState, useSections, useOnboardingSteps, useSessions, renderSlot, t,
   } = props
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(settingsHashRequested)
   const [activeId, setActiveId] = useState<string | undefined>(undefined)
   const [completedOnboarding, setCompletedOnboarding] = useState<ReadonlySet<string>>(() => new Set())
   const [showRecovery, setShowRecovery] = useState(false)
@@ -118,6 +125,10 @@ export function SettingsRoot(props: SettingsRootComponentProps) {
   const close = useCallback(() => {
     setOpen(false)
     setActiveId(undefined)
+    if (window.location.hash === SETTINGS_HASH) {
+      const next = `${window.location.pathname}${window.location.search}`
+      window.history.replaceState(null, '', next.length > 0 ? next : '/')
+    }
   }, [])
   // Restore after the close commit, when the dialog can no longer own focus.
   useEffect(() => {
@@ -127,6 +138,14 @@ export function SettingsRoot(props: SettingsRootComponentProps) {
   const openSection = useCallback((id: string) => {
     setActiveId(id)
     setOpen(true)
+  }, [])
+
+  useEffect(() => {
+    const onHashChange = (): void => {
+      if (settingsHashRequested()) setOpen(true)
+    }
+    window.addEventListener('hashchange', onHashChange)
+    return () => { window.removeEventListener('hashchange', onHashChange) }
   }, [])
 
   // The ledger tick keeps the nav rows fresh: registrants re-register with

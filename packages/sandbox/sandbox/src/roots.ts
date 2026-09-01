@@ -51,5 +51,10 @@ export function canonicalPath(path: string): string {
  */
 export function writableRoots(policy: SandboxExecutionPolicy): string[] {
   if (policy.mode !== 'workspace-write') return []
-  return [...new Set([policy.workspaceRoot, '/tmp', tmpdir()].map(canonicalPath))]
+  return [...new Set([
+    policy.workspaceRoot,
+    ...policy.extraRoots ?? [],
+    '/tmp',
+    tmpdir(),
+  ].map(canonicalPath))]
 }

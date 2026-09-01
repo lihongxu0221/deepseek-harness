@@ -25,6 +25,12 @@ type WorkspaceViewState = {
   sessionOrderByAccount: Record<string, string[]>
   /** Last observed update timestamps per order account for one-time promotion events. */
   sessionUpdatedAtByAccount: Record<string, Record<string, number>>
+  /** Workspace ids kept at the front of the grouped list, in pin order. */
+  pinnedWorkspaceIds: string[]
+  /** Whether the Workspaces section is expanded. */
+  workspacesOpen: boolean
+  /** Whether the Recent sessions section is expanded. */
+  recentsOpen: boolean
 }
 
 /**
@@ -43,6 +49,10 @@ type WorkspaceViewActions = {
     updatedAt: Record<string, number>,
   ) => void
   setSessionOrder: (draft: WorkspaceViewState, accountKey: string, order: string[]) => void
+  pinWorkspace: (draft: WorkspaceViewState, workspaceId: string) => void
+  unpinWorkspace: (draft: WorkspaceViewState, workspaceId: string) => void
+  setWorkspacesOpen: (draft: WorkspaceViewState, open: boolean) => void
+  setRecentsOpen: (draft: WorkspaceViewState, open: boolean) => void
 }
 
 /**
@@ -57,6 +67,9 @@ export function createWorkspaceViewStore(): EngineStoreHandle<WorkspaceViewState
       groupExpansion: {},
       sessionOrderByAccount: {},
       sessionUpdatedAtByAccount: {},
+      pinnedWorkspaceIds: [],
+      workspacesOpen: true,
+      recentsOpen: true,
     }),
     persist: 'dsh.workspace.view.v5',
     actions: {
@@ -74,6 +87,10 @@ export function createWorkspaceViewStore(): EngineStoreHandle<WorkspaceViewState
         d.sessionUpdatedAtByAccount = Object.fromEntries(
           Object.entries(d.sessionUpdatedAtByAccount).filter(([key]) => retained.has(key)),
         )
+        const pinned = Array.isArray(d.pinnedWorkspaceIds) ? d.pinnedWorkspaceIds : []
+        d.pinnedWorkspaceIds = pinned.filter(id => retained.has(id))
+        if (typeof d.workspacesOpen !== 'boolean') d.workspacesOpen = true
+        if (typeof d.recentsOpen !== 'boolean') d.recentsOpen = true
       },
       syncSessionOrderAccount: (d, accountKey: string, order: string[], updatedAt: Record<string, number>) => {
         d.sessionOrderByAccount[accountKey] = order
@@ -82,6 +99,17 @@ export function createWorkspaceViewStore(): EngineStoreHandle<WorkspaceViewState
       setSessionOrder: (d, accountKey: string, order: string[]) => {
         d.sessionOrderByAccount[accountKey] = order
       },
+      pinWorkspace: (d, workspaceId: string) => {
+        const pinned = Array.isArray(d.pinnedWorkspaceIds) ? d.pinnedWorkspaceIds : []
+        if (pinned.includes(workspaceId)) return
+        d.pinnedWorkspaceIds = [...pinned, workspaceId]
+      },
+      unpinWorkspace: (d, workspaceId: string) => {
+        const pinned = Array.isArray(d.pinnedWorkspaceIds) ? d.pinnedWorkspaceIds : []
+        d.pinnedWorkspaceIds = pinned.filter(id => id !== workspaceId)
+      },
+      setWorkspacesOpen: (d, open: boolean) => { d.workspacesOpen = open },
+      setRecentsOpen: (d, open: boolean) => { d.recentsOpen = open },
     },
   })
 }

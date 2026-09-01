@@ -16,7 +16,7 @@ import { Context } from '@deepseek-ai/cordis'
 import { createLaunchEnvironmentSnapshot, DSH_LAUNCH_ENVIRONMENT_KEY } from '@deepseek-ai/dsh-launch-environment'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import type { WebServer } from '@deepseek-ai/dsh-host-webserver'
-import { apply, Config, internals } from '../src/index.ts'
+import { apply, browserOpenerArgv, Config, internals } from '../src/index.ts'
 
 vi.mock('node:child_process', async importOriginal => ({
   ...await importOriginal<typeof import('node:child_process')>(),
@@ -414,5 +414,35 @@ describe('web-app runtime glue', () => {
     errored.emit('error', new Error('spawn failed'))
     await errorAssertion
     expect(errored.listenerCount('close')).toBe(0)
+  })
+})
+
+describe('browserOpenerArgv', () => {
+  const url = 'http://127.0.0.1:4567'
+
+  it('keeps the Node --eval helper when execPath is node', () => {
+    expect(browserOpenerArgv('/usr/bin/node', 'linux', url)).toEqual({
+      file: '/usr/bin/node',
+      args: ['--input-type=module', '--eval', expect.stringContaining('await import(') as unknown as string, '--', url],
+      windowsHide: false,
+    })
+  })
+
+  it('uses the OS opener when execPath is a packaged product exe', () => {
+    expect(browserOpenerArgv('D:\\dist\\dsh-web.exe', 'win32', url)).toEqual({
+      file: 'cmd.exe',
+      args: ['/c', 'start', '', url],
+      windowsHide: true,
+    })
+    expect(browserOpenerArgv('/Applications/dsh-web', 'darwin', url)).toEqual({
+      file: 'open',
+      args: [url],
+      windowsHide: false,
+    })
+    expect(browserOpenerArgv('/opt/dsh-web', 'linux', url)).toEqual({
+      file: 'xdg-open',
+      args: [url],
+      windowsHide: false,
+    })
   })
 })

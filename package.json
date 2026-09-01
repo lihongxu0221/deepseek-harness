@@ -150,6 +150,7 @@
     "release:pack": "tsx scripts/release/pack.ts",
     "release:verify-packed-install": "tsx scripts/release/verify-packed-install.ts",
     "release:publish": "tsx scripts/release/publish.ts",
+    "build:web-exe": "tsx scripts/build-web-exe.ts",
     "dsh": "node --import tsx/esm apps/cli/src/bin.ts",
     "demo:ptc": "node scripts/demo-ptc.mjs",
     "demo:inspector": "node --import tsx/esm apps/cli/src/bin.ts web --patch ./packages/experimental/inspector/cordis.source.patch.yml",

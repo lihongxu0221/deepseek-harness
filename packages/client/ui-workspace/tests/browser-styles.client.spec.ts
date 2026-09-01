@@ -74,6 +74,9 @@ describe('WorkspaceBrowser.module.css list', () => {
     expect(declarations(".searchTree > [role='treeitem'] + [role='treeitem']")?.get('margin-top')).toBe('2px')
     expect(declarations('.groupSection > * + *')?.get('margin-top')).toBe('2px')
     expect(declarations('.groupSection + .groupSection')?.get('margin-top')).toBe('4px')
+    expect(declarations('.treeSection > :not(.treeSectionHeader)')?.get('padding-left')).toBe('22px')
+    expect(declarations('.treeSection > .empty')?.get('padding-left')).toBe('30px')
+    expect(declarations('.treeSection > .sessionOverflowButton')?.get('padding-left')).toBe('50px')
   })
 
   it('draws drag targets as a leading chevron joined to the insertion line', () => {
@@ -106,6 +109,10 @@ describe('WorkspaceBrowser.module.css list', () => {
     expect(rowDeclarations('.searchResultRow')?.get('min-height')).toBe('48px')
     expect(rowDeclarations('.sessionRow.selected')?.get('background'))
       .toBe('var(--dsw-alias-interactive-bg-hover)')
+    expect(rowDeclarations('.projectRow .chevron')?.get('display')).toBe('none')
+    expect(rowDeclarations('.projectRow:hover .chevron')?.get('display')).toBe('inline-flex')
+    expect(rowDeclarations('.projectRow.menuOpen .chevron')?.get('display')).toBe('inline-flex')
+    expect(rowDeclarations('.projectRow:hover .folder')).toBeUndefined()
   })
 
   it('pins both rail controls to the shared left anchor during the column slide', () => {

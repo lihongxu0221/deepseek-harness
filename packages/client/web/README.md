@@ -39,7 +39,7 @@ The boot page uses plain DOM and local CSS, so bundle and plugin-activation fail
 
 ### The shared module table
 
-`PLATFORM_MODULES` (in `src/platform.ts`) names the shell-seeded shared modules — React, Cordis, and static UI libraries — and together with `PRELOADED_CLIENT_EXTERNALS` (the parser-preloaded runtime row) defines the implicit external baseline every dynamic bundle resolves against. `dsh.client.external` adds only exact non-baseline requests; see [shared modules and the module graph](../AGENTS.md#shared-modules-and-the-module-graph).
+`PLATFORM_MODULES` (in `src/platform.ts`) names the shell-seeded shared modules — React, Cordis, and static UI libraries — and together with `PRELOADED_CLIENT_EXTERNALS` (the parser-preloaded runtime row) defines the implicit external baseline every dynamic bundle resolves against. `getStaticModules()` also seeds `@deepseek-ai/dsh-client-runtime` and `@deepseek-ai/dsh-client-runtime/client` onto the same `dsh-client-store` instance so community plugins that still require the deleted Runtime package receive `createSnapshotStore` and `defineStore`. Those names are not platform words; first-party bundles must not request them. `dsh.client.external` adds only exact non-baseline requests; see [shared modules and the module graph](../AGENTS.md#shared-modules-and-the-module-graph).
 
 ### Configuration
 

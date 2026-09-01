@@ -1,0 +1,33 @@
+# Agent Note: Workspace extra folders
+
+Status: implemented
+
+English | [中文](2026-08-19-workspace-extra-folders.zh.md)
+
+## Problem
+
+A Workspace was one canonical directory. Users who keep related repositories side by side needed either several Workspace registrations or a wider sandbox (`danger-full-access`) so one session could write outside its cwd. Multiple registrations split the session list; a full-access sandbox drops the workspace-write boundary.
+
+## Decision
+
+A Workspace keeps a primary `path` (new-session cwd) and an extra `folders` list. The first folder added at create is primary; later extras stay extras until `setPrimaryFolder`. Only the primary directory is unique across the registry; extras are shareable, including as another Workspace's primary ([shared extra folders](2026-08-24-workspace-shared-extra-folders.md)). `Workspace.addFolder` / `removeFolder` / `setPrimaryFolder` and the matching RPCs mutate that list. Removing the primary path fails with `workspace-folder-primary`; promoting an unknown path fails with `workspace-folder-unknown`; promoting a path that is already another Workspace's primary fails with `workspace-folder-conflict`. Records written before `folders` existed parse as an empty extra list.
+
+Session membership matches a header cwd against the primary path or any extra folder. New sessions created from a Workspace use the current primary as cwd, so agent instructions (`AGENTS.md` and the rest of the instruction walk) start there. Existing session header cwds stay unchanged. `workspace-write` policy resolution reads the mounted workspace registry and sets `SandboxExecutionPolicy.extraRoots` to every other owned directory, so a session whose cwd is an extra folder still writes the primary. `writableRoots`, Seatbelt, Landlock, bwrap, and Windows ACL standing grants all consume that list; a later `addFolder` receives an ACE on the next confine, and a later `removeFolder` drops that ACE on the next confine. The primary-root ACE stays as the reuse cache.
+
+The sidebar Workspace row menu keeps **Edit project**, **Remove folder**, **Rename**, and **Delete workspace**. **Edit project** opens a dialog for the display name, source folders, and registration removal. The primary row shows a disabled **Primary** badge and **X**. Extra rows show **X**, and **Set as primary** on hover. Folder and primary edits stay in that draft until Save. Extra folders are added only from that dialog. The hover card shows the title with **Pin** or **Unpin**, the session count, every owned directory, and **Edit project**.
+
+## Alternatives considered
+
+**Several Workspace registrations, one folder each.** Already shipped, but it splits the session list and does not expand write roots for the current session.
+
+**Extra roots on the Session header.** The header is immutable, so adding a folder later would not reach existing sessions. Live Workspace folders apply on the next policy resolve.
+
+**Domain version bump that rejects old records.** Extra folders default on parse so existing user registries keep loading. A version bump would drop every stored Workspace.
+
+## Consequences
+
+Workspace-write sessions in a multi-folder Workspace can modify every owned directory without switching sandbox mode. New sessions start in the current primary directory; extra folders are additional roots until promoted. Promoting a folder does not rewrite existing session cwds. Sharing extras and creating a Workspace over an extra folder are recorded in [shared extra folders](2026-08-24-workspace-shared-extra-folders.md).
+
+## Testing
+
+`packages/workspace/workspace/tests/workspace.spec.ts` covers add/remove, primary promotion, attach-by-extra-cwd, and conflict/primary/unknown errors. `packages/host/apiproxy/tests/api-proxy-workspace.spec.ts` and `rpc-schemas.spec.ts` cover the RPCs and wire defaults. `packages/sandbox/sandbox/tests/roots.spec.ts`, `sandbox-policy/tests/policy.spec.ts`, and `sandbox-local/tests/local.spec.ts` plus `acl-grants.spec.ts` cover extra write roots, an extra-folder session cwd, live Windows ACL grants and revoke-after-remove, and the model-visible policy sentence. `packages/client/ui-workspace/tests/rows.client.spec.tsx` covers the row menu without Add folder, and the hover card Pin/Unpin control. `workspace-edit-dialog.client.spec.tsx` and `workspace-browser.client.spec.tsx` cover the project editor, Set as primary, multi-Workspace pin, and Recents.

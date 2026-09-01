@@ -23,6 +23,7 @@ function mount(props: {
   copyText?: string
   copyLabel?: string
   copiedLabel?: string
+  className?: string
 } = {}) {
   const view = render(
     <HoverCard
@@ -63,6 +64,13 @@ describe('HoverCard', () => {
     expect(card.parentElement).toBe(document.body)
     expect(card.style.left).toBe('208px')
     expect(card.style.top).toBe('40px')
+  })
+
+  it('appends className to the portaled card', () => {
+    const { wrapper } = mount({ className: 'wide-card' })
+    fireEvent.pointerEnter(wrapper)
+    act(() => { vi.advanceTimersByTime(500) })
+    expect((screen.getByText('card body').parentElement as HTMLElement).className).toMatch(/wide-card/)
   })
 
   it('honors a custom openDelayMs', () => {

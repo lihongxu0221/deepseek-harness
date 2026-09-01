@@ -46,7 +46,19 @@ describe('deriveGroups', () => {
     const workspaces = [workspace('first', ['older', 'newer']), workspace('empty', [])]
     const groups = deriveGroups(sessions, workspaces, noArchive, noAttention, view(['first']))
     expect(groups.map(group => group.key)).toEqual(['first', 'empty'])
+    expect(groups.map(group => group.pinned)).toEqual([false, false])
     expect(groups[0]!.sessions.map(session => session.id)).toEqual([sid('older'), sid('newer')])
+  })
+
+  it('keeps pinned Workspaces at the front in pin order', () => {
+    const sessions = list(summary('owned', 1))
+    const workspaces = [workspace('first', ['owned']), workspace('second', []), workspace('third', [])]
+    const groups = deriveGroups(sessions, workspaces, noArchive, noAttention, {
+      expandedGroups: [],
+      pinnedWorkspaceIds: ['third', 'first'],
+    })
+    expect(groups.map(group => group.key)).toEqual(['third', 'first', 'second'])
+    expect(groups.map(group => group.pinned)).toEqual([true, true, false])
   })
 
   it('projects pending-interaction state into grouped and flat rows', () => {
@@ -486,18 +498,31 @@ describe('createWorkspaceViewStore', () => {
     const store = createWorkspaceViewStore().create()
     expect(store.getSnapshot().groupBy).toBe('workspace')
     expect(store.getSnapshot().orderBy).toBe('updated')
+    expect(store.getSnapshot().pinnedWorkspaceIds).toEqual([])
+    expect(store.getSnapshot().workspacesOpen).toBe(true)
+    expect(store.getSnapshot().recentsOpen).toBe(true)
     store.actions.setGroupBy('flat')
     store.actions.setOrderBy('updated')
     store.actions.setGroupExpanded('alpha', true)
     store.actions.syncSessionOrderAccount('alpha', ['two', 'one'], { one: 1, two: 2 })
     store.actions.setSessionOrder('alpha', ['one', 'two'])
+    store.actions.pinWorkspace('beta')
+    store.actions.pinWorkspace('alpha')
+    store.actions.pinWorkspace('beta')
+    store.actions.setWorkspacesOpen(false)
+    store.actions.setRecentsOpen(false)
     expect(store.getSnapshot().groupBy).toBe('flat')
     expect(store.getSnapshot()).toMatchObject({
       orderBy: 'updated',
       groupExpansion: { alpha: true },
       sessionOrderByAccount: { alpha: ['one', 'two'] },
       sessionUpdatedAtByAccount: { alpha: { one: 1, two: 2 } },
+      pinnedWorkspaceIds: ['beta', 'alpha'],
+      workspacesOpen: false,
+      recentsOpen: false,
     })
+    store.actions.unpinWorkspace('beta')
+    expect(store.getSnapshot().pinnedWorkspaceIds).toEqual(['alpha'])
   })
 
   it('removes view state outside the retained Workspace key set', () => {
@@ -507,6 +532,8 @@ describe('createWorkspaceViewStore', () => {
     store.actions.setGroupExpanded('deleted', true)
     store.actions.syncSessionOrderAccount('alpha', ['alpha-session'], { 'alpha-session': 2 })
     store.actions.syncSessionOrderAccount('deleted', ['deleted-session'], { 'deleted-session': 1 })
+    store.actions.pinWorkspace('alpha')
+    store.actions.pinWorkspace('deleted')
 
     store.actions.retainAccountKeys(['', 'alpha'])
 
@@ -514,6 +541,7 @@ describe('createWorkspaceViewStore', () => {
     expect(snapshot.groupExpansion).toEqual({ '': true, alpha: true })
     expect(snapshot.sessionOrderByAccount).toEqual({ alpha: ['alpha-session'] })
     expect(snapshot.sessionUpdatedAtByAccount).toEqual({ alpha: { 'alpha-session': 2 } })
+    expect(snapshot.pinnedWorkspaceIds).toEqual(['alpha'])
   })
 })
 

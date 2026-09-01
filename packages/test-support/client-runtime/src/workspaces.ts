@@ -94,6 +94,46 @@ export class TestWorkspaces implements IWorkspaces {
   }
 
   /**
+   * Add an extra folder (recorded). The default echoes the path as the sole extra folder.
+   * @param workspaceId - target workspace.
+   * @param path - existing host directory.
+   * @returns the updated view.
+   */
+  async addFolder(workspaceId: WorkspaceId, path: string): Promise<WorkspaceView> {
+    this.calls.push({ method: 'addFolder', args: [workspaceId, path] })
+    const stub = this.stubs.get('addFolder')
+    if (stub !== undefined) return await (stub(workspaceId, path) as Promise<WorkspaceView>)
+    return { workspaceId, title: '', path: '', folders: [path], sessionIds: [] } as unknown as WorkspaceView
+  }
+
+  /**
+   * Remove an extra folder (recorded). The default echoes an empty extra list.
+   * @param workspaceId - target workspace.
+   * @param path - extra folder to drop.
+   * @returns the updated view.
+   */
+  async removeFolder(workspaceId: WorkspaceId, path: string): Promise<WorkspaceView> {
+    this.calls.push({ method: 'removeFolder', args: [workspaceId, path] })
+    const stub = this.stubs.get('removeFolder')
+    if (stub !== undefined) return await (stub(workspaceId, path) as Promise<WorkspaceView>)
+    return { workspaceId, title: '', path: '', folders: [], sessionIds: [] } as unknown as WorkspaceView
+  }
+
+  /**
+   * Promote an extra folder to primary (recorded). The default echoes the path
+   * as the new primary directory.
+   * @param workspaceId - target workspace.
+   * @param path - extra folder to promote.
+   * @returns the updated view.
+   */
+  async setPrimaryFolder(workspaceId: WorkspaceId, path: string): Promise<WorkspaceView> {
+    this.calls.push({ method: 'setPrimaryFolder', args: [workspaceId, path] })
+    const stub = this.stubs.get('setPrimaryFolder')
+    if (stub !== undefined) return await (stub(workspaceId, path) as Promise<WorkspaceView>)
+    return { workspaceId, title: '', path, folders: [], sessionIds: [] } as unknown as WorkspaceView
+  }
+
+  /**
    * Delete a Workspace (recorded; default no-op).
    * @param workspaceId - target workspace.
    */

@@ -39,7 +39,7 @@ dsh --profile web --dump-default-config
 dsh --profile web --patch ./extra.yml --dump-config
 ```
 
-`--dump-default-config` 只打印组合包各层；`--dump-config` 额外加上 profile 的 `cordis.patch.yml`、home 级的 `$DSH_HOME/cordis.patch.yml` 和 `--patch` overlay。两者都会打印注释，标明每行由哪个文件提供，以及哪些 overlay 修改过它；`!!js` 表达式保持未求值，插入行中的相对插件名以各自 patch 文件所在目录解析，找不到目标的 patch 会报告到 stderr。dump 操作会初始化缺失的 profile 文件，但不会准备 `$DSH_HOME/profiles/node_modules` 下的运行时模块 fallback。它不会运行应用的命令行参数提供方，因此展示的是解析任何应用参数之前的组合配置树；如果调用中包含应用参数，dump 会拒绝该调用。
+`--dump-default-config` 只打印组合包各层；`--dump-config` 额外加上 profile 的 `cordis.patch.yml`、home 级的 `$DSH_HOME/cordis.patch.yml`、`--patch` overlay，以及禁用仍在 inject `apiProxy` 的种子行的启动器 overlay。两者都会打印注释，标明每行由哪个文件提供，以及哪些 overlay 修改过它；`!!js` 表达式保持未求值，插入行中的相对插件名以各自 patch 文件所在目录解析，找不到目标的 patch 会报告到 stderr。dump 操作会初始化缺失的 profile 文件，但不会准备 `$DSH_HOME/profiles/node_modules` 下的运行时模块 fallback。它不会运行应用的命令行参数提供方，因此展示的是解析任何应用参数之前的组合配置树；如果调用中包含应用参数，dump 会拒绝该调用。
 
 ## 插件管理
 
@@ -86,6 +86,13 @@ dsh web --help
 基于 base 的 profile 中，新会话默认使用 `workspace-write` 权限预设。Bash 和文件系统修改仅限于会话 workspace 与平台临时根目录；读取和网络访问不受限制，进程可见性则取决于所选沙箱后端——bwrap 在私有 PID 命名空间中运行命令并隐藏宿主进程，Landlock 与 Seatbelt 保持宿主进程可见性不变。`DSH_PERMISSION_MODE` 更改进程后备值。General settings 中存储的权限影响后续 Web 会话，不改变已打开的会话。独立的 `sdk-minimal` 配置树则固定为 `danger-full-access`，且不挂载 approval 或权限 settings 服务。
 
 `DSH_TOOLS_MODE` 为进程选择 `native`、`ptc` 或 `both`；其他值会导致启动失败。随附的 `minimal` agent preset 会保留该部署的呈现方式，将完整系统提示词固定为 `You are a helpful software engineer assistant.`，并且仅组合持久 `bash` 和 `str_replace_editor`。创建 Web 会话时请选择极简模式；该 agent 不包含任何其他提示词段落或面向模型的插件，而共享的浏览器、workspace、持久化、沙箱与权限宿主保持不变。
+
+
+## 打包桌面可执行文件
+
+`scripts/build-web-exe.ts` 把同一个 `web` profile 部署到 `dist-exe/dsh-web-<platform>-<arch>/`，并在其中放入薄启动器 `dsh-web`，由它导入磁盘上的 `lib/packaged-web-bin.js`；当辅助程序把 exe 当作 Node spawn、且额外参数是已存在的 `.js`/`.cjs`/`.mjs` 时，则导入该脚本。第一个额外参数是 `plugin` 时，会对 `.config` 运行磁盘上的 `lib/bin.js`，而不是去占用 Windows 单实例 GUI 锁，这样插件市场安装才能到达 pnpm。Web GUI 不能打成单个 pkg 快照，因为 profile 模块回退需要真实的包目录。双击启动器会打开 GUI，在 Edge 或 Chrome 的应用模式窗口中打开回环 URL，并把可执行文件所在目录当作调用目录，这样资源管理器的进程 cwd 就不会是 `System32`。请保持整个文件夹完整。目标机器不需要安装系统 Node.js 或 Python：启动器内嵌 Node，`node_modules/` 随文件夹一起分发。Windows 构建会把启动器标成 GUI 子系统，资源管理器不会再打开控制台。闪窗报告启动进度，随后由托盘图标接管生命周期。关闭 Chromium 窗口只是隐藏界面。右键托盘图标可显示主窗口、用默认浏览器打开监听 URL、启动或停止 Web 服务、打开系统设置（`#settings`），或退出。macOS/Linux 关闭应用窗口或控制台即可停止。JSON-RPC 的 `dsh-jsonrpc-agent-pkg` 可执行文件是另一个产品，仍然走标准输入输出。该宿主见 [Windows 闪窗与托盘 Agent Note](../../../.agents/notes/implemented/feature/2026-08-19-windows-packaged-desktop-tray.zh.md)。
+
+Windows：`build-exe.bat` 或 `pnpm run build:web-exe -- --targets=node24-win-x64`。
 
 ## 共享部署行为
 

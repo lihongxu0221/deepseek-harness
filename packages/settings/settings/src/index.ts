@@ -42,6 +42,17 @@ function parseSettingsNamespace(value: string): SettingsNamespace {
   return value as SettingsNamespace
 }
 
+/**
+ * Brand a raw string as a {@link SettingsNamespace}.
+ * Out-of-tree plugins import this name; {@link SettingsProvider.register}
+ * also accepts a matching string and brands it itself.
+ * @param value - candidate namespace; lowercase kebab-case, as in plugin short names.
+ * @returns the branded namespace.
+ */
+export function settingsNamespace(value: string): SettingsNamespace {
+  return parseSettingsNamespace(value)
+}
+
 /** When a namespace's changes take effect for its owner. */
 export type SettingsApplies = 'live' | 'restart'
 
@@ -888,6 +899,33 @@ export interface SettingsSectionHooks<T> {
    * @param value - the resolved section, schema-valid by construction.
    */
   validate?: (value: T) => void
+}
+
+/**
+ * Install the canonical optional-settings consumer wiring. Out-of-tree plugins
+ * import this name; the Service Definition method is
+ * {@link SettingsProvider.installSection}. While a settings service exists,
+ * register `ns` with the consumer's composition entry as the `base` layer and
+ * point the source thunk at the resolved scope; when the service goes away,
+ * fall back to the entry so the consumer keeps working exactly as composed.
+ * The registration rides the scoped fiber, so no settings service ever mounted
+ * means none of this runs.
+ * @param ctx - consumer plugin context owning the wiring.
+ * @param ns - the consumer-owned settings namespace.
+ * @param schema - schema resolving the namespace (typically the plugin Config).
+ * @param entry - the consumer's composition entry config, used as `base`.
+ * @param hooks - source sink and change notification.
+ */
+export function installSettingsSection<T>(
+  ctx: Context,
+  ns: SettingsNamespace,
+  schema: z<T>,
+  entry: T,
+  hooks: SettingsSectionHooks<T>,
+): void {
+  ctx.inject(['settings'], (sctx) => {
+    sctx.settings.installSection(ctx, ns, schema, entry, hooks)
+  })
 }
 
 export default SettingsProvider

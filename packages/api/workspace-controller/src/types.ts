@@ -18,6 +18,11 @@ export interface WorkspaceView {
   readonly path: string
   /** User-visible title. */
   readonly title: string
+  /**
+   * Extra canonical directories besides {@link path}. Absent on older
+   * projections; consumers treat that as none.
+   */
+  readonly folders?: readonly string[]
   /** Sessions accounted to this Workspace in manual order. */
   readonly sessionIds: readonly SessionId[]
   /** ISO-8601 creation instant. */
@@ -32,6 +37,12 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     'workspace/invalid-path': { readonly path: string }
     /** Another Workspace already uses the requested name. */
     'workspace/name-conflict': { readonly name: string }
+    /** The named extra folder is this Workspace's primary directory. */
+    'workspace/folder-primary': { readonly path: string }
+    /** The named path is not an extra folder of this Workspace. */
+    'workspace/folder-unknown': { readonly path: string }
+    /** The named path is already another Workspace's primary directory. */
+    'workspace/folder-conflict': { readonly path: string; readonly ownerId: WorkspaceId }
     /** The Session or its anchor is not in the Workspace's manual order. */
     'workspace/move-invalid': {
       readonly workspaceId: WorkspaceId
@@ -64,6 +75,24 @@ export interface WorkspaceCreateValue {
 export interface WorkspaceRenameRequest {
   readonly workspaceId: WorkspaceId
   readonly title: string
+}
+
+/** Extra folder added to an existing Workspace. */
+export interface WorkspaceAddFolderRequest {
+  readonly workspaceId: WorkspaceId
+  readonly path: string
+}
+
+/** Extra folder dropped from a Workspace. The directory is kept. */
+export interface WorkspaceRemoveFolderRequest {
+  readonly workspaceId: WorkspaceId
+  readonly path: string
+}
+
+/** Extra folder promoted to the Workspace primary directory. */
+export interface WorkspaceSetPrimaryFolderRequest {
+  readonly workspaceId: WorkspaceId
+  readonly path: string
 }
 
 /** Workspace mutation returning the complete changed row. */

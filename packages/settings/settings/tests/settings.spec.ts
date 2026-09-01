@@ -1,7 +1,15 @@
 import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import { SettingsProvider, SettingsConflictError, type SettingsNamespace, type SettingsScope, type SettingsUpdateSource } from '../src/index.ts'
+import {
+  SettingsProvider,
+  SettingsConflictError,
+  installSettingsSection,
+  settingsNamespace,
+  type SettingsNamespace,
+  type SettingsScope,
+  type SettingsUpdateSource,
+} from '../src/index.ts'
 import { deepEqualJson } from '@deepseek-ai/dsh-util-values'
 import { MemorySettings } from './memory.ts'
 
@@ -694,6 +702,45 @@ describe('watch', () => {
     })
     expect(events).toHaveLength(1)
     expect(scope.get()).toEqual({ theme: 'light', fontSize: 14 })
+  })
+})
+
+describe('settingsNamespace', () => {
+  it('brands a lowercase hyphenated identifier and rejects anything else', () => {
+    expect(settingsNamespace('remote-web-ui')).toBe('remote-web-ui')
+    expect(() => settingsNamespace('Remote')).toThrow(/must match/)
+    expect(() => settingsNamespace('')).toThrow(/must match/)
+  })
+})
+
+describe('installSettingsSection', () => {
+  const HelperSchema: z<{ theme: string }> = z.object({
+    theme: z.string().default('default'),
+  })
+
+  it('registers through inject while a provider is present', async () => {
+    const ctx = new Context()
+    const entry = { theme: 'entry' }
+    let current: () => { theme: string } = () => entry
+    let changes = 0
+    installSettingsSection(ctx, settingsNamespace('helper-ns'), HelperSchema, entry, {
+      setSource: (source) => {
+        current = source
+      },
+      onChange: () => {
+        changes += 1
+      },
+    })
+    expect(current()).toEqual({ theme: 'entry' })
+    expect(changes).toBe(0)
+
+    const fiber = ctx.plugin(MemorySettings, { doc: { 'helper-ns': { theme: 'user' } } })
+    await fiber
+    await vi.waitFor(() => {
+      expect(current()).toEqual({ theme: 'user' })
+    })
+    expect(changes).toBe(1)
+    await fiber.dispose()
   })
 })
 

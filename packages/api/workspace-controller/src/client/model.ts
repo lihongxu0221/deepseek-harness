@@ -158,6 +158,42 @@ export class ClientWorkspaceModel implements WorkspaceFollowSink {
   }
 
   /**
+   * Add an extra folder and merge the returned row.
+   * @param workspaceId - owning Workspace.
+   * @param path - existing host directory.
+   * @returns generated Remote result.
+   */
+  async addFolder(workspaceId: WorkspaceId, path: string): Promise<RemoteResult<WorkspaceValue>> {
+    const result = await this.remote.addFolder({ workspaceId, path })
+    if (result.ok) this.upsert(result.value.workspace)
+    return result
+  }
+
+  /**
+   * Drop an extra folder and merge the returned row.
+   * @param workspaceId - owning Workspace.
+   * @param path - extra folder to drop.
+   * @returns generated Remote result.
+   */
+  async removeFolder(workspaceId: WorkspaceId, path: string): Promise<RemoteResult<WorkspaceValue>> {
+    const result = await this.remote.removeFolder({ workspaceId, path })
+    if (result.ok) this.upsert(result.value.workspace)
+    return result
+  }
+
+  /**
+   * Promote an extra folder to primary and merge the returned row.
+   * @param workspaceId - owning Workspace.
+   * @param path - extra folder to promote.
+   * @returns generated Remote result.
+   */
+  async setPrimaryFolder(workspaceId: WorkspaceId, path: string): Promise<RemoteResult<WorkspaceValue>> {
+    const result = await this.remote.setPrimaryFolder({ workspaceId, path })
+    if (result.ok) this.upsert(result.value.workspace)
+    return result
+  }
+
+  /**
    * Archive one Session and install the returned complete archive set.
    * @param sessionId - Session to archive.
    * @returns generated Remote result.

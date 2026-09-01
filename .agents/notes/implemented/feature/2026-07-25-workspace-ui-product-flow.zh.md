@@ -27,7 +27,7 @@ Host 在 Workspace entity 上提供以下 GUI 接线：
 
 Host 流推送 Workspace 与 Session 增量，包括 `host/workspace-removed`；Client 重连后分别刷新 `workspace.list` 与 `session.list` 基线。删除注册记录的所有权与安全边界由 [Workspace 注册记录删除 Agent Note](2026-07-27-workspace-registration-deletion.zh.md)定义。
 
-Workspace 的 `sessionIds` 是有序候选索引。成员投影同时要求 id 位于索引且对应 `SessionHeader.cwd` canonical 后等于 Workspace path；SessionHeader 不增加 `workspaceId`。cwd 匹配但未入索引的 Session 保持 Ungrouped，索引命中但 header 缺失、cwd 无效或 cwd 不匹配的 id 被过滤。同一 Session 被两个 Workspace 索引占用属于损坏状态并明确报错。
+Workspace 的 `sessionIds` 是有序候选索引。成员投影同时要求 id 位于索引且对应 `SessionHeader.cwd` canonical 后等于 Workspace 主路径或任一额外文件夹；SessionHeader 不增加 `workspaceId`。额外文件夹的归属见 [Workspace extra folders](2026-08-19-workspace-extra-folders.zh.md)。cwd 匹配但未入索引的 Session 保持 Ungrouped，索引命中但 header 缺失、cwd 无效或 cwd 不匹配的 id 被过滤。同一 Session 被两个 Workspace 索引占用属于损坏状态并明确报错。
 
 Workspace domain 以 durable marker 区分「从未初始化」和「已初始化但为空」。marker 未设置时，注册表只调用 `SessionPersistence.list()` 读取 header 元数据，既不调用 `load` 或 `inspect`，也不读取历史数据或解析事件正文；有效 cwd 按 canonical path 分组，组内 Session 与 Workspace 组均按 header `createdAt` 降序初始化。Bootstrap 可重入，最后才写 marker；marker 写入后，绕过 `workspaceId` 的新 Session 不再被自动收编。
 

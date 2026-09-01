@@ -242,10 +242,10 @@ const RUNNER_FAILURE_RULES = {
 /**
  * Local process-sandbox provider. Registers as `ctx.sandbox`. Caches the
  * chain verdict and, on the windows-acl rung, the write grants
- * ({@link AclWriteGrant}: the standing workspace-root grant per workspace
- * and the revocable private-temp grant per live session/workspace pair, the
- * latter revoked on provider dispose); the one-time probes spawn nothing
- * else.
+ * ({@link AclWriteGrant}: the standing workspace-root grant per workspace,
+ * standing extra-folder ACEs revoked when that folder leaves, and the
+ * revocable private-temp grant per live session/workspace pair, the latter
+ * revoked on provider dispose); the one-time probes spawn nothing else.
  */
 export class LocalSandboxProvider extends SandboxProvider {
   // Inline schema call: the config catalog walks `static Config` statically.
@@ -366,6 +366,7 @@ export class LocalSandboxProvider extends SandboxProvider {
       ]
     }
     const temp = this.materializeAclGrant(sessionId, policy.workspaceRoot)
+    this.syncExtraAclRoots(policy.workspaceRoot, policy.extraRoots ?? [])
     return [
       ...this.windowsAclRunnerInvocation(),
       '--workspace', policy.workspaceRoot,
@@ -440,6 +441,28 @@ export class LocalSandboxProvider extends SandboxProvider {
     const capability = { dir: tempDir, writeSid: tempSid, grant }
     this.tempCapabilities.set(key, capability)
     return capability
+  }
+
+  /**
+   * Apply extra-folder standing ACEs on a workspace grant already created by
+   * {@link materializeAclGrant}. Extra roots added after the first confine
+   * receive an ACE on the next call; extra roots that left the workspace
+   * lose that ACE. A missing grant is a no-op (read-only / no session).
+   * @param workspaceRoot - the resolved policy root.
+   * @param extraRoots - additional directories that receive the same standing write ACE.
+   */
+  private syncExtraAclRoots(workspaceRoot: string, extraRoots: readonly string[]): void {
+    const workspaceGrant = this.workspaceGrants.get(workspaceRoot)
+    /* v8 ignore next -- materializeAclGrant always caches the standing grant before this call. */
+    if (workspaceGrant === undefined) return
+    const owned = new Set([workspaceRoot, ...extraRoots])
+    for (const path of workspaceGrant.paths) {
+      if (!owned.has(path)) workspaceGrant.revoke(path)
+    }
+    for (const root of extraRoots) {
+      if (root === workspaceRoot || workspaceGrant.paths.includes(root)) continue
+      workspaceGrant.add(root, true)
+    }
   }
 
   /**

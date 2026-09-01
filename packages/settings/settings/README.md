@@ -55,7 +55,7 @@ const theme = scope.get()              // deep-frozen resolved snapshot
 scope.update({ density: 'compact' })   // merges into the user section and persists
 ```
 
-Literal namespace arguments are checked by TypeScript against the lowercase letter, digit, and hyphen grammar; dynamically supplied strings receive the same validation at runtime. `ctx.settings.installSection(owner, ns, schema, entry, hooks)` packages the optional-service wiring for a consumer plugin: while a settings service exists it registers the namespace with the plugin's composition entry as `base`; when the service goes away the plugin falls back to its entry config and keeps working exactly as composed.
+Literal namespace arguments are checked by TypeScript against the lowercase letter, digit, and hyphen grammar; dynamically supplied strings receive the same validation at runtime. `settingsNamespace(value)` brands a matching string for callers that still import that name. `ctx.settings.installSection(owner, ns, schema, entry, hooks)` packages the optional-service wiring for a consumer plugin: while a settings service exists it registers the namespace with the plugin's composition entry as `base`; when the service goes away the plugin falls back to its entry config and keeps working exactly as composed. `installSettingsSection(ctx, ns, schema, entry, hooks)` is the same wiring for out-of-tree plugins that import the helper instead of the method.
 
 ### Reading and observing values
 

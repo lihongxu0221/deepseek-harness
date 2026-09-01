@@ -10,6 +10,9 @@ import { en } from '../src/client/locales.ts'
 afterEach(() => {
   cleanup()
   vi.useRealTimers()
+  if (window.location.hash !== '') {
+    window.history.replaceState(null, '', window.location.pathname + window.location.search || '/')
+  }
 })
 
 type Row = { id: string; order: number; label: string }
@@ -119,6 +122,27 @@ function openPanel() {
   fireEvent.click(trigger)
   return trigger
 }
+
+describe('SettingsRoot hash deep link', () => {
+  it('opens the panel when the page is loaded with #settings', () => {
+    window.location.hash = '#settings'
+    mount({ onboardingActive: false })
+    expect(screen.getByRole('dialog')).toBeTruthy()
+  })
+
+  it('opens the panel when the hash becomes #settings and clears the hash on close', () => {
+    mount({ onboardingActive: false })
+    expect(screen.queryByRole('dialog')).toBeNull()
+    act(() => {
+      window.location.hash = '#settings'
+      window.dispatchEvent(new HashChangeEvent('hashchange'))
+    })
+    expect(screen.getByRole('dialog')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(window.location.hash).toBe('')
+  })
+})
 
 describe('SettingsRoot trigger', () => {
   it('renders the trigger seat content as the accessible name (no aria-label of its own)', () => {

@@ -285,6 +285,7 @@ interface WorkspaceView {
   readonly workspaceId: WorkspaceId
   readonly path: string
   readonly title: string
+  readonly folders?: readonly string[]
   readonly sessionIds: readonly SessionId[]
   readonly createdAt: string
   readonly updatedAt: string
@@ -308,6 +309,9 @@ interface WorkspaceInsertSessionBeforeRequest {
 }
 interface WorkspaceArchiveSessionRequest { readonly sessionId: SessionId }
 interface WorkspaceArchiveValue { readonly archivedSessionIds: readonly SessionId[] }
+interface WorkspaceAddFolderRequest { readonly workspaceId: WorkspaceId; readonly path: string }
+interface WorkspaceRemoveFolderRequest { readonly workspaceId: WorkspaceId; readonly path: string }
+interface WorkspaceSetPrimaryFolderRequest { readonly workspaceId: WorkspaceId; readonly path: string }
 
 type WorkspaceFollowFrame =
   | {
@@ -329,12 +333,16 @@ interface FixtureWorkspaceApi {
   insertBefore(request: WorkspaceInsertBeforeRequest): Promise<ConnectionRpcResult<WorkspaceOrderValue>>
   insertSessionBefore(request: WorkspaceInsertSessionBeforeRequest): Promise<ConnectionRpcResult<WorkspaceValue>>
   archiveSession(request: WorkspaceArchiveSessionRequest): Promise<ConnectionRpcResult<WorkspaceArchiveValue>>
+  addFolder(request: WorkspaceAddFolderRequest): Promise<ConnectionRpcResult<WorkspaceValue>>
+  removeFolder(request: WorkspaceRemoveFolderRequest): Promise<ConnectionRpcResult<WorkspaceValue>>
+  setPrimaryFolder(request: WorkspaceSetPrimaryFolderRequest): Promise<ConnectionRpcResult<WorkspaceValue>>
 }
 
 interface FixtureWorkspace {
   workspaceId: WorkspaceId
   path: string
   title: string
+  folders: string[]
   sessionIds: SessionId[]
   createdAt: string
   updatedAt: string
@@ -1898,6 +1906,7 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
     workspaceId: wid('fx-ws-fixture'),
     path: '/tmp/fixture',
     title: 'fixture',
+    folders: [],
     sessionIds: [sid('fx-alpha'), sid('fx-beta'), sid('fx-gamma')],
     createdAt: fixtureEpoch,
     updatedAt: fixtureEpoch,
@@ -1905,6 +1914,7 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
     workspaceId: wid('fx-ws-home'),
     path: `${FIXTURE_HOME}/Documents/project`,
     title: 'project',
+    folders: [],
     sessionIds: [],
     createdAt: fixtureEpoch,
     updatedAt: fixtureEpoch,
@@ -3257,6 +3267,7 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
         workspaceId: wid(`fx-ws-${nextWorkspace++}`),
         path: request.path,
         title: request.path.split('/').filter(Boolean).at(-1) ?? request.path,
+        folders: [],
         sessionIds: [],
         createdAt: now,
         updatedAt: now,
@@ -3389,6 +3400,69 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
         emitWorkspace({ type: 'archived', archivedSessionIds: [...archivedSessionIds] })
       }
       return sessionOk({ archivedSessionIds: [...archivedSessionIds] })
+    },
+    addFolder: (request) => {
+      const workspace = workspaces.find(candidate => candidate.workspaceId === request.workspaceId)
+      if (workspace === undefined) {
+        return sessionErr({
+          code: 'workspace/not-found',
+          message: `no workspace ${request.workspaceId}`,
+          details: { workspaceId: request.workspaceId },
+        })
+      }
+      if (request.path !== workspace.path && !workspace.folders.includes(request.path)) {
+        workspace.folders = [...workspace.folders, request.path]
+        workspace.updatedAt = new Date().toISOString()
+        emitWorkspace({ type: 'upsert', workspace: workspaceSnapshot(workspace) })
+      }
+      return sessionOk({ workspace: workspaceSnapshot(workspace) })
+    },
+    removeFolder: (request) => {
+      const workspace = workspaces.find(candidate => candidate.workspaceId === request.workspaceId)
+      if (workspace === undefined) {
+        return sessionErr({
+          code: 'workspace/not-found',
+          message: `no workspace ${request.workspaceId}`,
+          details: { workspaceId: request.workspaceId },
+        })
+      }
+      if (request.path === workspace.path) {
+        return sessionErr({
+          code: 'workspace/folder-primary',
+          message: `cannot remove folder '${request.path}': it is the workspace primary directory`,
+          details: { path: request.path },
+        })
+      }
+      if (workspace.folders.includes(request.path)) {
+        workspace.folders = workspace.folders.filter(folder => folder !== request.path)
+        workspace.updatedAt = new Date().toISOString()
+        emitWorkspace({ type: 'upsert', workspace: workspaceSnapshot(workspace) })
+      }
+      return sessionOk({ workspace: workspaceSnapshot(workspace) })
+    },
+    setPrimaryFolder: (request) => {
+      const workspace = workspaces.find(candidate => candidate.workspaceId === request.workspaceId)
+      if (workspace === undefined) {
+        return sessionErr({
+          code: 'workspace/not-found',
+          message: `no workspace ${request.workspaceId}`,
+          details: { workspaceId: request.workspaceId },
+        })
+      }
+      if (request.path === workspace.path) return sessionOk({ workspace: workspaceSnapshot(workspace) })
+      if (!workspace.folders.includes(request.path)) {
+        return sessionErr({
+          code: 'workspace/folder-unknown',
+          message: `cannot set primary folder '${request.path}': it is not owned by this workspace`,
+          details: { path: request.path },
+        })
+      }
+      const previous = workspace.path
+      workspace.folders = [previous, ...workspace.folders.filter(folder => folder !== request.path)]
+      workspace.path = request.path
+      workspace.updatedAt = new Date().toISOString()
+      emitWorkspace({ type: 'upsert', workspace: workspaceSnapshot(workspace) })
+      return sessionOk({ workspace: workspaceSnapshot(workspace) })
     },
   }
 
@@ -3572,6 +3646,9 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
           request as WorkspaceInsertSessionBeforeRequest,
         )
         case 'workspace/archiveSession': return workspaceApi.archiveSession(request as WorkspaceArchiveSessionRequest)
+        case 'workspace/addFolder': return workspaceApi.addFolder(request as WorkspaceAddFolderRequest)
+        case 'workspace/removeFolder': return workspaceApi.removeFolder(request as WorkspaceRemoveFolderRequest)
+        case 'workspace/setPrimaryFolder': return workspaceApi.setPrimaryFolder(request as WorkspaceSetPrimaryFolderRequest)
         default:
           return Promise.reject(new Error(`fixture connection RPC endpoint ${JSON.stringify(endpoint)} is unavailable`))
       }

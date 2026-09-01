@@ -30,6 +30,7 @@ import {
 } from 'node:fs'
 import { basename, dirname, join, relative, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import * as yaml from 'js-yaml'
 import { withFileLock } from '@deepseek-ai/dsh-atomic-write'
 import type { EntryOptions } from '@deepseek-ai/cordis-plugin-loader'
 import { applyEntryPatches, type PatchOptions } from '@deepseek-ai/cordis-plugin-include'
@@ -674,6 +675,174 @@ function healProfileModuleFallback(profile: Profile, installationPackageNames: R
     mkdirSync(dirname(profileLink), { recursive: true })
     ensureProfileSymlink(profileLink, ownedLink)
   }
+}
+
+/** pnpm's layout file inside a profile `node_modules`. */
+const PROFILE_MODULES_YAML = '.modules.yaml'
+
+/** Project-relative virtual store for the profile `.npmrc`. */
+const PORTABLE_VIRTUAL_STORE_DIR = 'node_modules/.pnpm'
+
+/**
+ * `.modules.yaml` `virtualStoreDir` is joined onto `node_modules`, so the portable
+ * value is `.pnpm`, not {@link PORTABLE_VIRTUAL_STORE_DIR}. Writing the npmrc path
+ * here makes pnpm read `node_modules/node_modules/.pnpm` and raise
+ * `ERR_PNPM_UNEXPECTED_VIRTUAL_STORE`.
+ */
+const PORTABLE_MODULES_VIRTUAL_STORE_DIR = '.pnpm'
+
+/** pnpm setting that records {@link PORTABLE_VIRTUAL_STORE_DIR} instead of an absolute path. */
+const VIRTUAL_STORE_NPMRC_LINE = `virtual-store-dir=${PORTABLE_VIRTUAL_STORE_DIR}`
+
+/**
+ * Keep a profile's pnpm layout portable: write `virtual-store-dir` in `.npmrc`,
+ * rewrite `.modules.yaml` `virtualStoreDir` to {@link PORTABLE_MODULES_VIRTUAL_STORE_DIR},
+ * and write `.modules.yaml` `storeDir` when the caller probed the current store.
+ * A shipped zip otherwise records the packer's absolute paths or, after an
+ * earlier heal, no `storeDir`; pnpm then rejects the next `pnpm add` with
+ * `ERR_PNPM_UNEXPECTED_STORE` because a missing `storeDir` is not "any store".
+ * @param profileDir - the profile directory (`$DSH_HOME/profiles/<name>`).
+ * @param storeDir - the store `pnpm store path` reported for this profile; omitted on boot.
+ */
+export function healProfileVirtualStoreDir(profileDir: string, storeDir?: string): void {
+  if (!existsSync(profileDir)) return
+  ensurePortableVirtualStoreNpmrc(profileDir)
+  const modulesYaml = join(profileDir, 'node_modules', PROFILE_MODULES_YAML)
+  if (!existsSync(modulesYaml)) return
+  const record = parseModulesLayout(readFileSync(modulesYaml, 'utf8'))
+  if (record === undefined) return
+  let dirty = false
+  if (typeof record.virtualStoreDir === 'string' && !isPortableVirtualStoreDir(record.virtualStoreDir)) {
+    record.virtualStoreDir = PORTABLE_MODULES_VIRTUAL_STORE_DIR
+    dirty = true
+  }
+  if (storeDir !== undefined) {
+    const wanted = resolve(profileDir, storeDir)
+    if (typeof record.storeDir !== 'string' || !sameStoreDir(record.storeDir, wanted)) {
+      record.storeDir = wanted
+      dirty = true
+    }
+  }
+  if (dirty) writeFileSync(modulesYaml, `${JSON.stringify(record, null, 2)}\n`)
+}
+
+/** Host entry of `@mlgbnb/dsh-archive-manager` relative to a profile `node_modules`. */
+const ARCHIVE_MANAGER_HOST = join('@mlgbnb', 'dsh-archive-manager', 'lib', 'index.js')
+
+/** Fingerprint of the published `dshHome` that ignores `$DSH_HOME`. */
+const ARCHIVE_MANAGER_HARDCODED_HOME = /return join\(homedir\(\),\s*['"]\.dsh['"]\)/u
+
+/** Replacement that prefers the process home the packaged desktop already sets. */
+const ARCHIVE_MANAGER_PORTABLE_HOME = 'return process.env.DSH_HOME ?? join(homedir(), \'.dsh\')'
+
+/**
+ * Rewrite `@mlgbnb/dsh-archive-manager` so `dshHome()` honors `$DSH_HOME` before
+ * `~/.dsh`. The published host hardcodes `join(homedir(), '.dsh')`, so a packaged
+ * desktop whose sessions live under `<product>/.config` lists an empty archive.
+ * ESM keeps that call as a local binding, so the file must change before import.
+ * A missing package, an already-portable `dshHome`, or a write failure is a no-op.
+ * @param profileDir - the profile directory (`$DSH_HOME/profiles/<name>`).
+ */
+export function healArchiveManagerHome(profileDir: string): void {
+  const host = join(profileDir, 'node_modules', ARCHIVE_MANAGER_HOST)
+  if (!existsSync(host)) return
+  let source: string
+  try {
+    source = readFileSync(host, 'utf8')
+  } catch (error) {
+    // An unreadable host is treated as absent; boot continues without this heal.
+    void error
+    return
+  }
+  if (source.includes('process.env.DSH_HOME')) return
+  const next = source.replace(ARCHIVE_MANAGER_HARDCODED_HOME, ARCHIVE_MANAGER_PORTABLE_HOME)
+  if (next === source) return
+  try {
+    writeFileSync(host, next)
+  } catch (error) {
+    // A locked or read-only copy is retried on the next boot; start must proceed.
+    void error
+  }
+}
+
+/** Compatibility package name still imported by seeded community plugins. */
+const HOST_APIPROXY_PACKAGE = join('@deepseek-ai', 'dsh-host-apiproxy')
+
+/** Subpath those plugins import for a correlation-id brand. */
+const HOST_APIPROXY_RPC_REL = join('api', 'rpc.js')
+
+/** Manifest that exposes only `./api/rpc`. A full API Proxy package is never restored. */
+const HOST_APIPROXY_PACKAGE_JSON = `{
+  "name": "@deepseek-ai/dsh-host-apiproxy",
+  "version": "0.0.0-compat",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./api/rpc": "./api/rpc.js"
+  }
+}
+`
+
+/** Identity brand matching `@deepseek-ai/dsh-client-connection` `RpcId`. */
+const HOST_APIPROXY_RPC_JS = `export function RpcId(id) {
+  return id
+}
+`
+
+/**
+ * Write a tiny `@deepseek-ai/dsh-host-apiproxy/api/rpc` stub under the profile
+ * installation fallback (`$DSH_HOME/profiles/node_modules`). Seeded community
+ * plugins still import `RpcId` from that deleted package; one missing specifier
+ * fail-louds the whole web profile. An existing package is left untouched.
+ * A write failure is a no-op so start still proceeds.
+ * @param profileDir - the profile directory (`$DSH_HOME/profiles/<name>`).
+ */
+export function healHostApiproxyRpcStub(profileDir: string): void {
+  const root = join(dirname(profileDir), 'node_modules', HOST_APIPROXY_PACKAGE)
+  const manifestPath = join(root, 'package.json')
+  const rpcPath = join(root, HOST_APIPROXY_RPC_REL)
+  try {
+    mkdirSync(join(root, 'api'), { recursive: true })
+    if (!existsSync(manifestPath)) writeFileSync(manifestPath, HOST_APIPROXY_PACKAGE_JSON)
+    if (!existsSync(rpcPath)) writeFileSync(rpcPath, HOST_APIPROXY_RPC_JS)
+  } catch (error) {
+    // A locked or read-only copy is retried on the next boot; start must proceed.
+    void error
+  }
+}
+
+/** Parse pnpm's `.modules.yaml` as YAML or JSON; a truncated file is left in place. */
+function parseModulesLayout(raw: string): Record<string, unknown> | undefined {
+  let parsed: unknown
+  try {
+    parsed = yaml.load(raw)
+  } catch (error) {
+    // pnpm reports the same unreadable layout on the next install.
+    void error
+    return undefined
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return undefined
+  return parsed as Record<string, unknown>
+}
+
+/** True when `path.relative` treats both store paths as the same directory. */
+function sameStoreDir(left: string, right: string): boolean {
+  return relative(left, right) === ''
+}
+
+/** True when `value` already names the portable modules-relative virtual store. */
+function isPortableVirtualStoreDir(value: string): boolean {
+  const normalized = value.replaceAll('\\', '/')
+  return normalized === PORTABLE_MODULES_VIRTUAL_STORE_DIR || normalized === './pnpm'
+}
+
+/** Append `virtual-store-dir` to the profile `.npmrc` when that key is absent. */
+function ensurePortableVirtualStoreNpmrc(profileDir: string): void {
+  const npmrc = join(profileDir, '.npmrc')
+  const current = existsSync(npmrc) ? readFileSync(npmrc, 'utf8') : ''
+  if (/(?:^|\n)virtual-store-dir\s*=/.test(current)) return
+  const prefix = current === '' || current.endsWith('\n') ? current : `${current}\n`
+  writeFileSync(npmrc, `${prefix}${VIRTUAL_STORE_NPMRC_LINE}\n`)
 }
 
 /**

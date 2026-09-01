@@ -51,6 +51,11 @@ function SidebarFrame({ renderSlot }: FrameProps) {
   return <>{renderSlot('sidebar.workspaces', { wide: true, expandSidebar: () => {} })}</>
 }
 
+function collapseRecents(view: ReturnType<SlotTestRuntime['renderRoot']>): void {
+  const toggle = view.queryByRole('button', { name: '折叠或展开最近会话' })
+  if (toggle !== null) fireEvent.click(toggle)
+}
+
 describe('session rename through the assembled browser', () => {
   it('renames via the row menu: binding.session.rename fires, the dialog closes, the row re-labels from the list', async () => {
     const runtime = await createRuntime()
@@ -74,6 +79,7 @@ describe('session rename through the assembled browser', () => {
     )
     await runtime.mount({ inject: [...inject], apply })
     const view = runtime.renderRoot()
+    collapseRecents(view)
 
     // The current session's group auto-expands; open the row's action menu.
     const row = (await view.findByText('旧标题')).closest('[role="treeitem"]')!
@@ -122,6 +128,7 @@ describe('session rename through the assembled browser', () => {
     await runtime.mount({ inject: [...inject], apply })
     const view = runtime.renderRoot()
     await runtime.flush()
+    collapseRecents(view)
 
     const row = (await view.findByText('旧标题')).closest('[role="treeitem"]')!
     fireEvent.click(within(row as HTMLElement).getByLabelText('会话“旧标题”的操作'))

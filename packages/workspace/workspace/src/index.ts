@@ -12,10 +12,21 @@ import { Context, Service } from '@deepseek-ai/cordis'
 import type { SessionHeader, SessionId } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-session-persistence'
 import type { DomainGlobal, KvTable } from '@deepseek-ai/dsh-storage-domain'
-import { WorkspaceEntity } from './entity.ts'
+import {
+  WorkspaceEntity,
+  WorkspaceFolderConflictError,
+  WorkspaceSessionAccountedError,
+} from './entity.ts'
 import type { WorkspaceEntityHost } from './entity.ts'
+import { extraFolders, ownedPaths, ownsPath } from './folders.ts'
 
-export { WorkspaceMoveInvalidError } from './entity.ts'
+export {
+  WorkspaceFolderConflictError,
+  WorkspaceFolderPrimaryError,
+  WorkspaceFolderUnknownError,
+  WorkspaceMoveInvalidError,
+  WorkspaceSessionAccountedError,
+} from './entity.ts'
 import { realpathNormalize } from './paths.ts'
 import { workspaceDomainSpec } from './spec.ts'
 import type { WorkspaceDomainState, WorkspaceRecord } from './spec.ts'
@@ -24,6 +35,7 @@ import type { Workspace, WorkspaceId as WorkspaceIdBrand } from './types.ts'
 export type { Workspace } from './types.ts'
 export { workspaceDomainState, workspaceRecord, workspaceDomainSpec } from './spec.ts'
 export type { WorkspaceDomainState, WorkspaceRecord } from './spec.ts'
+export { extraFolders, ownedPaths, ownsPath } from './folders.ts'
 export { realpathNormalize } from './paths.ts'
 
 /** Identifies one workspace record (see `src/types.ts` for the brand rationale). */
@@ -109,6 +121,20 @@ export class WorkspaceRegistry extends Service {
       this.sessionPaths.set(id, path)
       this.invalidSessionPaths.delete(id)
     },
+    assertFolderAvailable: (owner, canonical) => {
+      const holder = this.primaryOwner(canonical)
+      if (holder !== undefined && holder.id !== owner) {
+        throw new WorkspaceFolderConflictError(canonical, holder.id)
+      }
+    },
+    assertSessionUnaccounted: (owner, sessionId) => {
+      for (const [id, record] of this.requireTable().entries()) {
+        if (id !== owner && record.sessionIds.includes(sessionId)) {
+          throw new WorkspaceSessionAccountedError(sessionId, id)
+        }
+      }
+    },
+    enqueue: operation => this.enqueueOperation(operation),
   }
 
   constructor(ctx: Context) {
@@ -268,14 +294,26 @@ export class WorkspaceRegistry extends Service {
   }
 
   /**
-   * Resolve by canonical directory path without creating or mutating a
-   * workspace. A missing path rejects during `realpath`; an existing unowned
-   * directory returns `undefined`.
+   * Resolve the workspace whose PRIMARY directory is this canonical path,
+   * without creating or mutating anything. Extra folders are deliberately not
+   * matched: several workspaces may hold one path as an extra folder, so only
+   * a primary claim identifies a single registration. A missing path rejects
+   * during `realpath`; a directory held only as an extra folder returns
+   * `undefined`.
    * @param path - Existing directory path in any spelling.
-   * @returns the workspace owning the canonical path, when one exists.
+   * @returns the workspace whose primary is the canonical path, when one exists.
    */
   async resolveByPath(path: string): Promise<Workspace | undefined> {
-    const canonical = await realpathNormalize(path)
+    return this.primaryOwner(await realpathNormalize(path))
+  }
+
+  /**
+   * The single owner an already-canonical path can have: the workspace whose
+   * primary directory it is.
+   * @param canonical - Already-canonical directory path.
+   * @returns the primary holder, or `undefined` when no workspace claims it.
+   */
+  private primaryOwner(canonical: string): WorkspaceEntity | undefined {
     for (const entity of this.entities.values()) {
       if (entity.path === canonical) return entity
     }
@@ -283,9 +321,8 @@ export class WorkspaceRegistry extends Service {
   }
 
   private async createCanonical(canonical: string, title?: string): Promise<WorkspaceEntity> {
-    for (const entity of this.entities.values()) {
-      if (entity.path === canonical) return entity
-    }
+    const owner = this.primaryOwner(canonical)
+    if (owner !== undefined) return owner
 
     const workspaceName = title ?? basename(canonical)
     const table = this.requireTable()
@@ -294,6 +331,7 @@ export class WorkspaceRegistry extends Service {
     const now = new Date().toISOString()
     const record: WorkspaceRecord = {
       path: canonical,
+      folders: [],
       title: workspaceName,
       sessionIds: [],
       createdAt: now,
@@ -447,6 +485,11 @@ export class WorkspaceRegistry extends Service {
       byPath.set(record.path, id)
       for (const sessionId of record.sessionIds) accounted.set(sessionId, id)
     }
+    for (const [id, record] of table.entries()) {
+      for (const folder of extraFolders(record)) {
+        if (!byPath.has(folder)) byPath.set(folder, id)
+      }
+    }
 
     for (const group of groups) {
       let id = byPath.get(group.path)
@@ -459,6 +502,7 @@ export class WorkspaceRegistry extends Service {
         const createdAt = new Date(group.newestAt).toISOString()
         const record: WorkspaceRecord = {
           path: group.path,
+          folders: [],
           title: basename(group.path),
           sessionIds,
           createdAt,
@@ -526,17 +570,26 @@ export class WorkspaceRegistry extends Service {
       )
     }
 
-    const paths = new Map<string, WorkspaceId>()
+    const primaries = new Map<string, WorkspaceId>()
     const accounted = new Map<SessionId, WorkspaceId>()
     for (const [id, record] of table.entries()) {
-      const pathHolder = paths.get(record.path)
-      if (pathHolder !== undefined) {
+      const primaryHolder = primaries.get(record.path)
+      if (primaryHolder !== undefined) {
         throw new Error(
-          `workspace domain is inconsistent: path '${record.path}' is claimed `
-          + `by both workspace '${pathHolder}' and workspace '${id}'`,
+          `workspace domain is inconsistent: primary path '${record.path}' is claimed `
+          + `by both workspace '${primaryHolder}' and workspace '${id}'`,
         )
       }
-      paths.set(record.path, id)
+      primaries.set(record.path, id)
+      const owned = new Set<string>()
+      for (const path of ownedPaths(record)) {
+        if (owned.has(path)) {
+          throw new Error(
+            `workspace domain is inconsistent: workspace '${id}' claims path '${path}' twice`,
+          )
+        }
+        owned.add(path)
+      }
       for (const sessionId of record.sessionIds) {
         const holder = accounted.get(sessionId)
         if (holder !== undefined) {
@@ -600,10 +653,10 @@ export class WorkspaceRegistry extends Service {
       const record = this.requireTable().get(entity.id) as WorkspaceRecord
       for (const sessionId of record.sessionIds) {
         const path = this.sessionPaths.get(sessionId)
-        if (path === record.path) continue
+        if (path !== undefined && ownsPath(record, path)) continue
         const reason = this.invalidSessionPaths.get(sessionId)
           ?? (this.headers.has(sessionId)
-            ? `canonical cwd '${path}' differs from workspace path '${record.path}'`
+            ? `canonical cwd '${path}' is not an owned workspace directory`
             : 'session header is missing')
         this.ctx.logger.warn(
           `workspace '${entity.id}' filtered session '${sessionId}' from membership: ${reason}`,

@@ -13,7 +13,54 @@ import type { SessionHeader, SessionId } from '@deepseek-ai/dsh-session'
 import type { KvTable } from '@deepseek-ai/dsh-storage-domain'
 import type { WorkspaceRecord } from './spec.ts'
 import type { Workspace, WorkspaceId } from './types.ts'
+import { extraFolders, ownsPath } from './folders.ts'
 import { realpathNormalize } from './paths.ts'
+
+/** setPrimaryFolder named a directory that is already another workspace's primary. */
+export class WorkspaceFolderConflictError extends Error {
+  /**
+   * @param path - Canonical directory that is already another workspace's primary.
+   * @param ownerId - Workspace that already holds the path as its primary.
+   */
+  constructor(readonly path: string, readonly ownerId: WorkspaceId) {
+    super(`cannot set primary folder '${path}': it is already the primary directory of workspace '${ownerId}'`)
+    this.name = 'WorkspaceFolderConflictError'
+  }
+}
+
+/** setPrimaryFolder named a path this workspace does not own. */
+export class WorkspaceFolderUnknownError extends Error {
+  /**
+   * @param path - Canonical (or stored) directory the caller tried to promote.
+   */
+  constructor(readonly path: string) {
+    super(`cannot set primary folder '${path}': it is not owned by this workspace`)
+    this.name = 'WorkspaceFolderUnknownError'
+  }
+}
+
+/** removeFolder named the workspace primary directory. */
+export class WorkspaceFolderPrimaryError extends Error {
+  /**
+   * @param path - Canonical primary directory the caller tried to remove.
+   */
+  constructor(readonly path: string) {
+    super(`cannot remove folder '${path}': it is the workspace primary directory`)
+    this.name = 'WorkspaceFolderPrimaryError'
+  }
+}
+
+/** attachSession named a session another workspace already accounts. */
+export class WorkspaceSessionAccountedError extends Error {
+  /**
+   * @param sessionId - Session that is already accounted elsewhere.
+   * @param ownerId - Workspace whose durable account holds the session.
+   */
+  constructor(readonly sessionId: SessionId, readonly ownerId: WorkspaceId) {
+    super(`cannot attach session '${sessionId}': already accounted by workspace '${ownerId}'`)
+    this.name = 'WorkspaceSessionAccountedError'
+  }
+}
 
 /** An insertSessionBefore request named a session or anchor not on the account (storage failures stay plain errors). */
 export class WorkspaceMoveInvalidError extends Error {
@@ -60,6 +107,31 @@ export interface WorkspaceEntityHost {
    * @param path - Canonical existing directory from the immutable header cwd.
    */
   rememberSessionPath(id: SessionId, path: string): void
+
+  /**
+   * Reject when another workspace already holds this canonical directory as
+   * its PRIMARY. Extra folders are shareable, so only a primary claim conflicts.
+   * @param owner - Workspace that wants to hold the path as its primary.
+   * @param canonical - Already-canonical directory path.
+   */
+  assertFolderAvailable(owner: WorkspaceId, canonical: string): void
+
+  /**
+   * Reject when another workspace's durable account already holds this session.
+   * @param owner - Workspace that wants to account the session.
+   * @param sessionId - Session about to be attached.
+   */
+  assertSessionUnaccounted(owner: WorkspaceId, sessionId: SessionId): void
+
+  /**
+   * Run `operation` on the registry write queue. Primary claims and session
+   * accounting are cross-workspace checks and must not interleave with
+   * create/delete or another folder mutation. Must not be called from another
+   * queued registry operation: the queue is not reentrant.
+   * @param operation - Work that claims or drops a folder.
+   * @returns the operation result.
+   */
+  enqueue<T>(operation: () => Promise<T>): Promise<T>
 }
 
 /** Chain-slot abort sentinel thrown by the update fn when the record needs no change; only `mutate` observes it. */
@@ -86,6 +158,10 @@ export class WorkspaceEntity implements Workspace {
     return this.record.path
   }
 
+  get folders(): readonly string[] {
+    return extraFolders(this.record)
+  }
+
   get title(): string {
     return this.record.title
   }
@@ -99,11 +175,78 @@ export class WorkspaceEntity implements Workspace {
   }
 
   get sessionIds(): readonly SessionId[] {
-    return this.record.sessionIds.filter(id => this.host.sessionPath(id) === this.record.path)
+    return this.record.sessionIds.filter((id) => {
+      const path = this.host.sessionPath(id)
+      return path !== undefined && ownsPath(this.record, path)
+    })
   }
 
   async setTitle(title: string): Promise<void> {
     await this.mutate(record => ({ ...record, title }))
+  }
+
+  async addFolder(path: string): Promise<void> {
+    const canonical = await realpathNormalize(path)
+    if (!(await stat(canonical)).isDirectory()) {
+      throw new Error(`cannot add folder '${canonical}' to workspace '${this.record.path}': path is not a directory`)
+    }
+    await this.host.enqueue(async () => {
+      if (ownsPath(this.record, canonical)) return
+      await this.mutate((record) => {
+        if (ownsPath(record, canonical)) return record
+        return { ...record, folders: [...extraFolders(record), canonical] }
+      })
+    })
+  }
+
+  async removeFolder(path: string): Promise<void> {
+    let canonical: string
+    try {
+      canonical = await realpathNormalize(path)
+    } catch {
+      // The extra folder may already be missing; match the stored spelling.
+      canonical = path
+    }
+    await this.host.enqueue(async () => {
+      if (canonical === this.record.path) throw new WorkspaceFolderPrimaryError(canonical)
+      await this.mutate((record) => {
+        const folders = extraFolders(record)
+        if (!folders.includes(canonical) && !folders.includes(path)) return record
+        return {
+          ...record,
+          folders: folders.filter(folder => folder !== canonical && folder !== path),
+        }
+      })
+    })
+  }
+
+  async setPrimaryFolder(path: string): Promise<void> {
+    let canonical: string
+    try {
+      canonical = await realpathNormalize(path)
+    } catch {
+      // The extra folder may already be missing; match the stored spelling.
+      canonical = path
+    }
+    await this.host.enqueue(async () => {
+      if (canonical === this.record.path || path === this.record.path) return
+      const folders = extraFolders(this.record)
+      if (!folders.includes(canonical) && !folders.includes(path)) {
+        throw new WorkspaceFolderUnknownError(canonical)
+      }
+      this.host.assertFolderAvailable(this.id, folders.includes(canonical) ? canonical : path)
+      await this.mutate((record) => {
+        if (canonical === record.path || path === record.path) return record
+        const extras = extraFolders(record)
+        const match = extras.includes(canonical) ? canonical : extras.includes(path) ? path : undefined
+        if (match === undefined) throw new WorkspaceFolderUnknownError(canonical)
+        return {
+          ...record,
+          path: match,
+          folders: [record.path, ...extras.filter(folder => folder !== match)],
+        }
+      })
+    })
   }
 
   async attachSession(sessionId: SessionId): Promise<void> {
@@ -135,7 +278,7 @@ export class WorkspaceEntity implements Workspace {
           + `its cwd '${header.cwd}' is not a directory`,
         )
       }
-      if (cwd !== this.record.path) {
+      if (!ownsPath(this.record, cwd)) {
         throw new Error(
           `cannot attach session '${sessionId}' to workspace '${this.record.path}': `
           + `its cwd resolves to '${cwd}'`,
@@ -143,9 +286,14 @@ export class WorkspaceEntity implements Workspace {
       }
       this.host.rememberSessionPath(sessionId, cwd)
     }
-    await this.mutate(record => record.sessionIds.includes(sessionId)
-      ? record
-      : { ...record, sessionIds: [sessionId, ...record.sessionIds] })
+    await this.host.enqueue(async () => {
+      if (!this.record.sessionIds.includes(sessionId)) {
+        this.host.assertSessionUnaccounted(this.id, sessionId)
+      }
+      await this.mutate(record => record.sessionIds.includes(sessionId)
+        ? record
+        : { ...record, sessionIds: [sessionId, ...record.sessionIds] })
+    })
   }
 
   async insertSessionBefore(sessionId: SessionId, beforeSessionId?: SessionId): Promise<void> {
@@ -204,9 +352,10 @@ export class WorkspaceEntity implements Workspace {
     try {
       next = await this.host.table().update(this.id, (current) => {
         const changed = fn(current)
-        const sessionIds = changed.sessionIds.filter(
-          id => this.host.sessionPath(id) === changed.path,
-        )
+        const sessionIds = changed.sessionIds.filter((id) => {
+          const path = this.host.sessionPath(id)
+          return path !== undefined && ownsPath(changed, path)
+        })
         if (changed === current && sessionIds.length === current.sessionIds.length) {
           throw unchangedSentinel
         }

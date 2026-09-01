@@ -40,4 +40,4 @@ Status: implemented
 
 ## 影响
 
-`trustedHosts` 部署下的 LAN 客户端已经完全无法渲染设置页；配置表层就是回环。注册了 settings namespace 的插件，在它同时注册可配置提供方之前不会变得可在 Web 上配置——这是刻意的，也正是 `settings-not-exposed` 要在消息里点明这条边界的原因。`SettingsDescriptor` 新增了必填的 `revision`，因此以编程方式构造 descriptor 形状值的地方都必须提供它；`settings/document-updated` 是一个新事件，提供方侧的任何 listener 现在都可以观察它。忽略 `expectedRevision` 的客户端，其后写胜出的语义完全不变。延后事项：fail-closed 的协议 describe（连同它所承载的 `headers` 与信封净化工作），以及一套不含可执行代码的浏览器 schema 协议。
+受信任 LAN 源会把配置持久化到 Host；原生打开文档仍限回环（[受信任 LAN 配置](2026-08-20-trusted-lan-configuration-plane.zh.md)）。注册了 settings namespace 的插件，在它同时注册可配置提供方之前不会变得可在 Web 上配置——这是刻意的，也正是 `settings-not-exposed` 要在消息里点明这条边界的原因。`SettingsDescriptor` 新增了必填的 `revision`，因此以编程方式构造 descriptor 形状值的地方都必须提供它；`settings/document-updated` 是一个新事件，提供方侧的任何 listener 现在都可以观察它。忽略 `expectedRevision` 的客户端，其后写胜出的语义完全不变。延后事项：fail-closed 的协议 describe（连同它所承载的 `headers` 与信封净化工作），以及一套不含可执行代码的浏览器 schema 协议。

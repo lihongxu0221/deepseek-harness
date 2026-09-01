@@ -9,14 +9,17 @@
 
 import { spawn, type StdioOptions } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
+import { resolveDialogNodeExecutable } from './win32-dialog-node.ts'
 import type { Win32DialogWorkerData } from './win32-dialog-worker.ts'
 
 /**
  * Spawn the dialog child process. Built consumers launch the bundled CJS
- * entry next to this module under plain node; unbuilt (source) consumers
- * bootstrap tsx first, mirroring the dsh CLI's source launch. The dialog is
- * the child's first window, so Windows activates it without a foreground
- * call.
+ * entry next to this module under a Node that can execute scripts; unbuilt
+ * (source) consumers bootstrap tsx first, mirroring the dsh CLI's source
+ * launch. A packaged SEA exe is not `node`, so the built arm resolves a
+ * Node binary or falls back to `process.execPath` for a script-aware host.
+ * The dialog is the child's first window, so Windows activates it without a
+ * foreground call.
  * @param data - the child payload (dialog title).
  * @returns the spawned child process.
  */
@@ -25,7 +28,7 @@ export function spawnDialogWorker(data: Win32DialogWorkerData): ReturnType<typeo
   const stdio: StdioOptions = ['ignore', 'inherit', 'inherit', 'ipc']
   /* v8 ignore next 3 -- the built-output arm: tests always run unbuilt (src/) */
   if (!import.meta.url.endsWith('.ts')) {
-    return spawn(process.execPath, [fileURLToPath(new URL('./worker.cjs', import.meta.url))], { env, stdio, windowsHide: true })
+    return spawn(resolveDialogNodeExecutable(process.execPath, env), [fileURLToPath(new URL('./worker.cjs', import.meta.url))], { env, stdio, windowsHide: true })
   }
   return spawn(process.execPath, ['--import', import.meta.resolve('tsx/esm'), fileURLToPath(new URL('./win32-dialog-worker.ts', import.meta.url))], { env, stdio, windowsHide: true })
 }

@@ -16,11 +16,12 @@ import css from './HoverCard.module.css'
  * included in the card's accessible name.
  * @param props.copyLabel - localized accessible activation-label prefix.
  * @param props.copiedLabel - localized visible success label.
+ * @param props.className - optional extra class on the portaled card.
  * @returns anchor wrapper with the conditional portaled card.
  */
 export function HoverCard({
   anchor, content, openDelayMs = 500, disabled = false,
-  copyText, copyLabel, copiedLabel,
+  copyText, copyLabel, copiedLabel, className,
 }: {
   anchor: ReactNode
   content: ReactNode
@@ -29,6 +30,7 @@ export function HoverCard({
   copyText?: string | undefined
   copyLabel: string
   copiedLabel: string
+  className?: string | undefined
 }) {
   const rootRef = useRef<HTMLSpanElement>(null)
   const cardRef = useRef<HTMLDivElement>(null)
@@ -139,7 +141,7 @@ export function HoverCard({
   const card = open && pos !== null && (
     <div
       ref={cardRef}
-      className={`${css.card}${copyable ? ` ${css.copyable}` : ''}${copied ? ` ${css.feedback}` : ''}`}
+      className={`${css.card}${copyable ? ` ${css.copyable}` : ''}${copied ? ` ${css.feedback}` : ''}${className !== undefined && className !== '' ? ` ${className}` : ''}`}
       style={{ ...pos, minHeight: copied && copyHeightRef.current !== null ? copyHeightRef.current : undefined }}
       role={copyable ? 'button' : undefined}
       tabIndex={copyable ? 0 : undefined}

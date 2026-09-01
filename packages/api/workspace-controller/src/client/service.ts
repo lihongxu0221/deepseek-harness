@@ -74,6 +74,27 @@ export interface IWorkspaces {
     sessionId: SessionId,
     beforeSessionId?: SessionId,
   ): Promise<WorkspaceView>
+  /**
+   * Add an extra folder to a Workspace.
+   * @param workspaceId - owning Workspace.
+   * @param path - existing host directory.
+   * @returns the changed Workspace.
+   */
+  addFolder(workspaceId: WorkspaceId, path: string): Promise<WorkspaceView>
+  /**
+   * Drop an extra folder from a Workspace. The directory is kept.
+   * @param workspaceId - owning Workspace.
+   * @param path - extra folder to drop.
+   * @returns the changed Workspace.
+   */
+  removeFolder(workspaceId: WorkspaceId, path: string): Promise<WorkspaceView>
+  /**
+   * Promote an owned extra folder to the Workspace primary directory.
+   * @param workspaceId - owning Workspace.
+   * @param path - extra folder to promote.
+   * @returns the changed Workspace.
+   */
+  setPrimaryFolder(workspaceId: WorkspaceId, path: string): Promise<WorkspaceView>
 }
 
 /** Owns the bare Workspace snapshot and Workspace-only commands. */
@@ -123,6 +144,24 @@ export class WorkspaceController extends Service implements IWorkspaces {
   ): Promise<WorkspaceView> {
     const result = await this.model.insertSessionBefore(workspaceId, sessionId, beforeSessionId)
     if (!result.ok) throw commandError('move', result.error)
+    return result.value.workspace
+  }
+
+  async addFolder(workspaceId: WorkspaceId, path: string): Promise<WorkspaceView> {
+    const result = await this.model.addFolder(workspaceId, path)
+    if (!result.ok) throw commandError('add folder', result.error)
+    return result.value.workspace
+  }
+
+  async removeFolder(workspaceId: WorkspaceId, path: string): Promise<WorkspaceView> {
+    const result = await this.model.removeFolder(workspaceId, path)
+    if (!result.ok) throw commandError('remove folder', result.error)
+    return result.value.workspace
+  }
+
+  async setPrimaryFolder(workspaceId: WorkspaceId, path: string): Promise<WorkspaceView> {
+    const result = await this.model.setPrimaryFolder(workspaceId, path)
+    if (!result.ok) throw commandError('set primary folder', result.error)
     return result.value.workspace
   }
 }

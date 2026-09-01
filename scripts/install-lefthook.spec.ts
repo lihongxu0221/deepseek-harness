@@ -108,6 +108,12 @@ if (shouldFail) process.exit(77)
 }
 
 function installFakeLefthook(root: string): void {
+  const lefthookDirectory = join(root, 'node_modules/lefthook')
+  mkdirSync(lefthookDirectory, { recursive: true })
+  writeFileSync(join(lefthookDirectory, 'package.json'), `${JSON.stringify({
+    name: 'lefthook',
+    bin: { lefthook: 'bin/lefthook' },
+  })}\n`)
   const binDirectory = join(root, 'node_modules/.bin')
   mkdirSync(binDirectory, { recursive: true })
   writeFileSync(join(binDirectory, 'fake-lefthook.mjs'), fakeLefthookSource())
@@ -138,6 +144,7 @@ function createFixture(names: { main?: string; linked?: string } = {}): Fixture 
     ...process.env,
     CI: 'false',
     GITHUB_ACTIONS: 'false',
+    LEFTHOOK: undefined,
     GIT_AUTHOR_EMAIL: 'hooks@example.test',
     GIT_AUTHOR_NAME: 'Hooks Test',
     GIT_COMMITTER_EMAIL: 'hooks@example.test',
@@ -220,8 +227,9 @@ describe('worktree-local Lefthook installer', { timeout: 90_000 }, () => {
   for (const [label, extraEnv] of [
     ['CI', { CI: 'true' }],
     ['GitHub Actions', { GITHUB_ACTIONS: 'true' }],
+    ['LEFTHOOK=0', { LEFTHOOK: '0' }],
   ] satisfies [string, NodeJS.ProcessEnv][]) {
-    it(`skips hook installation when ${label} marks an automated job`, async () => {
+    it(`skips hook installation when ${label} disables contributor hooks`, async () => {
       const fixture = createFixture()
       const common = commonDirectory(fixture)
       const missingInclude = join(fixture.container, 'missing-ci-credentials.gitconfig')
@@ -244,6 +252,16 @@ describe('worktree-local Lefthook installer', { timeout: 90_000 }, () => {
       ]).status).toBe(1)
     })
   }
+
+  it('skips hook installation when lefthook is not installed', async () => {
+    const fixture = createFixture()
+    rmSync(join(fixture.main, 'node_modules', 'lefthook'), { recursive: true, force: true })
+
+    const result = await runInstaller(fixture, fixture.main)
+
+    expect(result.status, result.stderr).toBe(0)
+    expect(existsSync(hooksPath(fixture, fixture.main))).toBe(false)
+  })
 
   it('isolates main and linked worktrees without changing legacy common hooks', async () => {
     const fixture = createFixture()

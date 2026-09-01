@@ -26,7 +26,7 @@ export interface SettingsDescribeView {
 /** Mirror state every derived settings surface renders from. */
 export interface SettingsMirrorSnapshot {
   /**
-   * `unavailable` is the terminal non-loopback state; `ready` persists across
+   * `unavailable` is the test-only memory-mode stand-in; `ready` persists across
    * later failed refreshes (the held view keeps serving); `idle` means no
    * answer is held and no read is running, so `ensure` will start one.
    */
@@ -79,7 +79,7 @@ export class SettingsDescribeMirror implements SettingsDescribeFace {
   /**
    * @param ctx - the providing plugin's context, whose `remote.settings`
    * namespace answers the describe read.
-   * @param persistence - client-selected Host persistence; non-loopback pages may remain process-local.
+   * @param persistence - `host` reads the wire; `memory` is the test-only unavailable stand-in.
    */
   constructor(
     private readonly ctx: ClientContext,

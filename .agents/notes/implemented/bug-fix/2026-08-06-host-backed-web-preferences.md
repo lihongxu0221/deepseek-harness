@@ -18,7 +18,7 @@ The owning Host halves register three schemas: optional `locale.preference` (`zh
 
 User changes update the live service synchronously and queue a `settings.mutate` path operation through `scope.set`. The scope serializes gestures, sends the latest known namespace revision as `expectedRevision`, records every successful revision, and lets only the latest write settlement republish live state. A rejected or failed latest write reloads Host state. Disposal rejects new work, skips queued operations, suppresses publication by the in-flight operation, and waits for that operation to settle before the plugin reaches quiescence.
 
-The Client keeps Host persistence disabled on non-loopback pages, so their preferences remain process-local even though Connection authenticates the complete API. Dynamic third-party theme ids remain in-process extensions outside the built-in Host schema; removing one resets the live registry without replacing the last durable built-in preference.
+The Client uses Host persistence on trusted LAN origins as well as loopback ([trusted LAN configuration](../architecture/2026-08-20-trusted-lan-configuration-plane.md)). Dynamic third-party theme ids remain in-process extensions outside the built-in Host schema; removing one resets the live registry without replacing the last durable built-in preference.
 
 ## Alternatives considered
 
@@ -36,7 +36,7 @@ The Client keeps Host persistence disabled on non-loopback pages, so their prefe
 
 ## Consequences
 
-Appearance, Language, and busy-Enter choices follow the DSH user home across reloads, ports, and loopback origins. Direct edits to `settings.yaml` converge through the existing invalidation stream, while legacy `dsh.theme`, `dsh.locale`, and `dsh.conversation.busyEnter` entries are neither read nor written.
+Appearance, Language, and busy-Enter choices follow the DSH user home across reloads, ports, loopback origins, and trusted LAN origins. Direct edits to `settings.yaml` converge through the existing invalidation stream, while legacy `dsh.theme`, `dsh.locale`, and `dsh.conversation.busyEnter` entries are neither read nor written.
 
 Boot may briefly show the domain default before the background read settles. A transient read failure keeps that default or the last good in-process value; reconnect retries. A write rejection can visibly restore the durable preference after the immediate local change.
 

@@ -39,7 +39,7 @@ kind: "package-library"
 
 ### 共享模块表
 
-`PLATFORM_MODULES`（位于 `src/platform.ts`）列出外壳播种的共享模块——React、Cordis 与静态 UI 库——并与 `PRELOADED_CLIENT_EXTERNALS`（parser 预载的 runtime 行）一起定义每个动态 bundle 解析所依据的隐式 external 基座。`dsh.client.external` 只添加基座之外的精确请求；参见[共享模块与模块图](../AGENTS.md#shared-modules-and-the-module-graph)。
+`PLATFORM_MODULES`（位于 `src/platform.ts`）列出外壳播种的共享模块——React、Cordis 与静态 UI 库——并与 `PRELOADED_CLIENT_EXTERNALS`（parser 预载的 runtime 行）一起定义每个动态 bundle 解析所依据的隐式 external 基座。`getStaticModules()` 还会把 `@deepseek-ai/dsh-client-runtime` 和 `@deepseek-ai/dsh-client-runtime/client` 播到同一份 `dsh-client-store` 实例上，让仍在 require 已删除 Runtime 包的社区插件拿到 `createSnapshotStore` 和 `defineStore`。这些名字不是平台词；第一方 bundle 不得请求它们。`dsh.client.external` 只添加基座之外的精确请求；参见[共享模块与模块图](../AGENTS.md#shared-modules-and-the-module-graph)。
 
 ### 配置
 

@@ -113,6 +113,58 @@ describe('WorkspaceController commands', () => {
       .rejects.toMatchObject({ code: 'workspace/not-found' })
   })
 
+  it('projects extra folders and maps folder mutations to stable failures', async () => {
+    const { controller, root } = await harness()
+    const first = await controller.create({ path: stageDir(root, 'first') })
+    const second = await controller.create({ path: stageDir(root, 'second') })
+    const extra = stageDir(root, 'extra')
+    const workspaceId = first.workspace.workspaceId
+
+    await expect(controller.addFolder({ workspaceId, path: extra })).resolves.toMatchObject({
+      workspace: { workspaceId, path: first.workspace.path, folders: [extra] },
+    })
+    await expect(controller.addFolder({ workspaceId, path: extra })).resolves.toMatchObject({
+      workspace: { folders: [extra] },
+    })
+    await expect(controller.addFolder({ workspaceId, path: join(root, 'missing') })).rejects.toMatchObject({
+      code: 'workspace/invalid-path',
+      details: { path: join(root, 'missing') },
+    })
+    await expect(controller.removeFolder({ workspaceId, path: first.workspace.path })).rejects.toMatchObject({
+      code: 'workspace/folder-primary',
+      details: { path: first.workspace.path },
+    })
+    await expect(controller.setPrimaryFolder({ workspaceId, path: second.workspace.path })).rejects.toMatchObject({
+      code: 'workspace/folder-unknown',
+      details: { path: second.workspace.path },
+    })
+    await controller.addFolder({ workspaceId: second.workspace.workspaceId, path: first.workspace.path })
+    await expect(controller.setPrimaryFolder({
+      workspaceId: second.workspace.workspaceId,
+      path: first.workspace.path,
+    })).rejects.toMatchObject({
+      code: 'workspace/folder-conflict',
+      details: { path: first.workspace.path, ownerId: workspaceId },
+    })
+    await controller.removeFolder({ workspaceId: second.workspace.workspaceId, path: first.workspace.path })
+
+    await controller.addFolder({ workspaceId: second.workspace.workspaceId, path: extra })
+    await expect(controller.setPrimaryFolder({
+      workspaceId: second.workspace.workspaceId,
+      path: extra,
+    })).resolves.toMatchObject({
+      workspace: { path: extra, folders: [second.workspace.path] },
+    })
+    await expect(controller.removeFolder({
+      workspaceId: second.workspace.workspaceId,
+      path: second.workspace.path,
+    })).resolves.toMatchObject({
+      workspace: { path: extra, folders: [] },
+    })
+    await expect(controller.addFolder({ workspaceId: 'missing' as WorkspaceId, path: extra }))
+      .rejects.toMatchObject({ code: 'workspace/not-found' })
+  })
+
   it('preserves Remote failures and propagates unexpected registry failures', async () => {
     const { controller, ctx, root } = await harness()
     const remoteFailure = new RemoteError('fixture/failure', 'already mapped', {})

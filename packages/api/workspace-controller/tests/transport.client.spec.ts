@@ -19,6 +19,7 @@ import {
   type WorkspaceRemote,
 } from '../src/client/index.ts'
 import type {
+  WorkspaceAddFolderRequest,
   WorkspaceArchiveSessionRequest,
   WorkspaceArchiveValue,
   WorkspaceCreateRequest,
@@ -29,7 +30,9 @@ import type {
   WorkspaceInsertBeforeRequest,
   WorkspaceInsertSessionBeforeRequest,
   WorkspaceOrderValue,
+  WorkspaceRemoveFolderRequest,
   WorkspaceRenameRequest,
+  WorkspaceSetPrimaryFolderRequest,
   WorkspaceId,
   WorkspaceValue,
   WorkspaceView,
@@ -140,6 +143,18 @@ class ScriptedWorkspaceRemote implements WorkspaceRemote {
     throw new Error('unused')
   }
 
+  addFolder(_request: WorkspaceAddFolderRequest): Promise<RemoteResult<WorkspaceValue>> {
+    throw new Error('unused')
+  }
+
+  removeFolder(_request: WorkspaceRemoveFolderRequest): Promise<RemoteResult<WorkspaceValue>> {
+    throw new Error('unused')
+  }
+
+  setPrimaryFolder(_request: WorkspaceSetPrimaryFolderRequest): Promise<RemoteResult<WorkspaceValue>> {
+    throw new Error('unused')
+  }
+
   async *follow(signal = new AbortController().signal): AsyncIterable<WorkspaceFollowFrame> {
     const generation = this.generations[this.calls++]
     if (generation === undefined) throw new Error('no scripted Workspace generation')
@@ -178,6 +193,18 @@ class CommandWorkspaceRemote implements WorkspaceRemote {
 
   readonly archiveSession = vi.fn<WorkspaceRemote['archiveSession']>(request => Promise.resolve(remoteOk({
     archivedSessionIds: [request.sessionId],
+  })))
+
+  readonly addFolder = vi.fn<WorkspaceRemote['addFolder']>(request => Promise.resolve(remoteOk({
+    workspace: workspace(String(request.workspaceId), { folders: [request.path] }),
+  })))
+
+  readonly removeFolder = vi.fn<WorkspaceRemote['removeFolder']>(request => Promise.resolve(remoteOk({
+    workspace: workspace(String(request.workspaceId), { folders: [] }),
+  })))
+
+  readonly setPrimaryFolder = vi.fn<WorkspaceRemote['setPrimaryFolder']>(request => Promise.resolve(remoteOk({
+    workspace: workspace(String(request.workspaceId), { path: request.path, folders: [] }),
   })))
 
   async *follow(_signal?: AbortSignal): AsyncIterable<WorkspaceFollowFrame> {}
@@ -462,6 +489,9 @@ describe('WorkspaceController', () => {
       sessionIds: ['session'],
     })
     await expect(controller.archiveSession(sid('session'))).resolves.toBeUndefined()
+    await expect(controller.addFolder(wid('one'), '/extra')).resolves.toMatchObject({ folders: ['/extra'] })
+    await expect(controller.setPrimaryFolder(wid('one'), '/extra')).resolves.toMatchObject({ path: '/extra' })
+    await expect(controller.removeFolder(wid('one'), '/extra')).resolves.toMatchObject({ folders: [] })
     await expect(controller.delete(wid('one'))).resolves.toBeUndefined()
   })
 
@@ -490,5 +520,14 @@ describe('WorkspaceController', () => {
     )))
     await expect(controller.insertSessionBefore(wid('missing'), sid('session')))
       .rejects.toThrow('workspace move failed: workspace/move-invalid: invalid move')
+    remote.addFolder.mockResolvedValueOnce(remoteFailure(new RemoteError('workspace/invalid-path', 'missing folder', { path: '/gone' })))
+    await expect(controller.addFolder(wid('one'), '/gone'))
+      .rejects.toThrow('workspace add folder failed: workspace/invalid-path: missing folder')
+    remote.removeFolder.mockResolvedValueOnce(remoteFailure(new RemoteError('workspace/folder-primary', 'primary', { path: '/work/one' })))
+    await expect(controller.removeFolder(wid('one'), '/work/one'))
+      .rejects.toThrow('workspace remove folder failed: workspace/folder-primary: primary')
+    remote.setPrimaryFolder.mockResolvedValueOnce(remoteFailure(new RemoteError('workspace/folder-unknown', 'unknown', { path: '/gone' })))
+    await expect(controller.setPrimaryFolder(wid('one'), '/gone'))
+      .rejects.toThrow('workspace set primary folder failed: workspace/folder-unknown: unknown')
   })
 })

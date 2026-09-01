@@ -83,6 +83,17 @@ describe('profile dialects', () => {
     expect(landlockProfileArgs(WW)).toEqual(['--ro', '/', '--rw', '/dev/null', '--rw', '/tmp', '--rw', '/ws'])
   })
 
+  it('bwrap and landlock workspace-write bind extra folder roots', () => {
+    const extra: SandboxPolicy = { mode: 'workspace-write', workspaceRoot: '/ws', extraRoots: ['/extra'] }
+    expect(bwrapProfileArgs(extra)).toEqual([
+      '--ro-bind', '/', '/', '--dev', '/dev', '--proc', '/proc', '--die-with-parent',
+      '--tmpfs', '/tmp', '--bind', '/ws', '/ws', '--bind', '/extra', '/extra',
+    ])
+    expect(landlockProfileArgs(extra)).toEqual([
+      '--ro', '/', '--rw', '/dev/null', '--rw', '/tmp', '--rw', '/ws', '--rw', '/extra',
+    ])
+  })
+
   it('seatbelt read-only: allow-default with every file write denied except the /dev/null literal', () => {
     expect(seatbeltProfileArgs(RO)).toEqual(['-p', SEATBELT_RO_PROFILE])
   })

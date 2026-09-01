@@ -14,7 +14,7 @@ Status: implemented
 
 会话统计挂在 `'conversation.composer.dock'`（位于 `'conversation.input.dock'` 之上）。InputBar 的 textarea 在宿主内以 `{ passive: false }` 链式处理 `wheel`：在限高 textarea 仍能沿该方向滚动时保留原生手势；仅在自身边缘才 `preventDefault` 并将 `deltaY` 施加到宿主。
 
-Chat 历史前插通过稳定的已渲染 node／call 身份跟随读者意图，而不是使用整个滚动容器的高度差。分页开始时，`ChatView` 记录第一个可见的 `data-chat-anchor-key` 及其相对滚动容器的顶部位置；请求在途期间，每次读者滚动都会重新选择当前可见的稳定锚点；页面到达后则按该行矩形的前后差值补偿。到达底部或追加读者自己的消息会取消分页锚点，因此迟到的页面不能把视图从最新内容拉走。贴底跟随采用存储状态，而不是原始滚动几何状态；读者输入如何被识别——即以与设备无关的方式偏离由最近一次交付或写入的 `scrollTop` 构成的 observed-top ledger——由[读者滚动归因笔记](2026-08-06-reader-scroll-attribution-observed-top-ledger.zh.md)负责。`ChatView` 的单个 `ResizeObserver` 只会在贴底所有权仍保持时跟随流式输出、工具展开与草稿尺寸变化，且每个分片不会触发第二次滚动写入。
+Chat 历史前插通过稳定的已渲染 node／call 身份跟随读者意图，而不是使用整个滚动容器的高度差。在普通流路径上，分页开始时 `ChatView` 记录第一个可见的 `data-chat-anchor-key` 及其相对滚动容器的顶部位置；请求在途期间，每次读者滚动都会重新选择当前可见的稳定锚点；页面到达后则按该行矩形的前后差值补偿。而在虚拟账本上不存在这份手动锚点，前置稳定性由虚拟器的末端锚点负责（[有界账本笔记](../architecture/2026-08-23-bounded-chat-ledger-and-history-pages.zh.md)）。到达底部或追加读者自己的消息会取消分页锚点，因此迟到的页面不能把视图从最新内容拉走。贴底跟随采用存储状态，而不是原始滚动几何状态；读者输入如何被识别——即以与设备无关的方式偏离由最近一次交付或写入的 `scrollTop` 构成的 observed-top ledger——由[读者滚动归因笔记](2026-08-06-reader-scroll-attribution-observed-top-ledger.zh.md)负责。`ChatView` 的单个 `ResizeObserver` 只会在贴底所有权仍保持时跟随流式输出、工具展开与草稿尺寸变化，且每个分片不会触发第二次滚动写入。
 
 ## 考虑过的替代方案
 

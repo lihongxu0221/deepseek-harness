@@ -15,6 +15,9 @@ import { existsSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import {
   DEFAULT_PROFILE_BUNDLES,
+  healArchiveManagerHome,
+  healHostApiproxyRpcStub,
+  healProfileVirtualStoreDir,
   initProfile,
   PROFILE_TEMPLATES,
   readProfileManifest,
@@ -112,6 +115,23 @@ function anchorPathSpec(argument: string, cwd: string): string {
 }
 
 /**
+ * Ask the running pnpm which store this profile will use.
+ * @param profileDir - the profile directory (`cwd` for the probe).
+ * @returns the store path, or `undefined` when pnpm is missing or the probe fails.
+ */
+function probePnpmStorePath(profileDir: string): string | undefined {
+  const result = spawnSync('pnpm', ['store', 'path'], {
+    cwd: profileDir,
+    encoding: 'utf8',
+    shell: process.platform === 'win32',
+    windowsHide: true,
+  })
+  if (result.error !== undefined || result.status !== 0) return undefined
+  const value = result.stdout.trim()
+  return value === '' ? undefined : value
+}
+
+/**
  * Run one `dsh plugin` invocation: init if needed, forward to pnpm, reconcile.
  * @param profile - the profile name.
  * @param args - pnpm arguments with relative path specs anchored to the invoking directory.
@@ -128,6 +148,7 @@ export function runPlugin(profile: string, args: readonly string[]): number {
     )
     process.stderr.write(`${NAME}: initialized profile ${profile} at ${dir}\n`)
   }
+  healProfileVirtualStoreDir(dir, probePnpmStorePath(dir))
   const before = readProfileManifest(NAME, dir)
   // Windows resolves pnpm through its .cmd shim, which spawn() refuses
   // without a shell since the CVE-2024-27980 hardening.
@@ -135,6 +156,9 @@ export function runPlugin(profile: string, args: readonly string[]): number {
     cwd: dir,
     stdio: 'inherit',
     shell: process.platform === 'win32',
+    // CREATE_NO_WINDOW: the .cmd shim otherwise flashes an empty console
+    // when the parent is a GUI-subsystem packaged exe (Plugin Market).
+    windowsHide: true,
   })
   if (result.error !== undefined) {
     const code = (result.error as NodeJS.ErrnoException).code
@@ -147,6 +171,8 @@ export function runPlugin(profile: string, args: readonly string[]): number {
   const exitCode = result.status ?? 1
   if (exitCode === 0) {
     reconcilePlugins(before, dir)
+    healArchiveManagerHome(dir)
+    healHostApiproxyRpcStub(dir)
   } else {
     // pnpm's own diagnostics name pnpm-workspace.yaml without saying WHICH
     // one; the profile owns it, and the commonest failure here is pnpm ≥10

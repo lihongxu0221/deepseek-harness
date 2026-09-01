@@ -6,6 +6,7 @@ import { WorkspaceCommands } from './commands.ts'
 import { DirectoryPickerController } from './directory-picker.ts'
 import { WorkspaceFeed } from './feed.ts'
 import type {
+  WorkspaceAddFolderRequest,
   WorkspaceArchiveSessionRequest,
   WorkspaceArchiveValue,
   WorkspaceCreateRequest,
@@ -16,7 +17,9 @@ import type {
   WorkspaceInsertBeforeRequest,
   WorkspaceInsertSessionBeforeRequest,
   WorkspaceOrderValue,
+  WorkspaceRemoveFolderRequest,
   WorkspaceRenameRequest,
+  WorkspaceSetPrimaryFolderRequest,
   WorkspaceValue,
 } from './types.ts'
 
@@ -97,6 +100,36 @@ export class WorkspaceController extends TypertRemoteService {
   @Remote('insertSessionBefore')
   insertSessionBefore(request: WorkspaceInsertSessionBeforeRequest): Promise<WorkspaceValue> {
     return this.commands.insertSessionBefore(request)
+  }
+
+  /**
+   * Add an extra folder to one Workspace.
+   * @param request - Workspace identity and directory path.
+   * @returns the updated Workspace projection.
+   */
+  @Remote('addFolder')
+  addFolder(request: WorkspaceAddFolderRequest): Promise<WorkspaceValue> {
+    return this.commands.addFolder(request)
+  }
+
+  /**
+   * Drop an extra folder from one Workspace. The directory is kept.
+   * @param request - Workspace identity and extra-folder path.
+   * @returns the updated Workspace projection.
+   */
+  @Remote('removeFolder')
+  removeFolder(request: WorkspaceRemoveFolderRequest): Promise<WorkspaceValue> {
+    return this.commands.removeFolder(request)
+  }
+
+  /**
+   * Promote an owned extra folder to the Workspace primary directory.
+   * @param request - Workspace identity and extra-folder path.
+   * @returns the updated Workspace projection.
+   */
+  @Remote('setPrimaryFolder')
+  setPrimaryFolder(request: WorkspaceSetPrimaryFolderRequest): Promise<WorkspaceValue> {
+    return this.commands.setPrimaryFolder(request)
   }
 
   /**

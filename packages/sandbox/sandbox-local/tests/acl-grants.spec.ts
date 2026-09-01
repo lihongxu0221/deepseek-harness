@@ -16,7 +16,12 @@ import { LocalSandboxProvider } from '@deepseek-ai/dsh-sandbox-local'
 
 /** Cross-file state shared with the vi.mock factory (hoisting contract). */
 const mockState = vi.hoisted(() => ({
-  grants: [] as Array<{ writeSid: string; added: Array<{ path: string; standing: boolean }>; disposed: boolean }>,
+  grants: [] as Array<{
+    writeSid: string
+    added: Array<{ path: string; standing: boolean }>
+    revoked: string[]
+    disposed: boolean
+  }>,
   addFailure: undefined as Error | undefined,
   /** Restrict an add failure to standing (workspace) or revocable (temp). */
   addFailureStanding: undefined as boolean | undefined,
@@ -27,7 +32,8 @@ const mockState = vi.hoisted(() => ({
 vi.mock('@deepseek-ai/dsh-sandbox-windows-acl', () => {
   class MockAclWriteGrant {
     readonly writeSid: string
-    readonly added: Array<{ path: string; standing: boolean }> = []
+    added: Array<{ path: string; standing: boolean }> = []
+    readonly revoked: string[] = []
     disposed = false
     constructor(writeSid: string) {
       this.writeSid = writeSid
@@ -43,6 +49,13 @@ vi.mock('@deepseek-ai/dsh-sandbox-windows-acl', () => {
         && (mockState.addFailureStanding === undefined || mockState.addFailureStanding === standing)) {
         throw mockState.addFailure
       }
+    }
+    get paths(): readonly string[] {
+      return this.added.map(entry => entry.path)
+    }
+    revoke(path: string): void {
+      this.revoked.push(path)
+      this.added = this.added.filter(entry => entry.path !== path)
     }
     dispose(): void {
       if (mockState.disposeFailure !== undefined) throw mockState.disposeFailure
@@ -138,6 +151,72 @@ describe('windows-acl write grants (LocalSandboxProvider)', () => {
       await fiber.dispose()
       expect(mockState.grants.every(grant => grant.disposed)).toBe(true)
       expect(existsSync(tempDir ?? '')).toBe(false)
+    } finally {
+      cleanup()
+    }
+  })
+
+  it('workspace-write grants extra folder roots on first confine and on a later addFolder', async () => {
+    try {
+      const { sandbox, fiber } = await setup()
+      const ws = workspaceRoot()
+      const extra = workspaceRoot()
+      scratch.push(ws, extra)
+      const first: SandboxPolicy = { mode: 'workspace-write', workspaceRoot: ws, sessionId: SessionId('sess-extra') }
+      sandbox.confine(['true'], first)
+      expect(mockState.grants[0]?.added).toEqual([{ path: ws, standing: true }])
+
+      const withExtra: SandboxPolicy = {
+        mode: 'workspace-write',
+        workspaceRoot: ws,
+        extraRoots: [extra],
+        sessionId: SessionId('sess-extra'),
+      }
+      sandbox.confine(['true'], withExtra)
+      expect(mockState.grants[0]?.added).toEqual([
+        { path: ws, standing: true },
+        { path: extra, standing: true },
+      ])
+      sandbox.confine(['true'], withExtra)
+      expect(mockState.grants[0]?.added).toEqual([
+        { path: ws, standing: true },
+        { path: extra, standing: true },
+      ])
+
+      await fiber.dispose()
+    } finally {
+      cleanup()
+    }
+  })
+
+  it('workspace-write revokes a standing extra-folder ACE after removeFolder', async () => {
+    try {
+      const { sandbox, fiber } = await setup()
+      const ws = workspaceRoot()
+      const extra = workspaceRoot()
+      scratch.push(ws, extra)
+      const withExtra: SandboxPolicy = {
+        mode: 'workspace-write',
+        workspaceRoot: ws,
+        extraRoots: [extra],
+        sessionId: SessionId('sess-extra-remove'),
+      }
+      sandbox.confine(['true'], withExtra)
+      expect(mockState.grants[0]?.added).toEqual([
+        { path: ws, standing: true },
+        { path: extra, standing: true },
+      ])
+
+      const withoutExtra: SandboxPolicy = {
+        mode: 'workspace-write',
+        workspaceRoot: ws,
+        sessionId: SessionId('sess-extra-remove'),
+      }
+      sandbox.confine(['true'], withoutExtra)
+      expect(mockState.grants[0]?.revoked).toEqual([extra])
+      expect(mockState.grants[0]?.added).toEqual([{ path: ws, standing: true }])
+
+      await fiber.dispose()
     } finally {
       cleanup()
     }

@@ -63,15 +63,16 @@ Examples:
 /**
  * Parse and provide the Web invocation as an ordinary Cordis service. The
  * command's action publishes the flags this invocation named; `--host 0.0.0.0`
- * or a non-numeric `--port` is a usage error, so on rejection (and on `--help`)
- * nothing is provided.
+ * is a usage error unless `DSH_WEB_ALLOW_ALL_INTERFACES=1` (the packaged
+ * desktop tray sets this when the user chooses all-interfaces). A non-numeric
+ * `--port` is a usage error. On rejection (and on `--help`) nothing is provided.
  * @param ctx - plugin context carrying the command line.
  */
 export function apply(ctx: Context): void {
   const program = webCommand()
   program.action(() => {
     const options = program.opts<WebOptions>()
-    if (options.host === '0.0.0.0') {
+    if (options.host === '0.0.0.0' && process.env.DSH_WEB_ALLOW_ALL_INTERFACES !== '1') {
       program.error('error: --host 0.0.0.0 is intentionally not supported yet for safety: it would expose remote code execution to the network; use 127.0.0.1 instead')
     }
     if (options.port !== undefined && !/^\d+$/.test(options.port)) {

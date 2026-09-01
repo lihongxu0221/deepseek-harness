@@ -335,24 +335,28 @@ export class AgentPresets extends TypertRemoteService {
    *
    * A broken preset resolves — deleting one, reading one, and reporting one
    * all need the row — and the mounting paths refuse it AFTER resolution
-   * through {@link resolveMountable}.
+   * through {@link resolveMountable}. An omitted id uses {@link defaultId};
+   * when that id is absent from the roster, the composition `default` is used
+   * if present. An explicit unknown id still fails.
    * @param id - the preset id, or `undefined` for {@link defaultId}.
    * @returns the resolved preset.
    * @throws when no configured root supplies that id.
    */
   async resolve(id?: string): Promise<AgentPreset> {
-    const wanted = id ?? this.defaultId
     const presets = await this.list()
+    const wanted = id ?? this.defaultId
     const found = presets.find(preset => preset.id === wanted)
-    if (found === undefined) {
-      const available = presets.map(preset => preset.id)
-      throw new RemoteError(
-        'agent-preset/not-found',
-        `agent-presets: preset "${wanted}" not found (available: ${available.join(', ') || 'none'})`,
-        { agentPreset: wanted, available },
-      )
+    if (found !== undefined) return found
+    if (id === undefined) {
+      const compositionDefault = presets.find(preset => preset.id === this.config.default)
+      if (compositionDefault !== undefined) return compositionDefault
     }
-    return found
+    const available = presets.map(preset => preset.id)
+    throw new RemoteError(
+      'agent-preset/not-found',
+      `agent-presets: preset "${wanted}" not found (available: ${available.join(', ') || 'none'})`,
+      { agentPreset: wanted, available },
+    )
   }
 
   /**

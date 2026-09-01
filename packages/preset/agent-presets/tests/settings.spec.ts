@@ -137,14 +137,17 @@ describe('the default preset as a user setting', () => {
     expect((await ctx.agentPresets.resolve()).id).toBe('standard')
   })
 
-  it('reports an unknown user default only when a session tries to use it', async () => {
+  it('uses the composition default when the stored user default is absent from the roster', async () => {
     const { ctx } = await harness()
 
     // Storing it succeeds — the roster is a live directory, so a name that is
-    // absent now may exist by the time a session asks for it.
+    // absent now may exist by the time a session asks for it. An implicit
+    // resolve still needs a present composition, so it uses config.default.
     await ctx.settings.update(NS, { default: 'no-such-preset' })
 
-    await expect(ctx.agentPresets.resolve())
+    expect(ctx.agentPresets.defaultId).toBe('no-such-preset')
+    expect((await ctx.agentPresets.resolve()).id).toBe('standard')
+    await expect(ctx.agentPresets.resolve('no-such-preset'))
       .rejects.toThrow(/preset "no-such-preset" not found/)
   })
 })

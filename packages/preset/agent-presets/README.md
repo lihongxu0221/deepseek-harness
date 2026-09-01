@@ -66,7 +66,7 @@ agent-presets:
   default: minimal
 ```
 
-The value is read when a session is created, so a changed default affects only sessions created afterwards; running sessions stay on the preset they were composed from. Clearing the user field re-inherits the composition default.
+The value is read when a session is created, so a changed default affects only sessions created afterwards; running sessions stay on the preset they were composed from. Clearing the user field re-inherits the composition default. An implicit resolve whose stored user default is absent from the roster uses the composition `default` when that id is present; an explicit unknown id still fails.
 
 ### Authoring presets
 

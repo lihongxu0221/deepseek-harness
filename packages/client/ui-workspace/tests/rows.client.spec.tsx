@@ -137,8 +137,8 @@ describe('workspace browser rows', () => {
     const onToggle = vi.fn()
     const onCreate = vi.fn()
     const group: GroupNode = {
-      key: 'project', workspaceId: wid('project'), cwd: '/projects/project', createdAt: 0, label: 'Project',
-      sessionCount: 1, expanded: true, containsCurrent: true, sessions: [],
+      key: 'project', workspaceId: wid('project'), cwd: '/projects/project', folders: [], createdAt: 0, label: 'Project',
+      sessionCount: 1, expanded: true, containsCurrent: true, pinned: false, sessions: [],
     }
     render(<ProjectRowItem group={group} onToggle={onToggle} onCreate={onCreate} t={t} />)
 
@@ -303,57 +303,74 @@ describe('workspace browser rows', () => {
     expect(screen.getByRole('treeitem').querySelector('[data-state="done"]')).not.toBeNull()
   })
 
-  it('workspace row menu opens on the ellipsis, renames, and shows the danger delete row', () => {
+  it('workspace row menu keeps edit, folder, rename, and delete actions', () => {
+    const onEdit = vi.fn()
     const onRename = vi.fn()
     const onDelete = vi.fn()
+    const onRemoveFolder = vi.fn()
     const onToggle = vi.fn()
     const group: GroupNode = {
-      key: 'project', workspaceId: wid('project'), cwd: '/projects/project', createdAt: 0, label: 'Project',
-      sessionCount: 0, expanded: false, containsCurrent: false, sessions: [],
+      key: 'project', workspaceId: wid('project'), cwd: '/projects/project',
+      folders: ['/projects/extra'], createdAt: 0, label: 'Project',
+      sessionCount: 0, expanded: false, containsCurrent: false, pinned: false, sessions: [],
     }
     render(<ProjectRowItem
       group={group} onToggle={onToggle} onCreate={vi.fn()}
-      actions={{ rename: onRename, delete: onDelete }} t={t}
+      actions={{
+        edit: onEdit, rename: onRename, delete: onDelete,
+        removeFolder: onRemoveFolder, pin: vi.fn(),
+      }} t={t}
     />)
     fireEvent.click(screen.getByRole('button', { name: '工作区“Project”的操作' }))
-    // Opening the menu neither toggles the group nor renames yet.
     expect(onToggle).not.toHaveBeenCalled()
+    expect(screen.queryByRole('menuitem', { name: '添加文件夹…' })).toBeNull()
     expect(screen.getByRole('menuitem', { name: '删除工作区' }).className).toMatch(/danger/)
+    fireEvent.click(screen.getByRole('menuitem', { name: '编辑项目' }))
+    expect(onEdit).toHaveBeenCalledOnce()
+    fireEvent.click(screen.getByRole('button', { name: '工作区“Project”的操作' }))
+    const remove = screen.getByRole('menuitem', { name: '移除文件夹' })
+    fireEvent.mouseEnter(remove.parentElement as HTMLElement)
+    fireEvent.focus(remove)
+    fireEvent.click(screen.getByRole('menuitem', { name: '/projects/extra' }))
+    expect(onRemoveFolder).toHaveBeenCalledWith('/projects/extra')
+    fireEvent.click(screen.getByRole('button', { name: '工作区“Project”的操作' }))
     fireEvent.click(screen.getByRole('menuitem', { name: '重命名' }))
     expect(onRename).toHaveBeenCalledOnce()
-    expect(screen.queryByRole('menu')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: '工作区“Project”的操作' }))
     fireEvent.click(screen.getByRole('menuitem', { name: '删除工作区' }))
-    expect(screen.queryByRole('menu')).toBeNull()
-    expect(onRename).toHaveBeenCalledOnce()
     expect(onDelete).toHaveBeenCalledOnce()
-    // Escape closes without selecting (Menu onClose path).
+    expect(screen.queryByRole('menu')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: '工作区“Project”的操作' }))
     fireEvent.keyDown(document, { key: 'Escape' })
     expect(screen.queryByRole('menu')).toBeNull()
   })
 
-  it('workspace hover card shows its details and copies the full directory path', async () => {
+  it('workspace hover card shows pin, session count, paths, and Edit project', async () => {
     vi.useFakeTimers()
-    const writeText = vi.fn(async () => {})
-    const restoreClipboard = installClipboard(writeText)
     try {
+      const onPin = vi.fn()
+      const onEdit = vi.fn()
       const group: GroupNode = {
-        key: 'project', workspaceId: wid('project'), cwd: '/projects/project', createdAt: 0, label: 'Project',
-        sessionCount: 0, expanded: false, containsCurrent: false, sessions: [],
+        key: 'project', workspaceId: wid('project'), cwd: '/projects/project',
+        folders: ['/projects/extra'], createdAt: 0, label: 'Project',
+        sessionCount: 2, expanded: false, containsCurrent: false, pinned: false, sessions: [],
       }
-      render(<ProjectRowItem group={group} onToggle={vi.fn()} onCreate={vi.fn()} t={t} />)
+      render(<ProjectRowItem
+        group={group} onToggle={vi.fn()} onCreate={vi.fn()}
+        actions={{ edit: onEdit, rename: vi.fn(), delete: vi.fn(), pin: onPin }} t={t}
+      />)
       fireEvent.pointerEnter(screen.getByRole('treeitem').parentElement as HTMLElement)
       act(() => { vi.advanceTimersByTime(500) })
-      // Card body: full title + cwd + absolute creation time.
       expect(screen.getAllByText('Project')).toHaveLength(2)
+      expect(screen.getByText('2 个任务')).toBeTruthy()
       expect(screen.getByText('/projects/project')).toBeTruthy()
-      expect(screen.getByText(/^创建于 \d+年\d+月\d+日 /)).toBeTruthy()
-      await act(async () => { fireEvent.click(screen.getByRole('button', { name: '复制: /projects/project' })) })
-      expect(writeText).toHaveBeenCalledWith('/projects/project')
-      expect(screen.getByRole('status').textContent).toBe('已复制')
+      expect(screen.getByText('/projects/extra')).toBeTruthy()
+      fireEvent.click(screen.getByRole('button', { name: '置顶' }))
+      expect(onPin).toHaveBeenCalledOnce()
+      expect(screen.getByRole('button', { name: '置顶' }).getAttribute('aria-pressed')).toBe('false')
+      fireEvent.click(screen.getByRole('button', { name: '编辑项目' }))
+      expect(onEdit).toHaveBeenCalledOnce()
     } finally {
-      restoreClipboard()
       vi.useRealTimers()
     }
   })
@@ -364,8 +381,8 @@ describe('workspace browser rows', () => {
     const restoreClipboard = installClipboard(writeText)
     try {
       const group: GroupNode = {
-        key: 'project', workspaceId: wid('project'), cwd: '/home/u/Documents/project', createdAt: 0, label: 'Project',
-        sessionCount: 0, expanded: false, containsCurrent: false, sessions: [],
+        key: 'project', workspaceId: wid('project'), cwd: '/home/u/Documents/project', folders: [], createdAt: 0, label: 'Project',
+        sessionCount: 1, expanded: false, containsCurrent: false, pinned: false, sessions: [],
       }
       render(<ProjectRowItem group={group} home="/home/u" onToggle={vi.fn()} onCreate={vi.fn()} t={t} />)
       fireEvent.pointerEnter(screen.getByRole('treeitem').parentElement as HTMLElement)
@@ -384,8 +401,8 @@ describe('workspace browser rows', () => {
     vi.useFakeTimers()
     try {
       const group: GroupNode = {
-        key: 'project', workspaceId: wid('project'), cwd: undefined, createdAt: 0, label: 'Project',
-        sessionCount: 0, expanded: false, containsCurrent: false, sessions: [],
+        key: 'project', workspaceId: wid('project'), cwd: undefined, folders: [], createdAt: 0, label: 'Project',
+        sessionCount: 0, expanded: false, containsCurrent: false, pinned: false, sessions: [],
       }
       render(<ProjectRowItem group={group} home="/home/u" onToggle={vi.fn()} onCreate={vi.fn()} t={t} />)
       fireEvent.pointerEnter(screen.getByRole('treeitem').parentElement as HTMLElement)
@@ -402,8 +419,8 @@ describe('workspace browser rows', () => {
     vi.useFakeTimers()
     try {
       const group: GroupNode = {
-        key: 'project', workspaceId: wid('project'), cwd: 'C:\\Users\\u\\project', createdAt: 0, label: 'Project',
-        sessionCount: 0, expanded: false, containsCurrent: false, sessions: [],
+        key: 'project', workspaceId: wid('project'), cwd: 'C:\\Users\\u\\project', folders: [], createdAt: 0, label: 'Project',
+        sessionCount: 0, expanded: false, containsCurrent: false, pinned: false, sessions: [],
       }
       render(<ProjectRowItem group={group} home="C:\\Users\\u" onToggle={vi.fn()} onCreate={vi.fn()} t={t} />)
       fireEvent.pointerEnter(screen.getByRole('treeitem').parentElement as HTMLElement)
@@ -416,8 +433,8 @@ describe('workspace browser rows', () => {
 
   it('ungrouped bucket renders no workspace menu', () => {
     const group: GroupNode = {
-      key: '', workspaceId: undefined, cwd: undefined, createdAt: undefined, label: 'Ungrouped',
-      sessionCount: 0, expanded: false, containsCurrent: false, sessions: [],
+      key: '', workspaceId: undefined, cwd: undefined, folders: [], createdAt: undefined, label: 'Ungrouped',
+      sessionCount: 0, expanded: false, containsCurrent: false, pinned: false, sessions: [],
     }
     render(<ProjectRowItem group={group} onToggle={vi.fn()} onCreate={vi.fn()} t={t} />)
     expect(screen.queryByRole('button', { name: /工作区/ })).toBeNull()

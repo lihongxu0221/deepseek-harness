@@ -190,6 +190,19 @@ export class FakeApiClient {
   onWorkspaceArchiveSession: (payload: unknown) => Promise<RemoteResult<{ archivedSessionIds: SessionId[] }>> =
     payload => Promise.resolve(ok({ archivedSessionIds: [(payload as { sessionId: SessionId }).sessionId] }))
 
+  onWorkspaceAddFolder: (payload: unknown) => Promise<RemoteResult<{ workspace: WorkspaceView }>> =
+    payload => Promise.resolve(ok({
+      workspace: fakeWorkspace('fk-ws', { folders: [(payload as { path: string }).path] }),
+    }))
+
+  onWorkspaceRemoveFolder: (_payload: unknown) => Promise<RemoteResult<{ workspace: WorkspaceView }>> =
+    () => Promise.resolve(ok({ workspace: fakeWorkspace('fk-ws', { folders: [] }) }))
+
+  onWorkspaceSetPrimaryFolder: (payload: unknown) => Promise<RemoteResult<{ workspace: WorkspaceView }>> =
+    payload => Promise.resolve(ok({
+      workspace: fakeWorkspace('fk-ws', { path: (payload as { path: string }).path, folders: [] }),
+    }))
+
   /** Remote namespaces bound to this fake's programmable unary slots and stream pumps. */
   sessionRemotes(): RuntimeRemotes {
     return {
@@ -267,6 +280,13 @@ export class FakeApiClient {
           'workspace.archiveSession',
           payload,
           this.onWorkspaceArchiveSession(payload),
+        ),
+        addFolder: payload => this.record('workspace.addFolder', payload, this.onWorkspaceAddFolder(payload)),
+        removeFolder: payload => this.record('workspace.removeFolder', payload, this.onWorkspaceRemoveFolder(payload)),
+        setPrimaryFolder: payload => this.record(
+          'workspace.setPrimaryFolder',
+          payload,
+          this.onWorkspaceSetPrimaryFolder(payload),
         ),
         follow: signal => this.openWorkspace(signal),
       },

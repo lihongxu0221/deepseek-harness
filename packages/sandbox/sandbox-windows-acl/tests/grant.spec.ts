@@ -60,6 +60,22 @@ describe.skipIf(!isWin32)('AclWriteGrant (server-side materialization)', () => {
     expect(icaclsText(standingDir)).toContain('S-1-4-9000-77')
   })
 
+  it('revoke removes one standing extra-folder ACE and leaves the primary standing', () => {
+    const primary = scratch()
+    const extra = scratch()
+    const grant = AclWriteGrant.create('S-1-4-9000-80')
+    grant.add(primary, true)
+    grant.add(extra, true)
+    grant.revoke(extra)
+    expect(grant.paths).toEqual([primary])
+    expect(icaclsText(extra)).not.toContain('S-1-4-9000-80')
+    expect(icaclsText(primary)).toContain('S-1-4-9000-80')
+    grant.revoke(extra)
+    expect(grant.paths).toEqual([primary])
+    grant.dispose()
+    expect(icaclsText(primary)).toContain('S-1-4-9000-80')
+  })
+
   it('two grants with different SIDs coexist and revoke independently', () => {
     const dir = scratch()
     const grantA = AclWriteGrant.create('S-1-4-9000-78')

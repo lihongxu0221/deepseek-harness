@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-08-20-trusted-lan-configuration-plane.md
+2026-08-20-trusted-lan-configuration-plane.md: c16cfcc07a9ab080eaa630710ad53e4c2d6864d2
+2026-08-20-trusted-lan-configuration-plane.zh.md: 13538ff1c2f5e5d78f70fad5e1878228b3ef243b

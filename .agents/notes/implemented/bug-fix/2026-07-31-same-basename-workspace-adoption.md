@@ -10,13 +10,13 @@ A Workspace is identified by its stable id and canonical directory path, while i
 
 ## Decision
 
-`ctx.workspaceRegistry.create(path, title?)` treats canonical path as the only uniqueness key. Repeating the same path remains idempotent and preserves the registered title. Different canonical paths create different Workspace records and may share a title; when no title is supplied, each record still derives its title from `basename(path)` without suffixing or rewriting it.
+`ctx.workspaceRegistry.create(path, title?)` treats the canonical PRIMARY path as the only uniqueness key. A directory held only as an extra folder still creates a new Workspace ([shared extra folders](../feature/2026-08-24-workspace-shared-extra-folders.md)). Repeating the same path remains idempotent and preserves the registered title. Different canonical paths create different Workspace records and may share a title; when no title is supplied, each record still derives its title from `basename(path)` without suffixing or rewriting it.
 
 The Host's `workspace.create({ path })` adoption route inherits that rule. The Workspace manager, picker, grouping tree, selection, rename, deletion, and Session creation continue to use `WorkspaceId`, so equal labels neither merge records nor redirect an operation. The sidebar hover card exposes each canonical path when the labels need disambiguation.
 
 Explicit naming remains stricter. `workspace.rename` continues to reject a title already registered, as described by [manual Workspace naming](../feature/2026-07-25-session-list-browsing-and-manual-order.md). This prevents a user from deliberately introducing another ambiguous label while accepting collisions imposed by existing directory names. The path-adoption rule supersedes only the title-conflict clauses in the [Workspace product flow](../feature/2026-07-25-workspace-ui-product-flow.md) and [native directory picker](../feature/2026-07-27-native-workspace-directory-picker.md).
 
-The durable schema does not change: Workspace records already store id, path, and title independently, bootstrap can derive equal basenames, and startup validates duplicate paths rather than titles.
+The durable schema does not change: Workspace records already store id, path, and title independently, bootstrap can derive equal basenames, and startup validates duplicate primary paths rather than titles.
 
 ## Verification
 

@@ -435,6 +435,10 @@ class SingleExeBuild {
       '--output',
       product,
     ])
+    const windowsProduct = `${product}.exe`
+    if (!this.cli.dryRun && !existsSync(product) && existsSync(windowsProduct)) {
+      return [windowsProduct]
+    }
     if (!this.cli.dryRun && !existsSync(product)) {
       throw new Error(`build-exe-for-python-sdk: product ${product} is missing after the pkg run; inspect ${this.outDir}.`)
     }
@@ -584,7 +588,11 @@ class SingleExeBuild {
         cwd: root,
         stdio: 'inherit',
         // Artifact builds must not mutate or validate a developer's Git hooks.
-        env: { ...process.env, CI: 'true' },
+        // Do not set CI=true: pnpm 10 then runs `pnpm install --production`,
+        // which removes lefthook and then fails the lefthook postinstall.
+        env: { ...process.env, LEFTHOOK: '0' },
+        // Node 20+ refuses to spawn .cmd/.bat without a shell (EINVAL).
+        shell: process.platform === 'win32',
       })
       child.once('error', (error) => {
         reject(new Error(`build-exe-for-python-sdk: ${label} failed to spawn: ${error.message} (${printable})`))

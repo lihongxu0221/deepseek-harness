@@ -2,19 +2,26 @@
  * Config-dump entry for `dsh --profile <name> --dump-config`: compose the
  * profile's patch layers through the include plugin's patch algorithm without
  * booting or evaluating `!!js`, with one source layer per bundle, the
- * profile's own patch file, and each `--patch` overlay.
+ * profile's own patch file, each `--patch` overlay, and the launcher overlay
+ * that disables seeded rows still injecting `apiProxy`.
  * @module @deepseek-ai/dsh/dump-config
  */
 
 import { existsSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import {
+  composeEntries,
   loadOptionalPatches,
   loadOverlayPatches,
   renderConfigDump,
   type ConfigDumpLayer,
 } from '@deepseek-ai/dsh-app-boot'
-import { homePatchPath, prepareProfile, PROFILE_ROOT_FILENAME } from './profile-boot.ts'
+import {
+  homePatchPath,
+  prepareProfile,
+  PROFILE_ROOT_FILENAME,
+  resolveApiproxyDependentDisablePatches,
+} from './profile-boot.ts'
 
 const NAME = 'dsh'
 
@@ -45,6 +52,14 @@ export function runDumpConfig(profile: string, defaultOnly: boolean, patches: re
     for (const file of patches) {
       const absolute = resolve(file)
       layers.push({ label: absolute, patches: loadOverlayPatches(NAME, absolute) })
+    }
+    const rowIds = new Set<string>()
+    for (const row of composeEntries(layers.map(layer => layer.patches))) {
+      if (typeof row.id === 'string') rowIds.add(row.id)
+    }
+    const disablePatches = resolveApiproxyDependentDisablePatches(rowIds)
+    if (disablePatches.length > 0) {
+      layers.push({ label: 'dsh: apiproxy-dependent-disable', patches: disablePatches })
     }
   }
   // The dump anchors on the same empty root file the boot includes.
