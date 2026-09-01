@@ -131,6 +131,11 @@ class BuildCli {
     readonly restoreOnly: boolean,
     /** Product-folder VERSION stamp; defaults to the root package.json version. */
     readonly productVersion: string,
+    /**
+     * Folder name under dist-exe. Defaults to `dsh-web-<platform>-<arch>`.
+     * A custom name is only valid for a single target.
+     */
+    readonly productDir: string | undefined,
   ) {}
 
   /**
@@ -159,7 +164,18 @@ class BuildCli {
     const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as { version?: string }
     const baseVersion = typeof manifest.version === 'string' ? manifest.version : ''
     const productVersion = resolvePackagedWebExeVersion(baseVersion, process.env, values['product-version'])
-    return new BuildCli(targets, values['skip-build'], values['dry-run'], values['restore-only'], productVersion)
+    const productDir = values['product-dir']
+    if (productDir !== undefined) {
+      if (targets.length !== 1) {
+        throw new Error('build-web-exe: --product-dir requires exactly one --targets entry.')
+      }
+      if (!/^[A-Za-z0-9._-]+$/.test(productDir)) {
+        throw new Error('build-web-exe: --product-dir must be a single folder name under dist-exe.')
+      }
+    }
+    return new BuildCli(
+      targets, values['skip-build'], values['dry-run'], values['restore-only'], productVersion, productDir,
+    )
   }
 
   private static parseRaw(argv: string[]) {
@@ -171,6 +187,7 @@ class BuildCli {
         'dry-run': { type: 'boolean', default: false },
         'restore-only': { type: 'boolean', default: false },
         'product-version': { type: 'string' },
+        'product-dir': { type: 'string' },
         'help': { type: 'boolean', default: false },
       },
     }).values
@@ -186,6 +203,7 @@ class BuildCli {
       '  --dry-run              print every command and config patch without executing.',
       '  --restore-only         copy missing staged packages; do not rebuild or wipe.',
       '  --product-version=<v>  stamp VERSION / README; default: package.json or DSH_WEB_EXE_*.',
+      '  --product-dir=<name>   folder under dist-exe; default: dsh-web-<platform>-<arch>.',
       '  --help                 print this help.',
       '',
       `Build route: deploy the CLI closure, then ${PKG_SPEC} --sea for a thin launcher.`,
@@ -209,8 +227,8 @@ function formatCommand(command: string, args: string[]): string {
   return [command, ...args].map(part => (part.includes(' ') ? JSON.stringify(part) : part)).join(' ')
 }
 
-function productDirName(target: Target): string {
-  return `${OUTPUT_BASENAME}-${target.platform}-${target.arch}`
+function productDirName(target: Target, override?: string): string {
+  return override ?? `${OUTPUT_BASENAME}-${target.platform}-${target.arch}`
 }
 
 /** Workspace package name to source directory, excluding nested node_modules. */
@@ -288,7 +306,7 @@ class WebExeBuild {
   constructor(private readonly cli: BuildCli) {
     const [onlyTarget] = cli.targets
     this.staging = onlyTarget !== undefined && cli.targets.length === 1
-      ? resolve(root, OUT_DIR, productDirName(onlyTarget))
+      ? resolve(root, OUT_DIR, productDirName(onlyTarget, cli.productDir))
       : resolve(root, SHARED_STAGING_DIR)
   }
 
@@ -471,7 +489,7 @@ class WebExeBuild {
    * @returns the product folder and executable paths.
    */
   async pack(target: Target): Promise<string[]> {
-    const product = join(this.outDir, productDirName(target))
+    const product = join(this.outDir, productDirName(target, this.cli.productDir))
     if (product !== this.staging) {
       if (this.cli.dryRun) console.log(`build-web-exe: [dry-run] cp ${this.staging} ${product}`)
       else {
