@@ -16,7 +16,7 @@ import { Context } from '@deepseek-ai/cordis'
 import { createLaunchEnvironmentSnapshot, DSH_LAUNCH_ENVIRONMENT_KEY } from '@deepseek-ai/dsh-launch-environment'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import type { WebServer } from '@deepseek-ai/dsh-host-webserver'
-import { apply, browserOpenerArgv, Config, internals } from '../src/index.ts'
+import { apply, browserOpenerArgv, Config, escapeCmdStartUrl, internals } from '../src/index.ts'
 
 vi.mock('node:child_process', async importOriginal => ({
   ...await importOriginal<typeof import('node:child_process')>(),
@@ -432,6 +432,13 @@ describe('browserOpenerArgv', () => {
     expect(browserOpenerArgv('D:\\dist\\dsh-web.exe', 'win32', url)).toEqual({
       file: 'cmd.exe',
       args: ['/c', 'start', '', url],
+      windowsHide: true,
+    })
+    const tokenUrl = 'http://127.0.0.1:4567/?token=ab&boot=1'
+    expect(escapeCmdStartUrl(tokenUrl)).toBe('http://127.0.0.1:4567/?token=ab^&boot=1')
+    expect(browserOpenerArgv('D:\\dist\\dsh-web.exe', 'win32', tokenUrl)).toEqual({
+      file: 'cmd.exe',
+      args: ['/c', 'start', '', 'http://127.0.0.1:4567/?token=ab^&boot=1'],
       windowsHide: true,
     })
     expect(browserOpenerArgv('/Applications/dsh-web', 'darwin', url)).toEqual({

@@ -4,6 +4,7 @@
  * @module @deepseek-ai/dsh/packaged-web-desktop
  */
 
+import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { appendFileSync, unlinkSync } from 'node:fs'
 import net from 'node:net'
@@ -212,6 +213,12 @@ export interface PackagedWebDesktopIo {
    * @param listen - validated host and port.
    */
   saveListen(listen: DesktopListen): void
+  /**
+   * Surface a fatal error when the tray is not yet running. The GUI
+   * subsystem has no console; production shows a MessageBox.
+   * @param message - already-stringified failure text.
+   */
+  reportFatal?(message: string): void
 }
 
 /**
@@ -234,6 +241,7 @@ export function defaultPackagedWebDesktopIo(): PackagedWebDesktopIo {
     exit: (code) => { process.exit(code) },
     loadListen: () => loadDesktopListen(home),
     saveListen: (next) => { saveDesktopListen(home, next) },
+    reportFatal: (message) => { reportDesktopFatal(home, message) },
   }
 }
 
@@ -246,6 +254,31 @@ function logDesktop(home: string, message: string): void {
     appendFileSync(join(home, 'desktop-host.log'), `${new Date().toISOString()} ${message}\n`)
   } catch {
     // A missing home directory must not take down the tray host.
+  }
+}
+
+/**
+ * Log a pre-tray fatal and show a MessageBox. The GUI-subsystem exe has no
+ * console, so `console.error` and `process.exit(1)` are otherwise silent.
+ * @param home - resolved `$DSH_HOME`.
+ * @param message - already-stringified failure text.
+ */
+export function reportDesktopFatal(home: string, message: string): void {
+  logDesktop(home, message)
+  /* v8 ignore next 16 -- production MessageBox; tests inject reportFatal. */
+  try {
+    spawnSync('powershell.exe', [
+      '-NoProfile',
+      '-STA',
+      '-Command',
+      'Add-Type -AssemblyName System.Windows.Forms; [void][System.Windows.Forms.MessageBox]::Show($env:DSH_DESKTOP_FATAL, "DeepSeek Harness")',
+    ], {
+      env: { ...process.env, DSH_DESKTOP_FATAL: message },
+      windowsHide: true,
+      timeout: 120_000,
+    })
+  } catch {
+    // A missing PowerShell must not loop the GUI launcher.
   }
 }
 
@@ -279,6 +312,9 @@ export async function runPackagedWebDesktop(io: PackagedWebDesktopIo): Promise<v
   try {
     lock = await io.claimInstance(io.home, () => { commandSink({ type: 'show' }) })
   } catch (error) {
+    const text = `claimInstance failed ${errorText(error)}`
+    logDesktop(io.home, text)
+    io.reportFatal?.(errorText(error))
     io.exit(1)
     throw error
   }
@@ -292,6 +328,9 @@ export async function runPackagedWebDesktop(io: PackagedWebDesktopIo): Promise<v
   try {
     shell = io.startShell(io.shellIo)
   } catch (error) {
+    const text = `startShell failed ${errorText(error)}`
+    logDesktop(io.home, text)
+    io.reportFatal?.(errorText(error))
     lock.close()
     io.exit(1)
     throw error

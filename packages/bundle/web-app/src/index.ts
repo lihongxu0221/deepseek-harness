@@ -181,6 +181,15 @@ function resolveDistIndex(): string {
 
 const NODE_BASENAMES = new Set(['node', 'node.exe'])
 
+/**
+ * Escape a URL so `cmd.exe /c start "" <url>` does not split on `&`.
+ * @param url - loopback HTTP URL, including query and fragment.
+ * @returns the same URL with cmd metacharacters caret-escaped.
+ */
+export function escapeCmdStartUrl(url: string): string {
+  return url.replace(/[&|^<>()%!]/g, '^$&')
+}
+
 /** Spawn spec for the default-browser helper. */
 export interface BrowserOpenerArgv {
   /** Executable to spawn. */
@@ -201,7 +210,9 @@ export interface BrowserOpenerArgv {
  */
 export function browserOpenerArgv(execPath: string, platform: NodeJS.Platform, url: string): BrowserOpenerArgv {
   if (!NODE_BASENAMES.has(basename(execPath).toLowerCase())) {
-    if (platform === 'win32') return { file: 'cmd.exe', args: ['/c', 'start', '', url], windowsHide: true }
+    if (platform === 'win32') {
+      return { file: 'cmd.exe', args: ['/c', 'start', '', escapeCmdStartUrl(url)], windowsHide: true }
+    }
     if (platform === 'darwin') return { file: 'open', args: [url], windowsHide: false }
     return { file: 'xdg-open', args: [url], windowsHide: false }
   }

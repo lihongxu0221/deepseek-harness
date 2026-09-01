@@ -9,6 +9,7 @@ import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
+import { escapeCmdStartUrl } from '@deepseek-ai/dsh-web-app'
 
 /** A spawned window process the launcher can wait on or close. */
 export interface SpawnedDesktopWindow {
@@ -165,7 +166,7 @@ export function openDesktopWindow(url: string, io: DesktopWindowIo = defaultDesk
         },
       }
     }
-    io.spawn('cmd.exe', ['/c', 'start', '', url])
+    io.spawn('cmd.exe', ['/c', 'start', '', escapeCmdStartUrl(url)])
     return undefined
   }
   io.spawn(io.platform === 'darwin' ? 'open' : 'xdg-open', [url])

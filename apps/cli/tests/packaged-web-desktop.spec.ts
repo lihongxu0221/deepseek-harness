@@ -96,6 +96,7 @@ function createHarness(overrides: {
   let closed = 0
   let shells = 0
   const saved: DesktopListen[] = []
+  const fatals: string[] = []
   let listen: DesktopListen = { host: '127.0.0.1', port: 3080 }
   const bootArgs: string[][] = []
   const shell: WindowsDesktopShell = {
@@ -147,11 +148,13 @@ function createHarness(overrides: {
       listen = next
       saved.push(next)
     },
+    reportFatal(message) { fatals.push(message) },
   }
   return {
     io,
     messages,
     exits,
+    fatals,
     saved,
     bootArgs,
     windows,
@@ -242,6 +245,16 @@ describe('runPackagedWebDesktop', () => {
     const harness = createHarness({ claimError: new Error('pipe failed') })
     await expect(runPackagedWebDesktop(harness.io)).rejects.toThrow(/pipe failed/)
     expect(harness.exits).toEqual([1])
+    expect(harness.fatals).toEqual(['pipe failed'])
+  })
+
+  it('exits 1 when the tray host cannot start', async () => {
+    const harness = createHarness()
+    harness.io.startShell = () => { throw new Error('powershell missing') }
+    await expect(runPackagedWebDesktop(harness.io)).rejects.toThrow(/powershell missing/)
+    expect(harness.exits).toEqual([1])
+    expect(harness.fatals).toEqual(['powershell missing'])
+    expect(harness.lockClosed).toBe(1)
   })
 
   it('boots, reports progress, opens the main window, and stays up after the window closes', async () => {

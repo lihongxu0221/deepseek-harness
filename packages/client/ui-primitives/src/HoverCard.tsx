@@ -5,6 +5,12 @@ import { writeClipboard } from './clipboard.ts'
 import { usePointerGrace } from './pointer-grace.ts'
 import css from './HoverCard.module.css'
 
+const NESTED_COPY_BLOCKERS = 'button, a, input, textarea, select'
+
+function nestedControl(target: EventTarget): boolean {
+  return (target as HTMLElement).closest(NESTED_COPY_BLOCKERS) !== null
+}
+
 /**
  * Render an anchor with a hover-triggered preview card.
  * @param props.anchor - the hover target (rendered in place inside a wrapper span).
@@ -13,7 +19,8 @@ import css from './HoverCard.module.css'
  * @param props.openDelayMs - hover dwell before the card shows (default 500).
  * @param props.disabled - suppress opening; turning true closes an open card.
  * @param props.copyText - optional primary value copied by activation and
- * included in the card's accessible name.
+ * included in the card's accessible name. Nested buttons, links, and
+ * fields do not copy.
  * @param props.copyLabel - localized accessible activation-label prefix.
  * @param props.copiedLabel - localized visible success label.
  * @param props.className - optional extra class on the portaled card.
@@ -148,6 +155,7 @@ export function HoverCard({
       aria-label={copyable ? `${copyLabel}: ${copyText}` : undefined}
       onClick={copyable
         ? (e) => {
+          if (nestedControl(e.target)) return
           const selection = window.getSelection()
           if (selection !== null && !selection.isCollapsed) {
             for (let i = 0; i < selection.rangeCount; i += 1) {
@@ -160,6 +168,7 @@ export function HoverCard({
       onKeyDown={copyable
         ? (e) => {
           if (e.key !== 'Enter' && e.key !== ' ') return
+          if (nestedControl(e.target)) return
           e.preventDefault()
           void copy(copyText)
         }

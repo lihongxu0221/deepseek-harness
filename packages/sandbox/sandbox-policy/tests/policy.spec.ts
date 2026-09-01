@@ -141,7 +141,7 @@ describe('SandboxPolicyService', () => {
       .toEqual([resolve('/projects/two')])
   })
 
-  it('falls back to the first owning workspace and stays single-root when none owns the cwd', async () => {
+  it('stays single-root when a shared extra has no account and is nobody\'s primary', async () => {
     const shared = resolve('/projects/shared')
     const ctx = await mounted({ mode: 'workspace-write', workspaceRoot: '/fallback' })
     ctx.provide('workspaceRegistry', {
@@ -151,7 +151,7 @@ describe('SandboxPolicyService', () => {
       ],
     })
     expect(ctx.sandboxPolicy.resolve({ session: session('sess-loose', '/projects/shared') }).extraRoots)
-      .toEqual([resolve('/projects/one')])
+      .toBeUndefined()
     expect(ctx.sandboxPolicy.resolve({ session: session('sess-outside', '/projects/elsewhere') }).extraRoots)
       .toBeUndefined()
   })

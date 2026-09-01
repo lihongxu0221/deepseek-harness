@@ -23,7 +23,6 @@ import css from './SettingsRoot.module.css'
 
 const RECOVERY_CONFIRMATION_MS = 2_000
 
-/** Nav glyph by section id; unknown ids fall back to the settings gear. */
 /** Tray and other hosts open the panel by launching with this hash. */
 const SETTINGS_HASH = '#settings'
 
@@ -31,6 +30,7 @@ function settingsHashRequested(): boolean {
   return window.location.hash === SETTINGS_HASH
 }
 
+/** Nav glyph by section id; unknown ids fall back to the settings gear. */
 function navIcon(id: string) {
   if (id === 'models') return <IconDataOutline16 className={css.navIcon} size={16} />
   if (id === 'agent-presets') return <IconAgentPresetOutline16 className={css.navIcon} size={16} />

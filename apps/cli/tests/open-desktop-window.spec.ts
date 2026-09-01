@@ -1,6 +1,7 @@
 import { EventEmitter } from 'node:events'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { escapeCmdStartUrl } from '@deepseek-ai/dsh-web-app'
 import {
   openDesktopWindow,
   parseLocalWebUrl,
@@ -139,6 +140,20 @@ describe('openDesktopWindow', () => {
     }))
     expect(opened).toBeUndefined()
     expect(spawned).toEqual([{ command: 'cmd.exe', args: ['/c', 'start', '', 'http://127.0.0.1:3080'] }])
+  })
+
+  it('caret-escapes cmd metacharacters so a token query is not split', () => {
+    const spawned: Array<{ command: string; args: readonly string[] }> = []
+    const url = 'http://127.0.0.1:3080/?token=ab&boot=1#settings'
+    openDesktopWindow(url, io({
+      existsSync: () => false,
+      spawn: (command, args) => {
+        spawned.push({ command, args })
+        return fakeWindow()
+      },
+    }))
+    expect(escapeCmdStartUrl(url)).toBe('http://127.0.0.1:3080/?token=ab^&boot=1#settings')
+    expect(spawned).toEqual([{ command: 'cmd.exe', args: ['/c', 'start', '', 'http://127.0.0.1:3080/?token=ab^&boot=1#settings'] }])
   })
 
   it('uses the OS opener off Windows and does not wait', () => {

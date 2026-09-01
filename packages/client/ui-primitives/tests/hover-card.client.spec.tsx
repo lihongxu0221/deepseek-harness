@@ -206,6 +206,37 @@ describe('HoverCard', () => {
     expect(screen.queryByText('card body')).toBeNull()
   })
 
+  it('does not copy when a nested control is activated', async () => {
+    const writeText = vi.fn(async () => {})
+    const restoreClipboard = installClipboard(writeText)
+    const onPin = vi.fn()
+    try {
+      const view = render(
+        <HoverCard
+          anchor={<span>row</span>}
+          content={<div>card body<button type="button" onClick={onPin}>Pin</button></div>}
+          copyText="/full/path"
+          copyLabel="Copy path"
+          copiedLabel="Copied"
+        />,
+      )
+      const anchor = screen.getByText('row')
+      stubAnchorRect(anchor, { top: 40, right: 200 })
+      fireEvent.pointerEnter(anchor.parentElement as HTMLElement)
+      act(() => { vi.advanceTimersByTime(500) })
+      const pin = screen.getByRole('button', { name: 'Pin' })
+      await act(async () => { fireEvent.click(pin) })
+      expect(onPin).toHaveBeenCalledOnce()
+      expect(writeText).not.toHaveBeenCalled()
+      await act(async () => { fireEvent.keyDown(pin, { key: 'Enter' }) })
+      await act(async () => { fireEvent.keyDown(pin, { key: ' ' }) })
+      expect(writeText).not.toHaveBeenCalled()
+      view.unmount()
+    } finally {
+      restoreClipboard()
+    }
+  })
+
   it('copies its configured value and shows success only for the feedback window', async () => {
     const writeText = vi.fn(async () => {})
     const restoreClipboard = installClipboard(writeText)

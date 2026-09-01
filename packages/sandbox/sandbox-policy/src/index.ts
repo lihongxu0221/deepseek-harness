@@ -50,9 +50,10 @@ interface WorkspaceFolderSource {
  * owned directory is returned so workspace-write covers the whole workspace.
  *
  * One directory may be an extra folder of several workspaces, so a cwd can
- * match more than one. Exactly one is chosen — never the union: the workspace
- * whose account holds this session, else the workspace whose primary the cwd
- * is, else the first match in registry order.
+ * match more than one. Extra roots come from exactly one workspace — never
+ * the union: the workspace whose account holds this session, else the
+ * workspace whose primary the cwd is, else the unique owner. A shared
+ * extra with no account and no primary match stays single-root.
  * @param ctx - host context that may carry `workspaceRegistry`.
  * @param workspaceRoot - already-canonical session cwd or fallback root.
  * @param sessionId - calling session, when the call carries one.
@@ -64,7 +65,8 @@ function extraWorkspaceRoots(ctx: Context, workspaceRoot: string, sessionId?: st
     | undefined
   if (registry === undefined) return []
   let primaryMatch: string[] | undefined
-  let firstMatch: string[] | undefined
+  let uniqueMatch: string[] | undefined
+  let owners = 0
   for (const workspace of registry.list()) {
     const primaryRoot = resolveWorkspaceRoot(workspace.path)
     const folders = [primaryRoot, ...workspace.folders.map(resolveWorkspaceRoot)]
@@ -72,9 +74,12 @@ function extraWorkspaceRoots(ctx: Context, workspaceRoot: string, sessionId?: st
     const others = folders.filter(folder => folder !== workspaceRoot)
     if (sessionId !== undefined && workspace.sessionIds.includes(sessionId)) return others
     if (primaryRoot === workspaceRoot) primaryMatch = others
-    firstMatch ??= others
+    owners += 1
+    uniqueMatch = others
   }
-  return primaryMatch ?? firstMatch ?? []
+  if (primaryMatch !== undefined) return primaryMatch
+  if (uniqueMatch === undefined || owners !== 1) return []
+  return uniqueMatch
 }
 
 /**

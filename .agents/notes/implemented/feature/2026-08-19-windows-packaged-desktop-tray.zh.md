@@ -22,7 +22,7 @@ Status: implemented
 
 宿主脚本写入 `$DSH_HOME` 而非 `%TEMP%`：临时目录与机器上所有其他进程共享，也是终端防护扫描最激进的目录，而正在运行的 PowerShell 下脚本被删除或加锁会杀掉托盘。文件名带上父进程 pid 与时间戳，因此重启永不会 unlink 它正在替换的那个宿主的脚本。
 
-`scripts/build-web-exe.ts` 把 Windows 启动器的 PE 子系统设为 GUI，资源管理器不会再附加控制台。第二个使用同一 `$DSH_HOME`、且没有 `plugin` argv 的进程会以访客身份占用 named pipe，发送 `show` 后退出。`plugin` argv 的分发见[打包插件 CLI 说明](../bug-fix/2026-08-20-packaged-desktop-plugin-cli.zh.md)。owner 在该管道上只接受 `show`；start、stop、listen 和 quit 仍走托盘 stdin。macOS 和 Linux 仍使用[打包 Web 桌面可执行文件](2026-08-18-packaged-web-desktop-exe.zh.md)说明里的控制台托管路径。
+`scripts/build-web-exe.ts` 把 Windows 启动器的 PE 子系统设为 GUI，资源管理器不会再附加控制台。托盘尚未起来时的失败会写入 `desktop-host.log` 并弹出 MessageBox，因为 `console.error` 无处可见。第二个使用同一 `$DSH_HOME`、且没有 `plugin` argv 的进程会以访客身份占用 named pipe，发送 `show` 后退出。`plugin` argv 的分发见[打包插件 CLI 说明](../bug-fix/2026-08-20-packaged-desktop-plugin-cli.zh.md)。owner 在该管道上只接受 `show`；start、stop、listen 和 quit 仍走托盘 stdin。macOS 和 Linux 仍使用[打包 Web 桌面可执行文件](2026-08-18-packaged-web-desktop-exe.zh.md)说明里的控制台托管路径。
 
 ## Alternatives considered
 

@@ -12,7 +12,7 @@ Status: implemented
 
 注册表内只有主目录唯一。一个额外文件夹可以属于多个 Workspace，也可以同时是另一个 Workspace 的主目录。`addFolder` 不再冲突。`create` / `resolveByPath` 只在主目录命中时复用或解析；仅作为额外文件夹持有的路径会创建新 Workspace。`setPrimaryFolder` 仍拒绝已是其他 Workspace 主目录的路径（`workspace-folder-conflict`）。`attachSession` 拒绝已被其他 Workspace 记账的会话（`WorkspaceSessionAccountedError`），否则共享额外文件夹会让一个 cwd 匹配多个账本。
 
-多个 Workspace 同时拥有会话 cwd 时，`extraWorkspaceRoots` 只选其中一个——绝不取并集：记账了本会话的 Workspace，否则以该目录为主目录的，否则注册表顺序中第一个。`sandbox:policy` 在 `read-only` 和 `danger-full-access` 下也会点名这些额外目录（`The session workspace also includes …`）。单目录 Workspace 仍发出与此前相同的句子。
+多个 Workspace 同时拥有会话 cwd 时，`extraWorkspaceRoots` 只选其中一个——绝不取并集：记账了本会话的 Workspace，否则以该目录为主目录的，否则唯一归属方。共享额外目录既未记账也不是任何人的主目录时保持单根，不会因此授予另一个 Workspace 的目录。`sandbox:policy` 在 `read-only` 和 `danger-full-access` 下也会点名这些额外目录（`The session workspace also includes …`）。单目录 Workspace 仍发出与此前相同的句子。
 
 磁盘记录和领域版本不变。额外文件夹仍不扩大 `AGENTS.md` 查找、`@` 提及搜索或 `fs-search` 默认根。
 
@@ -22,6 +22,8 @@ Status: implemented
 
 **把所有匹配 Workspace 的额外根取并集。** 会话会写入它并未记账的目录。
 
+**共享且未记账的额外文件夹按注册表顺序取第一个。** 共享额外目录会授予碰巧排在最前的那个 Workspace。
+
 **让 `resolveByPath` 匹配额外文件夹。** 多个归属方会让返回值任意。
 
 ## Consequences
@@ -30,4 +32,4 @@ Workspace A 的额外文件夹可以再加进 Workspace B，也可以注册为 W
 
 ## Testing
 
-`packages/workspace/workspace/tests/workspace.spec.ts` 覆盖共享额外文件夹、在额外文件夹上创建、提升冲突、会话记账守卫和启动校验。`packages/host/apiproxy/tests/api-proxy-workspace.spec.ts` 覆盖线上的共享、在额外文件夹上创建以及 `setPrimaryFolder` 冲突。`packages/sandbox/sandbox-policy/tests/policy.spec.ts` 覆盖三档额外根选取，以及 `read-only` / `danger-full-access` 下的额外文件夹句子。`packages/client/runtime/tests/workspaces-service.client.spec.ts` 覆盖 addFolder 非法路径和 setPrimaryFolder 冲突透传。
+`packages/workspace/workspace/tests/workspace.spec.ts` 覆盖共享额外文件夹、在额外文件夹上创建、提升冲突、会话记账守卫和启动校验。`packages/host/apiproxy/tests/api-proxy-workspace.spec.ts` 覆盖线上的共享、在额外文件夹上创建以及 `setPrimaryFolder` 冲突。`packages/sandbox/sandbox-policy/tests/policy.spec.ts` 覆盖记账/主目录额外根选取、未记账仅额外文件夹的单根情形，以及 `read-only` / `danger-full-access` 下的额外文件夹句子。`packages/client/runtime/tests/workspaces-service.client.spec.ts` 覆盖 addFolder 非法路径和 setPrimaryFolder 冲突透传。

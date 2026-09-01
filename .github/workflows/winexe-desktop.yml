@@ -1,11 +1,11 @@
-# Pack the Windows Web desktop on every winexeBuilder push and publish a
-# prerelease zip. Official package.json versions stay unchanged; the product
-# stamp is <package-version>.winexe.<GitHub run number>.
+# Pack the Windows Web desktop on every winexeBuilder or winexeNew push and
+# publish a prerelease zip. Official package.json versions stay unchanged; the
+# product stamp is <package-version>.winexe.<GitHub run number>.
 name: Winexe desktop
 
 on:
   push:
-    branches: [winexeBuilder]
+    branches: [winexeBuilder, winexeNew]
   workflow_dispatch:
 
 permissions:
@@ -101,7 +101,7 @@ jobs:
           $ver = '${{ steps.version.outputs.version }}'
           $tag = "winexe-$ver"
           $zip = '${{ steps.zip.outputs.path }}'
-          $notes = "Automated winexeBuilder desktop $ver from ${{ github.sha }}."
+          $notes = "Automated ${{ github.ref_name }} desktop $ver from ${{ github.sha }}."
           if (gh release view $tag 2>$null) {
             gh release upload $tag $zip --clobber
           } else {

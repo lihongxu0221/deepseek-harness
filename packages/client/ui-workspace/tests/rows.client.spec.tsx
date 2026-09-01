@@ -347,6 +347,8 @@ describe('workspace browser rows', () => {
 
   it('workspace hover card shows pin, session count, paths, and Edit project', async () => {
     vi.useFakeTimers()
+    const writeText = vi.fn(async () => {})
+    const restoreClipboard = installClipboard(writeText)
     try {
       const onPin = vi.fn()
       const onEdit = vi.fn()
@@ -365,12 +367,15 @@ describe('workspace browser rows', () => {
       expect(screen.getByText('2 个任务')).toBeTruthy()
       expect(screen.getByText('/projects/project')).toBeTruthy()
       expect(screen.getByText('/projects/extra')).toBeTruthy()
-      fireEvent.click(screen.getByRole('button', { name: '置顶' }))
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: '置顶' })) })
       expect(onPin).toHaveBeenCalledOnce()
+      expect(writeText).not.toHaveBeenCalled()
       expect(screen.getByRole('button', { name: '置顶' }).getAttribute('aria-pressed')).toBe('false')
-      fireEvent.click(screen.getByRole('button', { name: '编辑项目' }))
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: '编辑项目' })) })
       expect(onEdit).toHaveBeenCalledOnce()
+      expect(writeText).not.toHaveBeenCalled()
     } finally {
+      restoreClipboard()
       vi.useRealTimers()
     }
   })
