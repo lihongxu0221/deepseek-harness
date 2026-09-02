@@ -11,30 +11,37 @@ import { join, resolve, sep } from 'node:path'
 /** Directory name for the packaged executable's harness home, beside the exe. */
 export const PACKAGED_WEB_HOME_DIR = '.config'
 
-/** Installation fallback healed on launch; not user data. */
-const MODULE_FALLBACK_SEGMENTS = ['profiles', 'node_modules'] as const
+/** Installation trees recreated on launch; not user data. */
+const OMITTED_HOME_SEGMENTS = new Set(['node_modules', '.dsh-module-fallback'])
 
 /**
- * Copy a packaged `.config` tree, omitting `profiles/node_modules`.
- * That directory is installation junctions recreated on launch; `fs.cp` would
- * recreate them as privilege-gated symlinks and fail with `EPERM` on Windows.
+ * Copy a packaged `.config` tree, omitting `node_modules` and
+ * `.dsh-module-fallback`. Those directories are installation junctions
+ * recreated on launch; `fs.cp` would recreate them as privilege-gated
+ * symlinks and fail with `EPERM` on Windows.
  * @param source - existing `.config` directory.
  * @param destination - directory that should receive the copy.
  */
 async function copyPackagedWebHome(source: string, destination: string): Promise<void> {
-  const fallback = resolve(source, ...MODULE_FALLBACK_SEGMENTS)
+  const home = resolve(source)
+  const prefix = home + sep
   await cp(source, destination, {
     recursive: true,
     filter: (path) => {
       const resolved = resolve(path)
-      return resolved !== fallback && !resolved.startsWith(fallback + sep)
+      const relative = resolved === home
+        ? ''
+        : resolved.startsWith(prefix)
+          ? resolved.slice(prefix.length)
+          : resolved
+      return !relative.split(sep).some(segment => OMITTED_HOME_SEGMENTS.has(segment))
     },
   })
 }
 
 /**
  * Copy `<directory>/.config` aside before a rebuild deletes that tree.
- * Omits `profiles/node_modules`, the installation fallback healed on launch.
+ * Omits `node_modules` and `.dsh-module-fallback`, which launch heals.
  * @param directory - staging or product folder that may already contain user data.
  * @returns the temp folder holding `.config`, or `undefined` when none existed.
  */

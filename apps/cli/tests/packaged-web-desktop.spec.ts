@@ -193,6 +193,7 @@ describe('parseDesktopGuestCommand', () => {
     expect(parseDesktopGuestCommand('{"type":"start"}')).toBeUndefined()
     expect(parseDesktopGuestCommand('{"type":"restart"}')).toBeUndefined()
     expect(parseDesktopGuestCommand('{"type":"settings"}')).toBeUndefined()
+    expect(parseDesktopGuestCommand('{"type":"window-missing"}')).toBeUndefined()
   })
 })
 
@@ -456,6 +457,34 @@ describe('runPackagedWebDesktop', () => {
     await waitFor(() => harness.messages.some(message => message.type === 'ready'))
     harness.emit({ type: 'show' })
     await waitFor(() => harness.messages.some(message => message.type === 'focus'))
+    expect(harness.windows).toHaveLength(1)
+    harness.emit({ type: 'quit' })
+    await done
+  })
+
+  it('reopens the main window when Show focus finds no visible HWND', async () => {
+    const harness = createHarness()
+    const done = runPackagedWebDesktop(harness.io)
+    await waitFor(() => harness.messages.some(message => message.type === 'ready'))
+    harness.emit({ type: 'show' })
+    await waitFor(() => harness.messages.some(message => message.type === 'focus'))
+    expect(harness.windows).toHaveLength(1)
+    harness.emit({ type: 'window-missing' })
+    await waitFor(() => harness.windows.length === 2)
+    expect(harness.windows[1]?.url).toBe('http://127.0.0.1:3080/?token=test-token')
+    harness.emit({ type: 'window-missing' })
+    await new Promise<void>((resolvePromise) => { setTimeout(resolvePromise, 20) })
+    expect(harness.windows).toHaveLength(2)
+    harness.emit({ type: 'quit' })
+    await done
+  })
+
+  it('ignores window-missing unless Show asked to raise a tracked window', async () => {
+    const harness = createHarness()
+    const done = runPackagedWebDesktop(harness.io)
+    await waitFor(() => harness.messages.some(message => message.type === 'ready'))
+    harness.emit({ type: 'window-missing' })
+    await new Promise<void>((resolvePromise) => { setTimeout(resolvePromise, 20) })
     expect(harness.windows).toHaveLength(1)
     harness.emit({ type: 'quit' })
     await done

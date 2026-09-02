@@ -47,6 +47,7 @@ try {
 Add-Type -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
+using System.Text;
 public static class DshNative {
   public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
   [DllImport("user32.dll")] public static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
@@ -55,6 +56,8 @@ public static class DshNative {
   [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
   [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
   [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hWnd);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetWindowTextLength(IntPtr hWnd);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
   public const int SW_RESTORE = 9;
   public const int SW_SHOW = 5;
 }
@@ -69,27 +72,49 @@ function Emit($obj) {
   [Console]::Out.Flush()
 }
 
-function FocusPid([int]$ProcessId) {
-  if ($ProcessId -le 0) { return }
+function FocusHwnd([IntPtr]$hWnd) {
+  if ([DshNative]::IsIconic($hWnd)) {
+    [void][DshNative]::ShowWindow($hWnd, [DshNative]::SW_RESTORE)
+  }
+  [void][DshNative]::ShowWindow($hWnd, [DshNative]::SW_SHOW)
+  [void][DshNative]::SetForegroundWindow($hWnd)
+}
+
+# Raise a visible product window. Pid match covers a live --app process; title
+# match covers a handoff where the HWND lives on a different Chromium pid.
+function FocusAppWindow([int]$ProcessId) {
   $script:Target = [IntPtr]::Zero
+  $script:TitleTarget = [IntPtr]::Zero
   $cb = [DshNative+EnumWindowsProc] {
     param([IntPtr]$hWnd, [IntPtr]$lParam)
+    if (-not [DshNative]::IsWindowVisible($hWnd)) { return $true }
     $wndPid = 0
     [void][DshNative]::GetWindowThreadProcessId($hWnd, [ref]$wndPid)
-    if (($wndPid -eq $ProcessId) -and [DshNative]::IsWindowVisible($hWnd)) {
+    if ($ProcessId -gt 0 -and $wndPid -eq $ProcessId) {
       $script:Target = $hWnd
       return $false
+    }
+    $len = [DshNative]::GetWindowTextLength($hWnd)
+    if ($len -gt 0) {
+      $sb = New-Object System.Text.StringBuilder ($len + 1)
+      [void][DshNative]::GetWindowText($hWnd, $sb, $sb.Capacity)
+      $title = $sb.ToString()
+      if ($title -eq 'DeepSeek Harness' -or $title.EndsWith(' — DeepSeek Harness')) {
+        $script:TitleTarget = $hWnd
+      }
     }
     return $true
   }
   [void][DshNative]::EnumWindows($cb, [IntPtr]::Zero)
   if ($script:Target -ne [IntPtr]::Zero) {
-    if ([DshNative]::IsIconic($script:Target)) {
-      [void][DshNative]::ShowWindow($script:Target, [DshNative]::SW_RESTORE)
-    }
-    [void][DshNative]::ShowWindow($script:Target, [DshNative]::SW_SHOW)
-    [void][DshNative]::SetForegroundWindow($script:Target)
+    FocusHwnd $script:Target
+    return $true
   }
+  if ($script:TitleTarget -ne [IntPtr]::Zero) {
+    FocusHwnd $script:TitleTarget
+    return $true
+  }
+  return $false
 }
 
 function IconCandidates([string]$filename, [string]$explicit) {
@@ -420,7 +445,9 @@ function HandleLine([string]$line) {
     'focus' {
       $focusPid = 0
       [void][int]::TryParse([string]$msg.pid, [ref]$focusPid)
-      FocusPid $focusPid
+      if (-not (FocusAppWindow $focusPid)) {
+        Emit @{ type = 'window-missing' }
+      }
     }
     'quit' {
       $script:Notify.Visible = $false

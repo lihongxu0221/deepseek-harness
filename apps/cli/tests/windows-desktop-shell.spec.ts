@@ -21,6 +21,7 @@ describe('windows desktop shell protocol', () => {
     expect(parseShellToHost('{"type":"stop"}')).toEqual({ type: 'stop' })
     expect(parseShellToHost('{"type":"restart"}')).toEqual({ type: 'restart' })
     expect(parseShellToHost('{"type":"settings"}')).toEqual({ type: 'settings' })
+    expect(parseShellToHost('{"type":"window-missing"}')).toEqual({ type: 'window-missing' })
     expect(parseShellToHost('{"type":"listen","host":"0.0.0.0","port":8080}'))
       .toEqual({ type: 'listen', host: '0.0.0.0', port: 8080 })
     expect(parseShellToHost('{"type":"listen","host":"10.0.0.1","port":8080}')).toBeUndefined()
@@ -45,6 +46,10 @@ describe('windows desktop shell protocol', () => {
       'utf8',
     ).replace(/^\uFEFF/, '').replace(/\r\n/g, '\n')
     expect(WINDOWS_DESKTOP_SHELL_SCRIPT).toBe(source)
+    expect(source).toContain('function FocusAppWindow')
+    expect(source).toContain('GetWindowText')
+    expect(source).toContain("EndsWith(' — DeepSeek Harness')")
+    expect(source).toContain("Emit @{ type = 'window-missing' }")
     expect(source).toContain("T '显示主界面' 'Show main window'")
     expect(source).toContain("T '打开 http://127.0.0.1:3080' 'Open http://127.0.0.1:3080'")
     expect(source).toContain('T "打开 $url" "Open $url"')

@@ -339,6 +339,8 @@ export async function runPackagedWebDesktop(io: PackagedWebDesktopIo): Promise<v
   let inFlightAbort: AbortController | undefined
   let current: Context | undefined
   let opened: OpenedDesktopWindow | undefined
+  /** True only while Show asked the tray to raise an already-tracked window. */
+  let raisePending = false
   let running = false
   let port: number | undefined
   let bootRev: string | undefined
@@ -493,6 +495,7 @@ export async function runPackagedWebDesktop(io: PackagedWebDesktopIo): Promise<v
   }
 
   const stop = async (): Promise<void> => {
+    raisePending = false
     await closeWindow()
     await disposeCurrent()
     running = false
@@ -514,20 +517,35 @@ export async function runPackagedWebDesktop(io: PackagedWebDesktopIo): Promise<v
     if (running) await restart()
   }
 
+  const openTracked = async (hash?: '#settings'): Promise<void> => {
+    try {
+      const window = io.openWindow(localUrl(hash))
+      trackWindow(window)
+      if (window?.pid !== undefined) send({ type: 'focus', pid: window.pid })
+    } catch (error) {
+      send({
+        type: 'error',
+        text: errorText(error),
+        zh: hash === '#settings' ? '打开设置失败。' : '打开窗口失败。',
+      })
+    }
+  }
+
+  const reveal = async (hash?: '#settings'): Promise<void> => {
+    raisePending = false
+    await closeWindow()
+    await openTracked(hash)
+  }
+
   const show = async (): Promise<void> => {
     if (!running) await start()
     if (!running) return
     if (opened !== undefined) {
-      if (opened.pid !== undefined) send({ type: 'focus', pid: opened.pid })
+      raisePending = true
+      send(opened.pid === undefined ? { type: 'focus' } : { type: 'focus', pid: opened.pid })
       return
     }
-    try {
-      const window = io.openWindow(localUrl())
-      trackWindow(window)
-      if (window?.pid !== undefined) send({ type: 'focus', pid: window.pid })
-    } catch (error) {
-      send({ type: 'error', text: errorText(error), zh: '打开窗口失败。' })
-    }
+    await openTracked()
   }
 
   const settings = async (): Promise<void> => {
@@ -535,14 +553,15 @@ export async function runPackagedWebDesktop(io: PackagedWebDesktopIo): Promise<v
       await start('#settings')
       return
     }
-    await closeWindow()
-    try {
-      const window = io.openWindow(localUrl('#settings'))
-      trackWindow(window)
-      if (window?.pid !== undefined) send({ type: 'focus', pid: window.pid })
-    } catch (error) {
-      send({ type: 'error', text: errorText(error), zh: '打开设置失败。' })
+    await reveal('#settings')
+  }
+
+  const missingWindow = async (): Promise<void> => {
+    if (!raisePending || !running) {
+      raisePending = false
+      return
     }
+    await reveal()
   }
 
   const quit = async (): Promise<void> => {
@@ -575,6 +594,9 @@ export async function runPackagedWebDesktop(io: PackagedWebDesktopIo): Promise<v
         return
       case 'settings':
         await settings()
+        return
+      case 'window-missing':
+        await missingWindow()
         return
       case 'quit':
         await quit()

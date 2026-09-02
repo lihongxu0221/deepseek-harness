@@ -49,26 +49,28 @@ describe('withPreservedPackagedWebHome', () => {
     expect(readFileSync(join(home, 'sessions', 'one.json'), 'utf8')).toBe('{"ok":true}')
   })
 
-  it('omits profiles/node_modules junctions and keeps profile files', async () => {
+  it('omits node_modules junctions under profiles and keeps profile files', async () => {
     const directory = fixture('dsh-web-config-fallback-')
     const home = join(directory, PACKAGED_WEB_HOME_DIR)
     const packageDir = fixture('dsh-web-config-pkg-')
     writeFileSync(join(packageDir, 'index.js'), 'module.exports = 1\n')
-    mkdirSync(join(home, 'profiles', 'web'), { recursive: true })
+    mkdirSync(join(home, 'profiles', 'web', 'node_modules', '@scope'), { recursive: true })
     mkdirSync(join(home, 'profiles', 'node_modules', '@scope'), { recursive: true })
+    mkdirSync(join(home, 'profiles', 'web', '.dsh-module-fallback'), { recursive: true })
     writeFileSync(join(home, 'profiles', 'web', 'package.json'), '{"name":"web"}')
+    writeFileSync(join(home, 'profiles', 'web', '.dsh-module-fallback', 'keep.txt'), 'fallback')
     writeFileSync(join(home, '.credentials.yaml'), 'marker: credentials')
-    symlinkSync(
-      packageDir,
-      join(home, 'profiles', 'node_modules', '@scope', 'pkg'),
-      process.platform === 'win32' ? 'junction' : 'dir',
-    )
+    const junction = process.platform === 'win32' ? 'junction' as const : 'dir' as const
+    symlinkSync(packageDir, join(home, 'profiles', 'node_modules', '@scope', 'pkg'), junction)
+    symlinkSync(packageDir, join(home, 'profiles', 'web', 'node_modules', '@scope', 'pkg'), junction)
     await withPreservedPackagedWebHome(directory, async () => {
       rmSync(directory, { recursive: true, force: true })
     })
     expect(readFileSync(join(home, '.credentials.yaml'), 'utf8')).toBe('marker: credentials')
     expect(readFileSync(join(home, 'profiles', 'web', 'package.json'), 'utf8')).toBe('{"name":"web"}')
     expect(existsSync(join(home, 'profiles', 'node_modules'))).toBe(false)
+    expect(existsSync(join(home, 'profiles', 'web', 'node_modules'))).toBe(false)
+    expect(existsSync(join(home, 'profiles', 'web', '.dsh-module-fallback'))).toBe(false)
   })
 
   it('restores .config when action throws', async () => {
