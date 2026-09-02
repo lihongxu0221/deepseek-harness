@@ -18,6 +18,44 @@ import {
   withPackagedScriptArgv,
 } from '../src/packaged-web-entry.ts'
 
+function wrapLauncherChildProcess(attachHiddenConsole: () => boolean) {
+  const launcher = readFileSync(fileURLToPath(new URL('../packaged-web-launcher.cjs', import.meta.url)), 'utf8')
+  const guard = "if (process.platform === 'win32') {"
+  const start = launcher.indexOf(guard)
+  const end = launcher.indexOf('const SCRIPT_EXTS')
+  expect(start).toBeGreaterThan(-1)
+  const body = launcher.slice(start + guard.length, end).replace(/\}\s*$/u, '')
+  const seen: unknown[][] = []
+  const record = (name: string) =>
+    (...callArgs: unknown[]): unknown => {
+      seen.push([name, ...callArgs])
+      return { pid: 0 }
+    }
+  const cp = {
+    spawn: record('spawn'),
+    spawnSync: record('spawnSync'),
+    exec: record('exec'),
+    execSync: record('execSync'),
+    execFile: record('execFile'),
+    execFileSync: record('execFileSync'),
+  }
+  const build = new Function(
+    'cp',
+    'attachHiddenConsole',
+    body +
+      '\nreturn { spawn: cp.spawn, spawnSync: cp.spawnSync, exec: cp.exec, execSync: cp.execSync, execFile: cp.execFile, execFileSync: cp.execFileSync }',
+  )
+  const wrapped = build(cp, attachHiddenConsole) as {
+    spawn: (...callArgs: unknown[]) => unknown
+    spawnSync: (...callArgs: unknown[]) => unknown
+    exec: (...callArgs: unknown[]) => unknown
+    execSync: (...callArgs: unknown[]) => unknown
+    execFile: (...callArgs: unknown[]) => unknown
+    execFileSync: (...callArgs: unknown[]) => unknown
+  }
+  return { seen, wrapped }
+}
+
 describe('resolvePackagedWebEntry', () => {
   it('resolves lib/packaged-web-bin.js beside the launcher and refuses a missing file', () => {
     const execPath = join('D:\\dist', 'dsh-web.exe')
@@ -37,12 +75,15 @@ describe('resolvePackagedWebEntry', () => {
     expect(launcher).toContain('isInvocationEcho(value, process.execPath)')
     expect(launcher).toContain("INVOCATION_STEMS = new Set(['dsh', 'dsh-web'])")
     expect(launcher).toContain("join(dirname(process.execPath), 'lib', 'bin.js')")
-    // Every child console is hidden on Windows by wrapping child_process in
-    // the launcher, before any ESM import creates the builtin facade; a GUI
-    // host without this makes each unpatched plugin spawn pop an empty
-    // console window (git from source-control panels, pnpm installs, ...).
+    // A GUI host attaches a hidden console and wraps child_process before any
+    // ESM import creates the builtin facade, so CUI grandchildren inherit that
+    // console instead of allocating a visible empty window.
     expect(launcher).toContain("require('node:child_process')")
-    expect(launcher).toContain('allocates a new, visible, empty console window')
+    expect(launcher).toContain('function attachHiddenConsole()')
+    expect(launcher).toContain('AllocConsole')
+    expect(launcher).toContain('SetStdHandle')
+    expect(launcher).toContain('const inheritHiddenConsole = attachHiddenConsole()')
+    expect(launcher).toContain('visible, empty console window')
     expect(launcher).toContain('cp.spawn = wrapArgv(cp.spawn)')
     expect(launcher).toContain('cp.spawnSync = wrapArgv(cp.spawnSync)')
     expect(launcher).toContain('cp.exec = wrapExec(cp.exec)')
@@ -56,41 +97,9 @@ describe('resolvePackagedWebEntry', () => {
   })
 
   it('forces windowsHide onto every documented child_process call shape', () => {
-    const launcher = readFileSync(fileURLToPath(new URL('../packaged-web-launcher.cjs', import.meta.url)), 'utf8')
-    const guard = "if (process.platform === 'win32') {"
-    const start = launcher.indexOf(guard)
-    const end = launcher.indexOf('const SCRIPT_EXTS')
-    expect(start).toBeGreaterThan(-1)
-    // Evaluate the block body against recording stand-ins so every wrapper
-    // branch is exercised without spawning real children.
-    const body = launcher.slice(start + guard.length, end).replace(/\}\s*$/u, '')
-    const seen: unknown[][] = []
-    const record = (name: string) =>
-      (...callArgs: unknown[]): unknown => {
-        seen.push([name, ...callArgs])
-        return { pid: 0 }
-      }
-    const cp = {
-      spawn: record('spawn'),
-      spawnSync: record('spawnSync'),
-      exec: record('exec'),
-      execSync: record('execSync'),
-      execFile: record('execFile'),
-      execFileSync: record('execFileSync'),
-    }
-    const build = new Function(
-      'cp',
-      body +
-        '\nreturn { spawn: cp.spawn, spawnSync: cp.spawnSync, exec: cp.exec, execSync: cp.execSync, execFile: cp.execFile, execFileSync: cp.execFileSync }',
-    )
-    const wrapped = build(cp) as {
-      spawn: (...callArgs: unknown[]) => unknown
-      spawnSync: (...callArgs: unknown[]) => unknown
-      exec: (...callArgs: unknown[]) => unknown
-      execSync: (...callArgs: unknown[]) => unknown
-      execFile: (...callArgs: unknown[]) => unknown
-      execFileSync: (...callArgs: unknown[]) => unknown
-    }
+    // Evaluate the wrap against recording stand-ins so every branch is
+    // exercised without spawning real children.
+    const { seen, wrapped } = wrapLauncherChildProcess(() => false)
     const noop = (): void => {}
     wrapped.spawn('git')
     wrapped.spawn('git', ['-v'])
@@ -127,6 +136,16 @@ describe('resolvePackagedWebEntry', () => {
     wrapped.spawn('git', ['-v'], { stdio: 'ignore', windowsHide: true })
     expect(seen[9]![3]).toEqual({ stdio: 'ignore', windowsHide: false })
     expect(seen[10]![3]).toEqual({ stdio: 'ignore', windowsHide: true })
+  })
+
+  it('does not inject windowsHide when a hidden console is already attached', () => {
+    const { seen, wrapped } = wrapLauncherChildProcess(() => true)
+    wrapped.spawn('git', ['-v'])
+    wrapped.spawn('git', ['-v'], { stdio: 'pipe' })
+    wrapped.spawn('git', ['-v'], { stdio: 'ignore', windowsHide: false })
+    expect(seen[0]![3]).toEqual({})
+    expect(seen[1]![3]).toEqual({ stdio: 'pipe' })
+    expect(seen[2]![3]).toEqual({ stdio: 'ignore', windowsHide: false })
   })
 })
 

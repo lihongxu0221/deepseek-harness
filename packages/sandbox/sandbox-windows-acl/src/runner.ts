@@ -47,6 +47,8 @@
 import { existsSync, mkdtempSync, rmSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 
+import { attachHiddenConsole } from '@deepseek-ai/dsh-win32-process'
+
 import { win32 } from './ffi.ts'
 import { AclSandbox, assertTempRootOutsideWorkspace } from './index.ts'
 import { tempWriteSid, workspaceWriteSid } from './workspace-sid.ts'
@@ -131,6 +133,13 @@ async function main(): Promise<number> {
   }
 
   const api = await win32()
+  // A GUI runner (packaged dsh-web.exe) has no console; restricted children
+  // cannot use CREATE_NO_WINDOW, so attach a hidden console for them to inherit.
+  try {
+    attachHiddenConsole()
+  } catch (_hiddenConsoleAttachFailed) {
+    // Spawn still proceeds; a GUI host may flash a console for this child.
+  }
   // Ignore this process's own CTRL+C: the confined child (same console) keeps
   // handling its own; the runner must survive to revoke grants and mirror the
   // child's exit code.

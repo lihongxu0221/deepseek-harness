@@ -29,6 +29,7 @@ kind: "package-library"
 - **管道进程原语** — `spawnPipedProcess()` 创建匿名 stdin/stdout/stderr 管道，立即关闭 stdin，并返回两个读取端；调用方负责等待进程与排空管道。任一局部失败都会关闭该操作已经拥有的句柄，并在各自 Win32 生命周期结束后释放每个 Koffi 输出槽与结构体分配。
 - **继承 stdio 的 Job 原语** — `spawnInheritedJobProcess()` 创建一个 kill-on-close Job，临时把当前 stdio 句柄设为可继承，以 suspended 状态创建 restricted child，把它分配给 Job，再恢复初始线程。目标代码不会在 Job 分配前运行；受控的分配或恢复失败会终止 suspended child，或在释放全部已拥有句柄前关闭已分配的 Job。
 - **显式结算归属** — `waitForProcessExit()` 等待并关闭进程句柄。`drainPipe()` 在排空期间复用一个 native count slot，释放该分配并关闭管道读取句柄。sandbox 保留既有调度、result 组合与调用方拥有的 Job 关闭行为。
+- **隐藏控制台附着** — `attachHiddenConsole()` 在本进程尚无控制台时分配一个隐藏控制台，并在之后恢复 stdin/stdout/stderr，使 CUI 子进程继承该控制台，而不把 Node 已打开的流变成 TTY。
 
 Windows ACL 沙箱在这些原语上增加 SID、DACL、grant、workspace 与公共 child policy。
 

@@ -83,7 +83,7 @@ The provider treats the process tree as the unit of lifetime. POSIX children spa
 
 ### Main flow
 
-A spawn builds the scrubbed child environment, starts the detached process, attaches collectors to the collected streams, and returns a handle. `done` settles at process close after a bounded pipe-drain grace, so a surviving descendant that inherited a pipe cannot hold the outcome open indefinitely; the escalation timer survives direct-child settlement so SIGKILL still reaches tree survivors. Terminal cleanup sweeps descendants by exact identity, stops the shell, re-sweeps, and verifies absence through the process table.
+A spawn builds the scrubbed child environment, starts the detached process, attaches collectors to the collected streams, and returns a handle. On Windows, spawn passes `windowsHide` only when this process has no console, so CUI grandchildren inherit a hidden console attached by a GUI host instead of allocating a visible empty window. `done` settles at process close after a bounded pipe-drain grace, so a surviving descendant that inherited a pipe cannot hold the outcome open indefinitely; the escalation timer survives direct-child settlement so SIGKILL still reaches tree survivors. Terminal cleanup sweeps descendants by exact identity, stops the shell, re-sweeps, and verifies absence through the process table.
 
 ### Safety invariants
 
@@ -103,6 +103,7 @@ Read these pages when the provider-level contract is not enough. They move from 
 - [dsh-bash-local](../../shell/bash-local/README.md) — the largest consumer and the concrete stdio shapes it asks for.
 - [Subprocess seam Agent Note](../../../.agents/notes/implemented/architecture/2026-07-26-subprocess-seam.md) — why the process half became its own seam.
 - [Synchronous subprocess exit cleanup](../../../.agents/notes/implemented/bug-fix/2026-08-11-synchronous-subprocess-exit-cleanup.md) — the host-exit finalization decision and its failure modes.
+- [Hidden-console inheritance](../../../.agents/notes/implemented/bug-fix/2026-09-02-inherit-hidden-console-for-gui-host.md) — why Windows spawn omits `windowsHide` when this process already owns a console.
 
 -----
 

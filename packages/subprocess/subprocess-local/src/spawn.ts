@@ -2,8 +2,9 @@
  * Process plumbing for the local subprocess service: detached process-tree
  * spawn with per-stream stdio dispositions, tail-keep collection with spill
  * files, tree-scoped signalling (POSIX groups; Windows taskkill), and the
- * SIGTERM→SIGKILL escalation. Windows spawns hide a new console so a GUI
- * host (the packaged Web desktop) does not flash one per child. This layer
+ * SIGTERM→SIGKILL escalation. Windows spawns pass windowsHide only when this
+ * process has no console, so a GUI host that attached a hidden console lets CUI
+ * grandchildren inherit it instead of allocating a visible empty window. This layer
  * reacts to an abort signal; callers own deadlines, teardown ladders, and
  * cause classification.
  * @module dsh-subprocess-local/spawn
@@ -16,6 +17,7 @@ import { closeSync, mkdtempSync, openSync, unlinkSync, writeSync } from 'node:fs
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { setTimeout as sleepMs } from 'node:timers/promises'
+import koffi from 'koffi'
 import { scrubbedParentEnv } from '@deepseek-ai/dsh-subprocess'
 import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
 import type {
@@ -58,6 +60,12 @@ export interface SpawnInternals {
   platform?: NodeJS.Platform
   /** Linux process-group member probe (defaults to `/proc` inspection). */
   linuxProcessGroupHasLiveMembers?: (processGroupId: number) => boolean | undefined
+  /**
+   * Whether this process already owns a console. When true, spawn omits
+   * CREATE_NO_WINDOW so CUI grandchildren inherit that console. Tests inject
+   * it; production probes GetConsoleWindow.
+   */
+  parentHasConsole?: boolean
 }
 
 /**
@@ -317,11 +325,34 @@ function signalTree(
 }
 
 /**
+ * Whether this process already owns a Windows console.
+ * @returns true only on win32 when GetConsoleWindow is non-null.
+ */
+function parentOwnsWindowsConsole(): boolean {
+  /* v8 ignore next -- kernel32 bind; tests inject parentHasConsole. */
+  if (process.platform === 'win32') return nativeParentOwnsConsole()
+  return false
+}
+
+/* v8 ignore start -- kernel32 bind; tests inject parentHasConsole. */
+function nativeParentOwnsConsole(): boolean {
+  try {
+    const kernel32 = koffi.load('kernel32.dll')
+    const getConsoleWindow = kernel32.func('__stdcall', 'GetConsoleWindow', koffi.pointer('void'), []) as () => unknown
+    const hwnd = getConsoleWindow()
+    return hwnd !== null && hwnd !== undefined && hwnd !== 0 && hwnd !== 0n
+  } catch (_consoleProbeFailed) {
+    return false
+  }
+}
+/* v8 ignore stop */
+
+/**
  * Spawn one isolated detached process tree with the spec's per-stream stdio
  * dispositions. Runtime exits resolve `done` as {@link SubprocessOutcome};
  * only spawn failures reject.
  * @param spec - fully resolved argv, cwd, stdio, grace, cancellation, environment.
- * @param internals - test-only spill-directory, platform, and taskkill overrides.
+ * @param internals - test-only spill-directory, platform, taskkill, and parentHasConsole overrides.
  * @returns live subprocess handle.
  * @throws when `graceMs` cannot be represented by one Node timer.
  */
@@ -360,9 +391,10 @@ export function spawnSubprocess(spec: SubprocessSpawnSpec, internals: SpawnInter
     // `detached` gives teardown a tree root on POSIX (its own process group);
     // Windows terminates by root pid through taskkill /T instead.
     detached: platform !== 'win32',
-    // CREATE_NO_WINDOW: a GUI-subsystem host otherwise allocates a visible
-    // console for each console-subsystem child (packaged rg.exe, pwsh, taskkill).
-    windowsHide: true,
+    // CREATE_NO_WINDOW hides a direct CUI child of a GUI host, but then that
+    // child's CUI grandchildren allocate a visible empty console. Inherit when
+    // this process already owns a console (including a hidden one).
+    windowsHide: !(internals.parentHasConsole ?? parentOwnsWindowsConsole()),
   })
 
   const collectStream = (mode: SubprocessOutputMode, stream: Readable | null, label: string): OutputCollector | undefined => {

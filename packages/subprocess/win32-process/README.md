@@ -29,6 +29,7 @@ Low-level Win32 process library consumed by the Windows ACL sandbox. It owns the
 - **Piped process primitive** — `spawnPipedProcess()` creates anonymous stdin/stdout/stderr pipes, closes stdin immediately, returns the two read ends, and leaves process waiting and pipe draining to the caller. Every partial failure closes the handles already owned by the operation, and every Koffi out-parameter or struct allocation is freed after its Win32 lifetime.
 - **Inherited-stdio Job primitive** — `spawnInheritedJobProcess()` creates one kill-on-close Job, temporarily marks the current stdio handles inheritable, creates the restricted child suspended, assigns it to the Job, and then resumes its initial thread. Target code cannot run before Job assignment; controlled assignment or resume failures terminate the suspended child or close the assigned Job before releasing every owned handle.
 - **Explicit settlement ownership** — `waitForProcessExit()` waits and closes the process handle. `drainPipe()` reuses one native count slot while draining, frees it, and closes the pipe read handle. The sandbox retains its existing scheduling, result composition, and caller-owned Job closure.
+- **Hidden console attachment** — `attachHiddenConsole()` allocates a hidden console when this process has none and restores stdin/stdout/stderr afterwards, so CUI children inherit that console without turning Node's already-opened streams into a TTY.
 
 The Windows ACL sandbox adds SID, DACL, grant, workspace, and public child policy above these primitives.
 

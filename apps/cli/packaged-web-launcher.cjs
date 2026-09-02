@@ -17,23 +17,61 @@ const cp = require('node:child_process')
 const { basename, dirname, extname, join, resolve } = require('node:path')
 const { pathToFileURL } = require('node:url')
 
-// Hide every child console on Windows. The packaged host is a GUI process
-// without its own console, so a child spawned without windowsHide — git from
-// a sidebar plugin, pnpm from the market, any future plugin's CLI helper —
-// allocates a new, visible, empty console window. Third-party plugins cannot
-// be fixed per callsite, so wrap the whole child_process export family here,
-// before any ESM import creates the node:child_process facade; every later
-// `import { spawn } from 'node:child_process'` sees the wrapped functions.
-// An explicit caller-owned windowsHide always wins: CREATE_NO_WINDOW also
-// seeds STARTUPINFO with SW_HIDE, which hides the first GUI window of
-// Chromium-style children, so window-spawning helpers declare `false`.
+// Attach a hidden console on Windows GUI hosts, then wrap child_process so
+// callers that leave windowsHide unset inherit that console instead of
+// CREATE_NO_WINDOW. CREATE_NO_WINDOW hides a direct CUI child but leaves its
+// CUI grandchildren (pwsh spawning git) without a console, so they allocate a
+// new, visible, empty console window. Restricted-token sandbox children also
+// cannot use CREATE_NO_WINDOW. Restoring stdin/stdout/stderr after AllocConsole
+// keeps piped stdio and leaves Node's already-opened streams non-TTY.
+// The wrap still injects windowsHide when AllocConsole does not attach, which
+// is the fallback for a GUI host with no console. An explicit caller-owned
+// windowsHide always wins: CREATE_NO_WINDOW also seeds STARTUPINFO with SW_HIDE,
+// which hides the first GUI window of Chromium-style children, so
+// window-spawning helpers declare false.
+function attachHiddenConsole() {
+  if (process.platform !== 'win32') return false
+  try {
+    const { createRequire } = require('node:module')
+    const onDisk = join(dirname(process.execPath), 'lib', 'packaged-web-bin.js')
+    const req = existsSync(onDisk) ? createRequire(onDisk) : createRequire(__filename)
+    const koffi = req('koffi')
+    const kernel32 = koffi.load('kernel32.dll')
+    const user32 = koffi.load('user32.dll')
+    const stdcall = (lib, name, result, args) => lib.func('__stdcall', name, result, args)
+    const GetConsoleWindow = stdcall(kernel32, 'GetConsoleWindow', 'void*', [])
+    const isNullHwnd = (value) => value === null || value === undefined || value === 0 || value === 0n
+    if (!isNullHwnd(GetConsoleWindow())) return true
+    const GetStdHandle = stdcall(kernel32, 'GetStdHandle', 'void*', ['int'])
+    const SetStdHandle = stdcall(kernel32, 'SetStdHandle', 'int', ['int', 'void*'])
+    const AllocConsole = stdcall(kernel32, 'AllocConsole', 'int', [])
+    const ShowWindow = stdcall(user32, 'ShowWindow', 'int', ['void*', 'int'])
+    const STD_INPUT_HANDLE = -10
+    const STD_OUTPUT_HANDLE = -11
+    const STD_ERROR_HANDLE = -12
+    const stdin = GetStdHandle(STD_INPUT_HANDLE)
+    const stdout = GetStdHandle(STD_OUTPUT_HANDLE)
+    const stderr = GetStdHandle(STD_ERROR_HANDLE)
+    if (!AllocConsole()) return false
+    const hwnd = GetConsoleWindow()
+    if (!isNullHwnd(hwnd)) ShowWindow(hwnd, 0)
+    SetStdHandle(STD_INPUT_HANDLE, stdin)
+    SetStdHandle(STD_OUTPUT_HANDLE, stdout)
+    SetStdHandle(STD_ERROR_HANDLE, stderr)
+    return !isNullHwnd(GetConsoleWindow())
+  } catch (_koffiOrWin32Unavailable) {
+    return false
+  }
+}
+
 if (process.platform === 'win32') {
+  const inheritHiddenConsole = attachHiddenConsole()
   const hideOptions = (options) => {
     if (options === undefined || options === null || typeof options !== 'object' || Array.isArray(options)) {
-      return { windowsHide: true }
+      return inheritHiddenConsole ? {} : { windowsHide: true }
     }
     if ('windowsHide' in options) return options
-    return { ...options, windowsHide: true }
+    return inheritHiddenConsole ? options : { ...options, windowsHide: true }
   }
   const wrapArgv = (fn) => function windowsHiddenSpawn(file, args, options) {
     if (Array.isArray(args) || args === undefined || args === null) {

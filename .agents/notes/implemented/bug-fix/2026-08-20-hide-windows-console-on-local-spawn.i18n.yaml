@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-08-20-hide-windows-console-on-local-spawn.md
-2026-08-20-hide-windows-console-on-local-spawn.md: ea50d50218c44b43e1e11a3debca53f661a41be3
-2026-08-20-hide-windows-console-on-local-spawn.zh.md: 40c27f4a291f9795a65098f8cbd3fba55825135f
+2026-08-20-hide-windows-console-on-local-spawn.md: ac1040789f462c0720ffb650cc1ec598b2e3987d
+2026-08-20-hide-windows-console-on-local-spawn.zh.md: 1f05a23f4045d2f57d78d21bf3b7efe9b381459b

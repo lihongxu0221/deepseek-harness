@@ -12,15 +12,15 @@ The public subprocess spec does not carry a window-visibility flag. Visibility i
 
 ## Decision
 
-`dsh-subprocess-local` always passes `windowsHide: true` to Node `spawn` / `spawnSync`. Node maps that option to `CREATE_NO_WINDOW`. Ordinary trees, including packaged `rg.exe` and pwsh, and the local `taskkill /T` helpers in `spawn.ts` and `windows-inspector.ts`, all take this path.
+`dsh-subprocess-local` passes `windowsHide: true` to Node `spawn` / `spawnSync` only when this process has no console. Node maps that option to `CREATE_NO_WINDOW`. Ordinary trees, including packaged `rg.exe` and pwsh, and the local `taskkill /T` helpers in `spawn.ts` and `windows-inspector.ts`, all take this path. When the parent already owns a console — including the hidden console a GUI host attaches — spawn omits the flag so CUI grandchildren inherit that console; see [hidden-console inheritance](2026-09-02-inherit-hidden-console-for-gui-host.md).
 
-The flag is unconditional on every host: Node ignores it off Windows, and a CUI host already owns a console, so hiding a new one does not change attached stdio. Piped and collected stdio stay pipes; `inherit` still uses the parent descriptors. Terminal sessions stay on `node-pty` / ConPTY and do not use this flag.
+Node ignores the flag off Windows. Piped and collected stdio stay pipes; `inherit` still uses the parent descriptors. Terminal sessions stay on `node-pty` / ConPTY and do not use this flag.
 
-Windows ACL sandbox children remain a separate native spawn that still omits `CREATE_NO_WINDOW`, because a restricted token dies with `STATUS_DLL_INIT_FAILED` under that flag; see [the Windows ACL sandbox decision](../feature/2026-08-08-windows-acl-restricted-token-sandbox.md). The packaged launcher separately wraps raw `node:child_process` exports so third-party-plugin children are hidden too; see [the packaged-launcher child-console decision](2026-08-23-hide-all-child-consoles-in-packaged-launcher.md).
+Windows ACL sandbox children remain a separate native spawn that still omits `CREATE_NO_WINDOW`, because a restricted token dies with `STATUS_DLL_INIT_FAILED` under that flag; see [the Windows ACL sandbox decision](../feature/2026-08-08-windows-acl-restricted-token-sandbox.md). The packaged launcher separately wraps raw `node:child_process` exports so third-party-plugin children follow the same hide-or-inherit rule; see [the packaged-launcher child-console decision](2026-08-23-hide-all-child-consoles-in-packaged-launcher.md).
 
 ## Verification
 
-Unit tests record the Node spawn options for an ordinary child and for `taskkillProcessTree`, and require `windowsHide: true` on both. Existing collect, inherit, abort, and Windows taskkill lifecycle tests continue to pin stdio and teardown.
+Unit tests record the Node spawn options for an ordinary child and for `taskkillProcessTree`, require `windowsHide: true` when the parent has no console, and require `windowsHide: false` on spawn when the parent already owns a console. Existing collect, inherit, abort, and Windows taskkill lifecycle tests continue to pin stdio and teardown.
 
 ## Alternatives considered
 
@@ -34,4 +34,4 @@ Unit tests record the Node spawn options for an ordinary child and for `taskkill
 
 ## Consequences
 
-A GUI-subsystem host no longer flashes a console per local child. Consumers do not opt in. A future caller that needs a visible extra console must change the local provider, not a single tool. Restricted-token sandbox children still share the host console when that sandbox is active.
+A GUI-subsystem host no longer flashes a console per direct local child. Consumers do not opt in. A future caller that needs a visible extra console must change the local provider, not a single tool. Restricted-token sandbox children still share the host console when that sandbox is active.

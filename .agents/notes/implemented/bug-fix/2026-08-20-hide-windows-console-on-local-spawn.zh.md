@@ -12,15 +12,15 @@ Status: implemented
 
 ## Decision
 
-`dsh-subprocess-local` 始终向 Node `spawn` / `spawnSync` 传入 `windowsHide: true`。Node 将该选项映射为 `CREATE_NO_WINDOW`。普通进程树（包括随包 `rg.exe` 与 pwsh）以及 `spawn.ts` 与 `windows-inspector.ts` 中的本地 `taskkill /T` 辅助程序都走这条路径。
+`dsh-subprocess-local` 仅在本进程没有控制台时向 Node `spawn` / `spawnSync` 传入 `windowsHide: true`。Node 将该选项映射为 `CREATE_NO_WINDOW`。普通进程树（包括随包 `rg.exe` 与 pwsh）以及 `spawn.ts` 与 `windows-inspector.ts` 中的本地 `taskkill /T` 辅助程序都走这条路径。当父进程已经拥有控制台——包括 GUI 宿主附着的隐藏控制台——spawn 省略该标志，让 CUI 孙进程继承该控制台；参见[隐藏控制台继承](2026-09-02-inherit-hidden-console-for-gui-host.zh.md)。
 
-该标志在每个宿主上都无条件设置：Node 在非 Windows 上忽略它；CUI 宿主已经拥有控制台，隐藏新控制台不会改变已连接的 stdio。管道与收集式 stdio 仍使用管道；`inherit` 仍使用父进程描述符。终端会话继续走 `node-pty` / ConPTY，不使用该标志。
+Node 在非 Windows 上忽略该标志。管道与收集式 stdio 仍使用管道；`inherit` 仍使用父进程描述符。终端会话继续走 `node-pty` / ConPTY，不使用该标志。
 
-Windows ACL 沙箱子进程仍是单独的原生 spawn，并且仍然省略 `CREATE_NO_WINDOW`，因为受限令牌在该标志下会以 `STATUS_DLL_INIT_FAILED` 死亡；参见 [Windows ACL 沙箱决策](../feature/2026-08-08-windows-acl-restricted-token-sandbox.zh.md)。打包启动器另行包装了裸 `node:child_process` 导出，让第三方插件的子进程同样隐藏；参见[打包启动器子控制台决策](2026-08-23-hide-all-child-consoles-in-packaged-launcher.zh.md)。
+Windows ACL 沙箱子进程仍是单独的原生 spawn，并且仍然省略 `CREATE_NO_WINDOW`，因为受限令牌在该标志下会以 `STATUS_DLL_INIT_FAILED` 死亡；参见 [Windows ACL 沙箱决策](../feature/2026-08-08-windows-acl-restricted-token-sandbox.zh.md)。打包启动器另行包装了裸 `node:child_process` 导出，让第三方插件的子进程遵循同一套隐藏或继承规则；参见[打包启动器子控制台决策](2026-08-23-hide-all-child-consoles-in-packaged-launcher.zh.md)。
 
 ## Verification
 
-单元测试记录普通子进程和 `taskkillProcessTree` 的 Node spawn 选项，并要求两者都带 `windowsHide: true`。现有的收集、inherit、abort 以及 Windows taskkill 生命周期测试继续固定 stdio 与拆卸行为。
+单元测试记录普通子进程和 `taskkillProcessTree` 的 Node spawn 选项，在父进程没有控制台时要求 `windowsHide: true`，并在父进程已拥有控制台时要求 spawn 使用 `windowsHide: false`。现有的收集、inherit、abort 以及 Windows taskkill 生命周期测试继续固定 stdio 与拆卸行为。
 
 ## Alternatives considered
 
@@ -34,4 +34,4 @@ Windows ACL 沙箱子进程仍是单独的原生 spawn，并且仍然省略 `CRE
 
 ## Consequences
 
-GUI 子系统宿主不再为每个本地子进程弹出控制台。消费方无需选择加入。若未来调用方需要额外的可见控制台，必须改本地 provider，而不是单个工具。受限令牌沙箱子进程在该沙箱启用时仍共享宿主控制台。
+GUI 子系统宿主不再为每个直接本地子进程弹出控制台。消费方无需选择加入。若未来调用方需要额外的可见控制台，必须改本地 provider，而不是单个工具。受限令牌沙箱子进程在该沙箱启用时仍共享宿主控制台。

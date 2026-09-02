@@ -37,7 +37,7 @@ afterEach(() => {
 })
 
 describe('Windows console hide', () => {
-  it('passes windowsHide on an ordinary spawn', async () => {
+  it('passes windowsHide when the parent has no console', async () => {
     const running = spawnSubprocess({
       argv: [process.execPath, '-e', ''],
       cwd: process.cwd(),
@@ -47,10 +47,26 @@ describe('Windows console hide', () => {
         stderr: { maxBytes: 1024 },
       },
       graceMs: 3_000,
-    }, { spillDir })
+    }, { spillDir, parentHasConsole: false })
     await running.done
     expect(spawnCalls.length).toBeGreaterThan(0)
     expect(spawnCalls.every(call => call.windowsHide === true)).toBe(true)
+  })
+
+  it('omits windowsHide when the parent already owns a console', async () => {
+    const running = spawnSubprocess({
+      argv: [process.execPath, '-e', ''],
+      cwd: process.cwd(),
+      stdio: {
+        stdin: 'ignore',
+        stdout: { maxBytes: 1024 },
+        stderr: { maxBytes: 1024 },
+      },
+      graceMs: 3_000,
+    }, { spillDir, parentHasConsole: true })
+    await running.done
+    expect(spawnCalls.length).toBeGreaterThan(0)
+    expect(spawnCalls.every(call => call.windowsHide === false)).toBe(true)
   })
 
   it('passes windowsHide on taskkillProcessTree', () => {

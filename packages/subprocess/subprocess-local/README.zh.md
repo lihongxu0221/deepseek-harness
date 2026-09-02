@@ -83,7 +83,7 @@ kind: "package-reference"
 
 ### 主流程
 
-一次 spawn 会构建清理后的子进程环境、启动 detached 进程、把收集器挂到收集模式的流上，然后返回句柄。`done` 在进程关闭后、经过一段有界管道排空宽限期才结算，因此继承了管道的存活后代无法无限期拖住结果；升级定时器在直接子进程结算后依然存活，使 SIGKILL 仍能到达进程树幸存者。终端清理按精确身份清扫后代、停止 shell、再次清扫，并通过进程表验证其已不存在。
+一次 spawn 会构建清理后的子进程环境、启动 detached 进程、把收集器挂到收集模式的流上，然后返回句柄。在 Windows 上，仅当本进程没有控制台时 spawn 才传 `windowsHide`，以便 CUI 孙进程继承 GUI 宿主附着的隐藏控制台，而不是再分配一个可见的空窗口。`done` 在进程关闭后、经过一段有界管道排空宽限期才结算，因此继承了管道的存活后代无法无限期拖住结果；升级定时器在直接子进程结算后依然存活，使 SIGKILL 仍能到达进程树幸存者。终端清理按精确身份清扫后代、停止 shell、再次清扫，并通过进程表验证其已不存在。
 
 ### 安全不变式
 
@@ -103,6 +103,7 @@ spill 文件以 `0600` 权限、`O_EXCL` 与随机名称在 `0700` 每进程目�
 - [dsh-bash-local](../../shell/bash-local/README.zh.md)——最大的消费方及其请求的具体 stdio 形态。
 - [subprocess seam Agent Note](../../../.agents/notes/implemented/architecture/2026-07-26-subprocess-seam.zh.md)——进程部分为何成为独立的 seam。
 - [同步子进程退出清理](../../../.agents/notes/implemented/bug-fix/2026-08-11-synchronous-subprocess-exit-cleanup.zh.md)——宿主退出最终清理决策及其失败模式。
+- [隐藏控制台继承](../../../.agents/notes/implemented/bug-fix/2026-09-02-inherit-hidden-console-for-gui-host.zh.md)——说明 Windows spawn 为何在本进程已有控制台时省略 `windowsHide`。
 
 -----
 
