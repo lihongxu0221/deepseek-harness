@@ -26,6 +26,7 @@ const temps: string[] = []
 afterEach(() => {
   for (const path of temps.splice(0)) rmSync(path, { recursive: true, force: true })
   delete process.env.DSH_WEB_ALLOW_ALL_INTERFACES
+  delete process.env.DSH_PROFILE
 })
 
 function fakeWindow(url: string, pid = 9000): OpenedDesktopWindow & { settle(): void; url: string } {
@@ -263,6 +264,7 @@ describe('runPackagedWebDesktop', () => {
     const harness = createHarness()
     const done = runPackagedWebDesktop(harness.io)
     await waitFor(() => harness.messages.some(message => message.type === 'ready'))
+    expect(process.env.DSH_PROFILE).toBe('web')
     expect(harness.windows[0]?.url).toBe('http://127.0.0.1:3080/?token=test-token')
     expect(harness.messages).toEqual(expect.arrayContaining([
       expect.objectContaining({ type: 'progress', percent: 20 }),

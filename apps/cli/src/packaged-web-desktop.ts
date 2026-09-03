@@ -27,6 +27,7 @@ import {
   openDesktopWindow,
   type OpenedDesktopWindow,
 } from './open-desktop-window.ts'
+import { applyPackagedWebProfile } from './packaged-web-home.ts'
 import { bootProfile, type BootProfileOptions } from './profile-boot.ts'
 import {
   defaultWindowsDesktopShellIo,
@@ -442,6 +443,7 @@ export async function runPackagedWebDesktop(io: PackagedWebDesktopIo): Promise<v
     try {
       if (listen.host === '0.0.0.0') process.env.DSH_WEB_ALLOW_ALL_INTERFACES = '1'
       else delete process.env.DSH_WEB_ALLOW_ALL_INTERFACES
+      applyPackagedWebProfile()
       disposeProxy = await io.installProxy(io.environment)
       const ctx = await io.bootProfile({
         environment: io.environment,

@@ -38,7 +38,7 @@ import {
   resolvePackagedScriptArg,
   withPackagedScriptArgv,
 } from './packaged-web-entry.ts'
-import { applyPackagedWebHome } from './packaged-web-home.ts'
+import { applyPackagedWebHome, applyPackagedWebProfile } from './packaged-web-home.ts'
 import { runProfile } from './profile-boot.ts'
 
 const extra = extraPackagedArgv(process.argv, fileURLToPath(import.meta.url))
@@ -78,6 +78,7 @@ if (script !== undefined) {
         process.chdir(execDir)
       }
     }
+    applyPackagedWebProfile()
     if (process.platform === 'win32') {
       await runPackagedWebDesktop(defaultPackagedWebDesktopIo())
     } else {

@@ -10,6 +10,12 @@ import { DSH_HOME_ENV, resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 /** Directory name for the packaged executable's harness home, beside the exe. */
 export const PACKAGED_WEB_HOME_DIR = '.config'
 
+/** Environment name host plugins use when `process.argv` has no `--profile`. */
+export const DSH_PROFILE_ENV = 'DSH_PROFILE'
+
+/** Profile the packaged GUI always boots. */
+export const PACKAGED_WEB_PROFILE = 'web'
+
 /**
  * Resolve the packaged executable's default harness home.
  * @param execPath - `process.execPath` of the launcher.
@@ -41,4 +47,15 @@ export function applyPackagedWebHome(
   const home = resolveDshHome(undefined, env)
   mkdir(home)
   return home
+}
+
+/**
+ * Record that this process boots the packaged `web` profile.
+ * The GUI launcher calls {@link bootProfile} with that name and does not put
+ * `--profile web` on `process.argv`. Host plugins that resolve the boot
+ * profile from argv or `$DSH_PROFILE` need this process-wide value.
+ * @param env - environment mapping to write.
+ */
+export function applyPackagedWebProfile(env: NodeJS.ProcessEnv = process.env): void {
+  env[DSH_PROFILE_ENV] = PACKAGED_WEB_PROFILE
 }

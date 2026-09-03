@@ -3,7 +3,13 @@ import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { DSH_HOME_ENV } from '@deepseek-ai/dsh-home-paths'
-import { applyPackagedWebHome, packagedWebHomeDir } from '../src/packaged-web-home.ts'
+import {
+  applyPackagedWebHome,
+  applyPackagedWebProfile,
+  DSH_PROFILE_ENV,
+  PACKAGED_WEB_PROFILE,
+  packagedWebHomeDir,
+} from '../src/packaged-web-home.ts'
 
 describe('applyPackagedWebHome', () => {
   it('points an unset DSH_HOME at <exeDir>/.config and creates it', () => {
@@ -41,8 +47,17 @@ describe('applyPackagedWebHome', () => {
   it('keeps the packaged desktop entry on this home path', () => {
     const source = readFileSync(fileURLToPath(new URL('../src/packaged-web-bin.ts', import.meta.url)), 'utf8')
     expect(source).toContain('applyPackagedWebHome(process.execPath)')
+    expect(source).toContain('applyPackagedWebProfile()')
     expect(source).toContain("loadLayeredEnv('dsh')")
     expect(source).toContain("process.platform === 'win32'")
     expect(source).toContain('runPackagedWebDesktop(defaultPackagedWebDesktopIo())')
+  })
+})
+
+describe('applyPackagedWebProfile', () => {
+  it('records the packaged GUI profile for host plugins that read DSH_PROFILE', () => {
+    const env: NodeJS.ProcessEnv = {}
+    applyPackagedWebProfile(env)
+    expect(env[DSH_PROFILE_ENV]).toBe(PACKAGED_WEB_PROFILE)
   })
 })
