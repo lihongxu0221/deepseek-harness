@@ -33,8 +33,6 @@ const OUTPUT_BASENAME = 'dsh-web'
 const LAUNCHER_NAME = 'dsh-web'
 /** Default Node major; SEA mode requires at least Node 22. */
 const DEFAULT_NODE_RANGE = 'node24'
-/** Pinned for reproducible builds. */
-const PKG_SPEC = '@yao-pkg/pkg@6.21.0'
 const OUT_DIR = 'dist-exe'
 const SHARED_STAGING_DIR = join(OUT_DIR, 'web-staging')
 const FRONTEND_DIST_INDEX = join('node_modules', '@deepseek-ai', 'dsh-web-frontend', 'dist', 'index.html')
@@ -206,7 +204,7 @@ class BuildCli {
       '  --product-dir=<name>   folder under dist-exe; default: dsh-web-<platform>-<arch>.',
       '  --help                 print this help.',
       '',
-      `Build route: deploy the CLI closure, then ${PKG_SPEC} --sea for a thin launcher.`,
+      'Build route: deploy the CLI closure, then @yao-pkg/pkg --sea (root devDependency, pnpm-patched) for a thin launcher.',
       `Writes ${OUTPUT_BASENAME}-<platform>-<arch>/ to ${OUT_DIR}/.`,
       'This is the double-click Web GUI, not the JSON-RPC Python runtime exe.',
     ].join('\n')
@@ -504,8 +502,8 @@ class WebExeBuild {
     await this.prepareNativePty(product, target)
     const launcherOutput = join(product, LAUNCHER_NAME)
     await this.run(`pkg ${target.spec}`, pnpmBin(), [
-      'dlx',
-      PKG_SPEC,
+      'exec',
+      'pkg',
       LAUNCHER_BIN,
       '--sea',
       '--targets',
