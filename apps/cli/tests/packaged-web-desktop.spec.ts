@@ -110,6 +110,7 @@ function createHarness(overrides: {
     home: 'D:\\home',
     execPath: 'D:\\dist\\dsh-web.exe',
     environment,
+    installProxy: async () => async () => undefined,
     args: [],
     bootProfile: async (options) => {
       bootArgs.push([...options.args])

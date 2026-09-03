@@ -12,6 +12,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { loadLayeredEnv } from '@deepseek-ai/dsh-app-boot'
+import { installProxyFromEnvironment } from '@deepseek-ai/dsh-http-proxy'
 import type { LaunchEnvironmentSnapshot } from '@deepseek-ai/dsh-launch-environment'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import {
@@ -169,6 +170,12 @@ export interface PackagedWebDesktopIo {
   execPath: string
   /** Frozen launch environment handed to {@link bootProfile}. */
   environment: LaunchEnvironmentSnapshot
+  /**
+   * Install the launch-environment proxy before the profile mounts.
+   * @param environment - frozen launch snapshot.
+   * @returns a disposer restoring the previous dispatcher.
+   */
+  installProxy(environment: LaunchEnvironmentSnapshot): Promise<() => Promise<void>>
   /** Inner argv for `ctx.cmdlineArgs`. */
   args: readonly string[]
   /**
@@ -232,6 +239,10 @@ export function defaultPackagedWebDesktopIo(): PackagedWebDesktopIo {
     home,
     execPath,
     environment: loadLayeredEnv('dsh'),
+    installProxy: environment => installProxyFromEnvironment(
+      environment,
+      (message) => { process.stderr.write(`dsh: ${message}\n`) },
+    ),
     args: process.argv.slice(2),
     bootProfile,
     openWindow: url => openDesktopWindow(url, defaultDesktopWindowIo()),
@@ -338,6 +349,7 @@ export async function runPackagedWebDesktop(io: PackagedWebDesktopIo): Promise<v
   let generation = 0
   let inFlightAbort: AbortController | undefined
   let current: Context | undefined
+  let disposeProxy: (() => Promise<void>) | undefined
   let opened: OpenedDesktopWindow | undefined
   /** True only while Show asked the tray to raise an already-tracked window. */
   let raisePending = false
@@ -367,12 +379,16 @@ export async function runPackagedWebDesktop(io: PackagedWebDesktopIo): Promise<v
   const disposeCurrent = async (): Promise<void> => {
     const ctx = current
     current = undefined
-    if (ctx === undefined) return
-    try {
-      await ctx.fiber.dispose()
-    } catch {
-      // Disposal after abort can reject because the tree is already exiting.
+    const uninstallProxy = disposeProxy
+    disposeProxy = undefined
+    if (ctx !== undefined) {
+      try {
+        await ctx.fiber.dispose()
+      } catch {
+        // Disposal after abort can reject because the tree is already exiting.
+      }
     }
+    if (uninstallProxy !== undefined) await uninstallProxy()
   }
 
   const closeWindow = async (): Promise<void> => {
@@ -426,6 +442,7 @@ export async function runPackagedWebDesktop(io: PackagedWebDesktopIo): Promise<v
     try {
       if (listen.host === '0.0.0.0') process.env.DSH_WEB_ALLOW_ALL_INTERFACES = '1'
       else delete process.env.DSH_WEB_ALLOW_ALL_INTERFACES
+      disposeProxy = await io.installProxy(io.environment)
       const ctx = await io.bootProfile({
         environment: io.environment,
         profile: 'web',
