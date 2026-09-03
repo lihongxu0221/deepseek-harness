@@ -323,6 +323,7 @@ class WebExeBuild {
   async seedBuiltinPlugins(): Promise<void> {
     await seedBuiltinProfilePlugins(this.staging, {
       dryRun: this.cli.dryRun,
+      refresh: true,
       log: (line): void => {
         console.log(`build-web-exe: ${line}`)
       },

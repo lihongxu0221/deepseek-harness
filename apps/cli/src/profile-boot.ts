@@ -81,15 +81,13 @@ export const INSTALL_ANCHOR = fileURLToPath(new URL('../package.json', import.me
 const TELEMETRY_ROW_ID = 'session-telemetry-otel'
 
 /**
- * Seeded `@linxin666/dsh-web-ui-all` and standalone installs insert these rows.
- * Both host plugins inject `apiProxy`, which this product does not provide.
+ * Row ids to disable because they inject `apiProxy`, which this product does
+ * not provide. Empty: current seeded `@linxin666/dsh-web-all` host plugins
+ * inject `webServer` / `typertGateway` / `connection` instead. Disabling
+ * `web-ui-remote-web-ui` left `/api/update` unmounted while the client still
+ * rendered Check for updates.
  */
-const APIPROXY_DEPENDENT_ROW_IDS = [
-  'web-ui-task-board',
-  'web-ui-remote-web-ui',
-  'ui-task-board',
-  'remote-web-ui',
-] as const
+const APIPROXY_DEPENDENT_ROW_IDS: readonly string[] = []
 
 /** The empty root entry list every profile tree patches over. */
 const PROFILE_ROOT_CONFIG = `# dsh profile root — an empty entry list. The tree is composed as patches:

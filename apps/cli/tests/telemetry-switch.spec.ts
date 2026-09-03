@@ -22,20 +22,13 @@ describe('resolveTelemetryPatch', () => {
 })
 
 describe('resolveApiproxyDependentDisablePatches', () => {
-  it('disables only the seeded rows that inject apiProxy', () => {
+  it('does not disable seeded family-pack rows that no longer inject apiProxy', () => {
     expect(resolveApiproxyDependentDisablePatches(new Set([
       'web-ui-task-board',
       'web-ui-remote-web-ui',
       'ui-task-board',
+      'remote-web-ui',
       'web-ui-pet',
-    ]))).toEqual([
-      { id: 'web-ui-task-board', disabled: true },
-      { id: 'web-ui-remote-web-ui', disabled: true },
-      { id: 'ui-task-board', disabled: true },
-    ])
-  })
-
-  it('is a no-op when those rows are absent', () => {
-    expect(resolveApiproxyDependentDisablePatches(new Set(['webserver', 'web-ui-pet']))).toEqual([])
+    ]))).toEqual([])
   })
 })

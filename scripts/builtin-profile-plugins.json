@@ -1,10 +1,10 @@
 {
   "profile": "web",
   "plugins": {
-    "dshmarket": "1.18.1",
-    "@linxin666/dsh-web-ui-all": "0.2.9",
-    "@ychris12138/dsh-usage-stats": "0.2.10",
-    "dsh-all-usage": "1.0.7"
+    "dshmarket": "1.40.0",
+    "@linxin666/dsh-web-all": "0.3.13",
+    "@ychris12138/dsh-usage-stats": "0.3.2",
+    "dsh-all-usage": "1.1.4"
   },
   "allowBuilds": {
     "cloudflared": true,
