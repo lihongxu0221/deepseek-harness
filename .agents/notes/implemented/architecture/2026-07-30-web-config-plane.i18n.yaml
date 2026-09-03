@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-07-30-web-config-plane.md
-2026-07-30-web-config-plane.md: 14ea93924939b64438064ec4470886fbdd30b403
-2026-07-30-web-config-plane.zh.md: 5be65c89215e0c80f258d41e305a3505fd33d3d2
+2026-07-30-web-config-plane.md: da63164042d80aed874ca5f693570f8d5ee71b92
+2026-07-30-web-config-plane.zh.md: 6e0042df344cd2b0cb48d1968512c425769c8996
