@@ -168,6 +168,12 @@
         # its literals, for example: ['app.internal', ...ctx.webRuntime.trustedHosts].
         trustedHosts: !!js ctx.webRuntime.trustedHosts
 
+    # Packaged Windows desktop GitHub zip updater. Source `dsh web` reports
+    # unavailable (no VERSION beside Node); the Settings row still renders.
+    - id: desktop-update
+      name: '@deepseek-ai/dsh-host-desktop-update'
+      inject: [connection]
+
     # Raw Blob and ReadableStream uploads run independently of Connection's
     # RPC and generation service.
     - id: file-upload
@@ -289,6 +295,9 @@
 
     - id: ui-permission
       name: '@deepseek-ai/dsh-client-ui-permission-presets'
+
+    - id: ui-desktop-update
+      name: '@deepseek-ai/dsh-client-ui-desktop-update'
 
     # The agent-preset row in General settings: the default preset for
     # sessions created later. Absent a roster it renders nothing.

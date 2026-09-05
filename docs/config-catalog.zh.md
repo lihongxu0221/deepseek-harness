@@ -846,6 +846,28 @@ export interface Config {
 
 来源：[`packages/hooks/hooks-codex/src/index.ts:44`](../packages/hooks/hooks-codex/src/index.ts)
 
+<a id="deepseek-aidsh-host-desktop-update"></a>
+
+## `@deepseek-ai/dsh-host-desktop-update`
+
+需要：`connection`
+
+```ts config-catalog
+/** Plugin configuration. */
+export interface Config {
+  /** GitHub `owner/name` that publishes winexe zips. @default lihongxu0221/deepseek-harness */
+  readonly repository?: string
+  /** Required zip asset filename prefix. @default dsh-web-win-x64- */
+  readonly assetPrefix?: string
+  /** Probe GitHub after load when this is a packaged desktop. @default true */
+  readonly checkOnBoot?: boolean
+  /** GitHub list cache window in milliseconds. @default 600000 */
+  readonly cacheTtlMs?: number
+}
+```
+
+来源：[`packages/host/desktop-update/src/index.ts:67`](../packages/host/desktop-update/src/index.ts)
+
 <a id="deepseek-aidsh-host-directory-picker-browse"></a>
 
 ## `@deepseek-ai/dsh-host-directory-picker-browse`
@@ -3339,6 +3361,7 @@ export interface Config {
 - `@deepseek-ai/dsh-client-ui-conversation`（[`packages/client/ui-conversation/src/index.ts`](../packages/client/ui-conversation/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-cordis`（[`packages/extensions/ui-cordis/src/index.ts`](../packages/extensions/ui-cordis/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-deliverables` — 需要 `systemPrompt`（[`packages/client/ui-deliverables/src/index.ts`](../packages/client/ui-deliverables/src/index.ts)）
+- `@deepseek-ai/dsh-client-ui-desktop-update`（[`packages/client/ui-desktop-update/src/index.ts`](../packages/client/ui-desktop-update/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-directory-picker-browse`（[`packages/client/ui-directory-picker-browse/src/index.ts`](../packages/client/ui-directory-picker-browse/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-directory-picker-native`（[`packages/client/ui-directory-picker-native/src/index.ts`](../packages/client/ui-directory-picker-native/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-goal`（[`packages/client/ui-goal/src/index.ts`](../packages/client/ui-goal/src/index.ts)）

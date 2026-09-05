@@ -145,6 +145,7 @@ flowchart TD
     pkg_client_ui_commands["client-ui-commands"]
     pkg_client_ui_conversation["client-ui-conversation"]
     pkg_client_ui_deliverables["client-ui-deliverables"]
+    pkg_client_ui_desktop_update["client-ui-desktop-update"]
     pkg_client_ui_directory_picker_browse["client-ui-directory-picker-browse"]
     pkg_client_ui_directory_picker_native["client-ui-directory-picker-native"]
     pkg_client_ui_goal["client-ui-goal"]
@@ -231,6 +232,7 @@ flowchart TD
     pkg_tool_call_timeout_policy["tool-call-timeout-policy"]
   end
   subgraph group_host["packages/host"]
+    pkg_host_desktop_update["host-desktop-update"]
     pkg_host_directory_picker["host-directory-picker"]
     pkg_host_directory_picker_auto["host-directory-picker-auto"]
     pkg_host_directory_picker_browse["host-directory-picker-browse"]
@@ -1188,6 +1190,7 @@ flowchart TD
 | [`client-ui-commands`](../packages/client/ui-commands) | `client` | — |
 | [`client-ui-conversation`](../packages/client/ui-conversation) | `client` | — |
 | [`client-ui-deliverables`](../packages/client/ui-deliverables) | `client` | — |
+| [`client-ui-desktop-update`](../packages/client/ui-desktop-update) | `client` | — |
 | [`client-ui-directory-picker-browse`](../packages/client/ui-directory-picker-browse) | `client` | — |
 | [`client-ui-directory-picker-native`](../packages/client/ui-directory-picker-native) | `client` | — |
 | [`client-ui-goal`](../packages/client/ui-goal) | `client` | — |
@@ -1225,6 +1228,7 @@ flowchart TD
 | [`experimental-webworker-packer`](../packages/experimental/webworker-packer) | `experimental` | — |
 | [`client-ui-cordis`](../packages/extensions/ui-cordis) | `extensions` | — |
 | [`cordis-client-runner`](../packages/extensions/cordis-client-runner) | `extensions` | — |
+| [`host-desktop-update`](../packages/host/desktop-update) | `host` | — |
 | [`host-directory-picker`](../packages/host/directory-picker) | `host` | — |
 | [`host-directory-picker-browse`](../packages/host/directory-picker-browse) | `host` | — |
 | [`host-directory-picker-native`](../packages/host/directory-picker-native) | `host` | — |

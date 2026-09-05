@@ -60,6 +60,7 @@ The kernel packages boot and serve the page; the UI feature packages present it.
 | [`ui-jobs/`](ui-jobs/README.md) | Lists this session's background jobs in the conversation header | — |
 | [`ui-model-selection/`](ui-model-selection/README.md) | Provides model selection in conversation surfaces | — |
 | [`ui-permission-presets/`](ui-permission-presets/README.md) | Configures default permissions and switches the current session's access | — |
+| [`ui-desktop-update/`](ui-desktop-update/README.md) | Checks GitHub for a newer packaged Windows desktop zip | — |
 | [`ui-plan/`](ui-plan/README.md) | Presents active plan-mode status and its exit control | — |
 | [`ui-settings-plugins/`](ui-settings-plugins/README.md) | Owns the Plugins settings section, its tab extension point, and configurable host-plane plugin cards | — |
 | [`ui-user-questions/`](ui-user-questions/README.md) | Presents interactive questions requested by the agent | — |
