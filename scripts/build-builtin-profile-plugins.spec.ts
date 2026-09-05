@@ -38,6 +38,7 @@ describe('loadBuiltinManifest', () => {
     const manifest = loadBuiltinManifest(MANIFEST_PATH)
     expect(manifest.profile).toBe('web')
     expect(Object.keys(manifest.plugins)).toContain('dshmarket')
+    expect(Object.keys(manifest.plugins)).toContain('dsh-free-search')
     for (const version of Object.values(manifest.plugins)) {
       expect(version).toMatch(/^\d+\.\d+\.\d+/)
     }
