@@ -52,4 +52,6 @@ pre-merge-commit:
 pre-push:
   jobs:
     - name: typecheck
-      run: pnpm run typecheck
+      # npm run, not pnpm run: pnpm's verify-deps-before-run treats a missing
+      # TTY (IDE/agent git push) as CI and executes `install --production`.
+      run: npm run typecheck
