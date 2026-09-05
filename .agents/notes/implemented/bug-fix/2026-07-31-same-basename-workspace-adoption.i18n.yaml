@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-07-31-same-basename-workspace-adoption.md
-2026-07-31-same-basename-workspace-adoption.md: 8fbe3c3b6c1823de23340d64dc81459308a12b60
-2026-07-31-same-basename-workspace-adoption.zh.md: 014b1f1e60e58a7b7f865476d1d77f820b2c6f79
+2026-07-31-same-basename-workspace-adoption.md: 5d7f1fdace612b021db18b8d8d40ab0d77c3cc97
+2026-07-31-same-basename-workspace-adoption.zh.md: d8b06e9d766304b7421f0aeba8145caac83cfd62
