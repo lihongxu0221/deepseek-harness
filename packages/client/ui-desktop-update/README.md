@@ -25,7 +25,7 @@ This browser plugin contributes one General-settings row that talks to the Host 
 <a id="use-this-package"></a>
 ## Use this package
 
-Mount it beside the Host updater in the web composition. The row occupies `settings.general.item` with id `desktop-update`. Copy lives in the `settings.desktopUpdate` locale namespace. The Host refuses non-loopback control routes; a 403/404 is treated as `unavailable` and the row stays hidden.
+Mount it beside the Host updater in the web composition. The row occupies `settings.general.item` with id `desktop-update`. Copy lives in the `settings.desktopUpdate` locale namespace. The Host allows loopback and this machine's current LAN IPv4 Hosts. HTTP 403/404 surfaces as an error on the row; source `dsh web` returns `mode: unavailable` and the row shows that copy.
 
 -----
 
@@ -35,7 +35,7 @@ Mount it beside the Host updater in the web composition. The row occupies `setti
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-The apply-world controller owns same-origin Fetch to `/api/desktop-update/*` and publishes a snapshot store through the inject `hooks` compartment. Download polls `/progress` every 500ms until the Host leaves `downloading`. Apply treats a dropped Fetch as success because the Host exits after arming the helper.
+The apply-world controller owns same-origin Fetch to `/api/desktop-update/*` and publishes a snapshot store through the inject `hooks` compartment. Download polls `/progress` every 500ms until the Host leaves `downloading`; opening Settings while a zip is already transferring resumes that poll. The row draws a determinate progress bar from `received`/`total`. Apply treats a dropped Fetch as success because the Host exits after arming the helper.
 
 </details>
 

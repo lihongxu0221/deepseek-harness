@@ -25,7 +25,7 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用本包
 
-在 web 组合中与 Host 更新器一起挂载。该行占据 `settings.general.item`，id 为 `desktop-update`。文案位于 `settings.desktopUpdate` 语言命名空间。Host 拒绝非回环控制路由；403/404 视为 `unavailable`，该行保持隐藏。
+在 web 组合中与 Host 更新器一起挂载。该行占据 `settings.general.item`，id 为 `desktop-update`。文案位于 `settings.desktopUpdate` 语言命名空间。Host 允许回环以及本机当前局域网 IPv4 的 Host。HTTP 403/404 在该行显示为错误；源码 `dsh web` 返回 `mode: unavailable`，该行显示对应文案。
 
 -----
 
@@ -35,7 +35,7 @@ kind: "package-reference"
 <details>
 <summary>实现内部细节 — 点击展开</summary>
 
-apply 世界的控制器对 `/api/desktop-update/*` 发起同源 Fetch，并通过 inject 的 `hooks` 隔间发布 snapshot store。下载期间每 500ms 轮询 `/progress`，直到 Host 离开 `downloading`。Apply 把中断的 Fetch 视为成功，因为 Host 在武装 helper 之后会退出。
+apply 世界的控制器对 `/api/desktop-update/*` 发起同源 Fetch，并通过 inject 的 `hooks` 隔间发布 snapshot store。下载期间每 500ms 轮询 `/progress`，直到 Host 离开 `downloading`；设置页在 zip 已在传输时打开会恢复该轮询。该行用 `received`/`total` 画确定进度条。Apply 把中断的 Fetch 视为成功，因为 Host 在武装 helper 之后会退出。
 
 </details>
 

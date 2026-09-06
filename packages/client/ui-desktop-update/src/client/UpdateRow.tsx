@@ -72,8 +72,25 @@ export function UpdateRow({
         {t('current')}: {state.status.current ?? '—'}
         {state.status.latest !== undefined ? ` · ${t('latest')}: ${state.status.latest}` : ''}
       </div>
-      {percent !== undefined && (
-        <div className={css.progress}>{t('downloading')} {percent}%</div>
+      {state.status.mode === 'downloading' && (
+        <div className={css.progressBlock}>
+          <div
+            className={css.progressTrack}
+            role="progressbar"
+            aria-label={t('downloading')}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            {...percent === undefined ? {} : { 'aria-valuenow': percent }}
+          >
+            <div
+              className={percent === undefined ? css.progressFillBusy : css.progressFill}
+              style={percent === undefined ? undefined : { width: `${String(percent)}%` }}
+            />
+          </div>
+          <div className={css.progressLabel}>
+            {t('downloading')}{percent === undefined ? '' : ` ${String(percent)}%`}
+          </div>
+        </div>
       )}
       <div className={css.actions}>
         <Button

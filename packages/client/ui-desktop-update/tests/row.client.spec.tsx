@@ -79,6 +79,17 @@ describe('UpdateRow', () => {
       },
     })
     expect(screen.getByText(`${zh.downloading} 50%`)).toBeTruthy()
+    const bar = screen.getByRole('progressbar', { name: zh.downloading })
+    expect(bar.getAttribute('aria-valuenow')).toBe('50')
+    expect(bar.getAttribute('aria-valuemin')).toBe('0')
+    expect(bar.getAttribute('aria-valuemax')).toBe('100')
+
+    cleanup()
+    mount({
+      loaded: true,
+      status: { mode: 'downloading', outdated: true },
+    })
+    expect(screen.getByRole('progressbar', { name: zh.downloading }).getAttribute('aria-valuenow')).toBeNull()
 
     cleanup()
     mount({

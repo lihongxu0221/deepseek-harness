@@ -4,8 +4,8 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import {
-  apply, Config, createDefaultIo, DESKTOP_UPDATE_PATHS, inject, mountDesktopUpdate,
-  name, resolveConfig,
+  apply, Config, createDefaultIo, DESKTOP_UPDATE_PATHS, inject, localLanIpv4Addresses,
+  mountDesktopUpdate, name, resolveConfig,
 } from '../src/index.ts'
 import type { DesktopUpdateIo } from '../src/controller.ts'
 
@@ -98,12 +98,26 @@ describe('mountDesktopUpdate', () => {
     const ctx = ctxWithConnection()
     mountDesktopUpdate(ctx, resolveConfig({ checkOnBoot: false }), testIo())
     const status = handler(DESKTOP_UPDATE_PATHS.status)
-    const forbidden = await status(new Request('http://192.168.1.9/api/desktop-update/status'))
+    const forbidden = await status(new Request('http://example.test/api/desktop-update/status'))
     expect(forbidden.status).toBe(403)
     expect(await forbidden.json()).toEqual({ ok: false, code: 'forbidden' })
     const ok = await status(new Request('http://127.0.0.1/api/desktop-update/status'))
     expect(ok.status).toBe(200)
     expect(await ok.json()).toMatchObject({ mode: 'idle', current: '0.1.0' })
+    const bridged = await status(new Request('http://dsh.internal/api/desktop-update/status', {
+      headers: { host: '127.0.0.1' },
+    }))
+    expect(bridged.status).toBe(200)
+    const bridgedRemote = await status(new Request('http://dsh.internal/api/desktop-update/status', {
+      headers: { host: 'example.test' },
+    }))
+    expect(bridgedRemote.status).toBe(403)
+    for (const address of localLanIpv4Addresses()) {
+      const allowed = await status(new Request('http://dsh.internal/api/desktop-update/status', {
+        headers: { host: address },
+      }))
+      expect(allowed.status).toBe(200)
+    }
     const progress = await handler(DESKTOP_UPDATE_PATHS.progress)(
       new Request('http://127.0.0.1/api/desktop-update/progress'),
     )
@@ -135,7 +149,7 @@ describe('mountDesktopUpdate', () => {
     await ctx.fiber.dispose()
   })
 
-  it('returns 409 while a download is in flight and exits after apply', async () => {
+  it('returns downloading before the zip finishes and ignores a second POST', async () => {
     let resume!: () => void
     const blocked = new Promise<void>((resolve) => { resume = resolve })
     let entered = 0
@@ -173,16 +187,18 @@ describe('mountDesktopUpdate', () => {
     await handler(DESKTOP_UPDATE_PATHS.check)(
       new Request('http://127.0.0.1/api/desktop-update/check', { method: 'POST' }),
     )
-    const first = handler(DESKTOP_UPDATE_PATHS.download)(
+    const first = await handler(DESKTOP_UPDATE_PATHS.download)(
       new Request('http://127.0.0.1/api/desktop-update/download', { method: 'POST' }),
     )
+    expect(first.status).toBe(200)
+    expect(await first.json()).toMatchObject({ mode: 'downloading' })
     await vi.waitFor(() => { expect(entered).toBe(1) })
     const conflict = await handler(DESKTOP_UPDATE_PATHS.download)(
       new Request('http://127.0.0.1/api/desktop-update/download', { method: 'POST' }),
     )
-    expect(conflict.status).toBe(409)
+    expect(conflict.status).toBe(200)
+    expect(await conflict.json()).toMatchObject({ mode: 'downloading' })
     resume()
-    await first
     await ctx.fiber.dispose()
     expect(exits).toEqual([])
   })
@@ -208,6 +224,12 @@ describe('mountDesktopUpdate', () => {
     await handler(DESKTOP_UPDATE_PATHS.download)(
       new Request('http://127.0.0.1/api/desktop-update/download', { method: 'POST' }),
     )
+    await vi.waitFor(async () => {
+      const progress = await handler(DESKTOP_UPDATE_PATHS.progress)(
+        new Request('http://127.0.0.1/api/desktop-update/progress'),
+      )
+      expect(await progress.json()).toMatchObject({ mode: 'ready' })
+    })
     await handler(DESKTOP_UPDATE_PATHS.apply)(
       new Request('http://127.0.0.1/api/desktop-update/apply', { method: 'POST' }),
     )

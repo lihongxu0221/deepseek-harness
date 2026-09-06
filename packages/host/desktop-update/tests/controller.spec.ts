@@ -175,10 +175,12 @@ describe('DesktopUpdateController', () => {
     await controller.check(true, new AbortController().signal)
     const first = controller.download(new AbortController().signal)
     await vi.waitFor(() => { expect(entered).toBe(1) })
+    expect(controller.snapshot().mode).toBe('downloading')
     const second = await controller.download(new AbortController().signal)
-    expect(second.error).toBe('download already in progress')
+    expect(second.mode).toBe('downloading')
     resume()
     await first
+    expect(controller.snapshot().mode).toBe('ready')
   })
 
   it('refuses a missing digest and apply before ready', async () => {

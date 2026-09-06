@@ -63,6 +63,25 @@ describe('DesktopUpdateClient', () => {
     expect(fresh.store.getSnapshot().loaded).toBe(false)
   })
 
+  it('polls progress after refresh finds a download in flight', async () => {
+    let progressCalls = 0
+    const client = new DesktopUpdateClient(async (input) => {
+      if (String(input).endsWith('/status')) {
+        return json({ mode: 'downloading', outdated: true, progress: { received: 1, total: 2 } })
+      }
+      if (String(input).endsWith('/progress')) {
+        progressCalls += 1
+        return json({ mode: 'downloading', outdated: true, progress: { received: progressCalls, total: 4 } })
+      }
+      return json({ mode: 'idle', outdated: false })
+    })
+    vi.useFakeTimers()
+    await client.refresh()
+    await vi.advanceTimersByTimeAsync(500)
+    expect(progressCalls).toBe(1)
+    client.dispose()
+  })
+
   it('keeps polling while progress stays downloading', async () => {
     let progressCalls = 0
     const client = new DesktopUpdateClient(async (input) => {

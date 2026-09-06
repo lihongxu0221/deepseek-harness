@@ -32,7 +32,7 @@ kind: "package-reference"
 - `checkOnBoot`（默认 `true`）— 当本进程是打包桌面时，加载后列出 Releases。
 - `cacheTtlMs`（默认 `600000`）— 成功列表在此毫秒内复用，除非用户点击检查。
 
-全部控制路由拒绝非回环主机名，包括 Connection 已为普通 `/api` 授权的局域网绑定。`/api/update` 属于另一个插件（npm 全家桶自更新），此处不用。
+控制路由允许回环主机名以及本机当前每一个非 internal 的 IPv4 地址（一台机器可以有多块网卡、多个地址）。其他主机名一律拒绝。`/api/update` 属于另一个插件（npm 全家桶自更新），此处不用。
 
 -----
 
@@ -42,7 +42,7 @@ kind: "package-reference"
 <details>
 <summary>实现内部细节 — 点击展开</summary>
 
-VERSION 戳是 `{semver}` 或 `{semver}.winexe.{n}`。比较先对 base 使用 semver 优先级，仅在 base 相同时比较 winexe 迭代。GitHub `/releases/latest` 会跳过预发布，因此插件列出 `/releases`。草稿以及不符合配置 zip 前缀的附件被忽略；从不下载源码 zipball。缺少 GitHub `digest` 会使下载失败：helper 绝不拷贝未校验的 zip。解压后剥掉单层包裹目录，树中必须有 `VERSION` 和 `dsh-web.exe`（或 `dsh-web`）。Apply 在 `$DSH_HOME/desktop-update` 写入 PowerShell 5.1 helper，脱离启动后退出，托盘宿主随 Node stdin 关闭。
+VERSION 戳是 `{semver}` 或 `{semver}.winexe.{n}`。比较先对 base 使用 semver 优先级，仅在 base 相同时比较 winexe 迭代。GitHub `/releases/latest` 会跳过预发布，因此插件列出 `/releases`。草稿以及不符合配置 zip 前缀的附件被忽略；从不下载源码 zipball。缺少 GitHub `digest` 会使下载失败：helper 绝不拷贝未校验的 zip。解压后剥掉单层包裹目录，树中必须有 `VERSION` 和 `dsh-web.exe`（或 `dsh-web`）。Apply 在 `$DSH_HOME/desktop-update` 写入 PowerShell 5.1 helper，脱离启动后退出，托盘宿主随 Node stdin 关闭。`/api` HTTP 桥把 Fetch URL 建在 `http://dsh.internal` 上，因此栅栏读取 Host 头，仅在 Host 缺失时使用请求 URL 主机名。非回环 Host 若等于本机当前某个非 internal IPv4 则允许；`example.test` 这类 Host 不允许。POST `/download` 在 zip 传输启动后即返回，设置行轮询 `/progress`；GitHub zip 请求使用与 Releases 列表相同的 User-Agent。
 
 </details>
 

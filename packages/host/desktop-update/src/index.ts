@@ -17,7 +17,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import {
-  DesktopUpdateController, type DesktopUpdateIo, type DesktopUpdateResolvedConfig,
+  DesktopUpdateController, GITHUB_USER_AGENT, type DesktopUpdateIo, type DesktopUpdateResolvedConfig,
 } from './controller.ts'
 import { isLoopbackRequest } from './loopback.ts'
 import { DESKTOP_UPDATE_PATHS } from './paths.ts'
@@ -38,7 +38,7 @@ export {
 } from './product.ts'
 export { digestMismatch, parseSha256Digest } from './digest.ts'
 export { applyHelperScript, powershellLiteral } from './helper.ts'
-export { isLoopbackHostname, isLoopbackRequest } from './loopback.ts'
+export { isLoopbackHostname, isLoopbackRequest, localLanIpv4Addresses } from './loopback.ts'
 export { DESKTOP_UPDATE_PATHS } from './paths.ts'
 export {
   DesktopUpdateController, GITHUB_USER_AGENT, peelExtractRootName,
@@ -174,10 +174,7 @@ export function mountDesktopUpdate(
       path: DESKTOP_UPDATE_PATHS.download,
       methods: ['POST'],
       requestBody: 'buffered',
-      fetch: request => fence(request, () => controller.download(request.signal).then((body) => {
-        const status = body.error === 'download already in progress' ? 409 : 200
-        return json(status, body)
-      })),
+      fetch: request => fence(request, () => controller.beginDownload(abort.signal).then(({ status }) => json(200, status))),
     }),
     connection.fetch.register({
       path: DESKTOP_UPDATE_PATHS.apply,
@@ -243,7 +240,14 @@ export function createDefaultIo(): DesktopUpdateIo {
     },
     /* v8 ignore start -- production download/extract/spawn/exit; controller tests replace Io */
     download: async (url, dest, onProgress, signal) => {
-      const response = await fetch(url, { signal, redirect: 'follow' })
+      const response = await fetch(url, {
+        signal,
+        redirect: 'follow',
+        headers: {
+          Accept: 'application/octet-stream',
+          'User-Agent': GITHUB_USER_AGENT,
+        },
+      })
       if (!response.ok) throw new Error(`download HTTP ${String(response.status)}`)
       const lengthHeader = response.headers.get('content-length')
       const total = lengthHeader === null ? 0 : Number(lengthHeader)

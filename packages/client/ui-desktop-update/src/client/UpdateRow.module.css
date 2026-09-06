@@ -35,7 +35,41 @@
   gap: 8px;
 }
 
-.progress {
+.progressBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.progressTrack {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--dsw-alias-bg-layer-2);
+}
+
+.progressFill,
+.progressFillBusy {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--dsw-alias-brand-primary);
+}
+
+.progressFill {
+  transition: width 200ms linear;
+}
+
+.progressFillBusy {
+  width: 40%;
+  animation: desktop-update-indeterminate 1.2s ease-in-out infinite;
+}
+
+@keyframes desktop-update-indeterminate {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(250%); }
+}
+
+.progressLabel {
   font-size: 12px;
   line-height: 18px;
   color: var(--dsw-alias-label-secondary);

@@ -195,11 +195,32 @@ export class DesktopUpdateController {
    * @returns the updated snapshot.
    */
   async download(signal: AbortSignal): Promise<DesktopUpdateStatus> {
+    const { work } = await this.beginDownload(signal)
+    if (work !== undefined) {
+      try {
+        await work
+      } catch (error) {
+        if (signal.aborted) throw error
+      }
+    }
+    return this.snapshot()
+  }
+
+  /**
+   * Start a zip download and return as soon as the transfer is armed.
+   * The HTTP route uses this so the browser can poll `/progress`.
+   * @param signal - cancellation.
+   * @returns the downloading snapshot and the in-flight work, when started.
+   */
+  async beginDownload(signal: AbortSignal): Promise<{
+    readonly status: DesktopUpdateStatus
+    readonly work?: Promise<void>
+  }> {
     if (this.product === undefined) {
-      return this.fail('not a packaged desktop')
+      return { status: this.fail('not a packaged desktop') }
     }
     if (this.mode === 'downloading' || this.downloadLock) {
-      return this.fail('download already in progress')
+      return { status: this.snapshot() }
     }
     this.downloadLock = true
     try {
@@ -207,15 +228,23 @@ export class DesktopUpdateController {
       const selected = this.latest
       const current = this.product.version
       if (selected === undefined || !isOutdated(current, selected.version)) {
-        return this.fail('no newer packaged zip')
+        this.downloadLock = false
+        return { status: this.fail('no newer packaged zip') }
       }
       if (parseSha256Digest(selected.digest) === undefined) {
-        return this.fail('GitHub asset digest is missing or not sha256')
+        this.downloadLock = false
+        return { status: this.fail('GitHub asset digest is missing or not sha256') }
       }
-      await this.runDownload(selected, signal)
-      return this.snapshot()
-    } finally {
+      this.mode = 'downloading'
+      this.error = undefined
+      this.progress = { received: 0, total: selected.size }
+      const work = this.runDownload(selected, signal).finally(() => {
+        this.downloadLock = false
+      })
+      return { status: this.snapshot(), work }
+    } catch (error) {
       this.downloadLock = false
+      throw error
     }
   }
 

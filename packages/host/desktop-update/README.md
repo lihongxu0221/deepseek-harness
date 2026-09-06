@@ -32,7 +32,7 @@ Mount it after `connection` in the web composition. The browser Settings row is 
 - `checkOnBoot` (default `true`) — list Releases after load when this process is a packaged desktop.
 - `cacheTtlMs` (default `600000`) — reuse a successful list for this many milliseconds unless the user clicks Check.
 
-All control routes refuse non-loopback Hostnames, including LAN binds that Connection already authorizes for ordinary `/api`. `/api/update` is a different plugin (npm family self-update) and is not used here.
+Control routes allow loopback Hostnames and every current non-internal IPv4 address of this machine (a host may have several). Other Hostnames are refused. `/api/update` is a different plugin (npm family self-update) and is not used here.
 
 -----
 
@@ -42,7 +42,7 @@ All control routes refuse non-loopback Hostnames, including LAN binds that Conne
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-VERSION stamps are `{semver}` or `{semver}.winexe.{n}`. Comparison uses semver precedence on the base, then the winexe iteration only when bases match. GitHub `/releases/latest` skips prereleases, so the plugin lists `/releases`. Drafts and assets that are not the configured zip prefix are ignored; the source zipball is never downloaded. A missing GitHub `digest` fails the download: the helper never copies an unauthenticated zip. After extract, a single wrapping directory is peeled, then the tree must contain `VERSION` and `dsh-web.exe` (or `dsh-web`). Apply writes a PowerShell 5.1 helper under `$DSH_HOME/desktop-update`, detaches it, and exits so the tray host drops with Node stdin.
+VERSION stamps are `{semver}` or `{semver}.winexe.{n}`. Comparison uses semver precedence on the base, then the winexe iteration only when bases match. GitHub `/releases/latest` skips prereleases, so the plugin lists `/releases`. Drafts and assets that are not the configured zip prefix are ignored; the source zipball is never downloaded. A missing GitHub `digest` fails the download: the helper never copies an unauthenticated zip. After extract, a single wrapping directory is peeled, then the tree must contain `VERSION` and `dsh-web.exe` (or `dsh-web`). Apply writes a PowerShell 5.1 helper under `$DSH_HOME/desktop-update`, detaches it, and exits so the tray host drops with Node stdin. The `/api` HTTP bridge builds Fetch URLs on `http://dsh.internal`, so the fence reads the Host header and uses the request URL hostname only when Host is absent. Non-loopback Hosts that match a current non-internal IPv4 of this machine are allowed; a Host such as `example.test` is not. POST `/download` returns once the zip transfer is armed so the Settings row can poll `/progress`; GitHub zip fetches send the same User-Agent as the Releases list.
 
 </details>
 

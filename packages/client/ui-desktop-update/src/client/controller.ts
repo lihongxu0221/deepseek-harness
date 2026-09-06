@@ -35,7 +35,10 @@ export class DesktopUpdateClient {
    * @returns the snapshot.
    */
   async refresh(): Promise<DesktopUpdateStatus> {
-    return this.run(() => callUpdate('/status', 'GET', this.request))
+    const status = await this.run(() => callUpdate('/status', 'GET', this.request))
+    if (status.mode === 'downloading') this.startPoll()
+    else this.stopPoll()
+    return status
   }
 
   /**
@@ -51,9 +54,15 @@ export class DesktopUpdateClient {
    * @returns the snapshot.
    */
   async download(): Promise<DesktopUpdateStatus> {
-    const status = await this.run(() => callUpdate('/download', 'POST', this.request))
-    if (status.mode === 'downloading') this.startPoll()
-    return status
+    this.startPoll()
+    try {
+      const status = await this.run(() => callUpdate('/download', 'POST', this.request))
+      if (status.mode !== 'downloading') this.stopPoll()
+      return status
+    } catch (error) {
+      this.stopPoll()
+      throw error
+    }
   }
 
   /**

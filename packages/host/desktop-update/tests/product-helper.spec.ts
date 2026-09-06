@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { join } from 'node:path'
 import { digestMismatch, parseSha256Digest } from '../src/digest.ts'
 import { applyHelperScript, powershellLiteral } from '../src/helper.ts'
-import { isLoopbackHostname, isLoopbackRequest } from '../src/loopback.ts'
+import { isLoopbackHostname, isLoopbackRequest, localLanIpv4Addresses } from '../src/loopback.ts'
 import { peelExtractRootName } from '../src/controller.ts'
 import {
   detectPackagedProduct, isPackagedExtract, readProductVersion, shouldCopyProductEntry,
@@ -75,17 +75,52 @@ describe('digest', () => {
 })
 
 describe('loopback', () => {
-  it('accepts loopback hosts and rejects LAN literals', () => {
+  it('accepts loopback and this machine\'s LAN IPv4s, rejects other hosts', () => {
     expect(isLoopbackHostname('127.0.0.1')).toBe(true)
     expect(isLoopbackHostname('127.1.2.3')).toBe(true)
     expect(isLoopbackHostname('localhost')).toBe(true)
     expect(isLoopbackHostname('[::1]')).toBe(true)
     expect(isLoopbackHostname('::1')).toBe(true)
-    expect(isLoopbackHostname('192.168.1.9')).toBe(false)
     expect(isLoopbackHostname('example.test')).toBe(false)
-    expect(isLoopbackRequest(new Request('http://127.0.0.1:3080/api/desktop-update/status'))).toBe(true)
-    expect(isLoopbackRequest(new Request('http://192.168.0.2/api/desktop-update/status'))).toBe(false)
-    expect(isLoopbackRequest({ url: 'not a url' } as Request)).toBe(false)
+    expect(Array.isArray(localLanIpv4Addresses())).toBe(true)
+    expect(localLanIpv4Addresses({
+      lo: [{ family: 'IPv4', internal: true, address: '127.0.0.1' }],
+      eth0: [
+        { family: 'IPv6', internal: false, address: 'fe80::1' },
+        { family: 'IPv4', internal: false, address: '10.0.0.7' },
+      ],
+      eth1: [{ family: 'IPv4', internal: false, address: '10.0.0.8' }],
+      utun0: undefined,
+    })).toEqual(['10.0.0.7', '10.0.0.8'])
+    const lan = ['10.0.0.7', '10.0.0.8'] as const
+    expect(isLoopbackRequest(new Request('http://127.0.0.1:3080/api/desktop-update/status'), lan)).toBe(true)
+    expect(isLoopbackRequest(new Request('http://example.test/api/desktop-update/status'), lan)).toBe(false)
+    expect(isLoopbackRequest({ url: 'not a url' } as Request, lan)).toBe(false)
+    // The /api HTTP bridge synthesizes http://dsh.internal and copies Host.
+    expect(isLoopbackRequest(new Request('http://dsh.internal/api/desktop-update/status', {
+      headers: { host: '127.0.0.1' },
+    }), lan)).toBe(true)
+    expect(isLoopbackRequest(new Request('http://dsh.internal/api/desktop-update/status', {
+      headers: { host: 'localhost' },
+    }), lan)).toBe(true)
+    expect(isLoopbackRequest(new Request('http://dsh.internal/api/desktop-update/status', {
+      headers: { host: '[::1]' },
+    }), lan)).toBe(true)
+    expect(isLoopbackRequest(new Request('http://dsh.internal/api/desktop-update/status', {
+      headers: { host: '10.0.0.7' },
+    }), lan)).toBe(true)
+    expect(isLoopbackRequest(new Request('http://dsh.internal/api/desktop-update/status', {
+      headers: { host: '10.0.0.8' },
+    }), lan)).toBe(true)
+    expect(isLoopbackRequest(new Request('http://dsh.internal/api/desktop-update/status', {
+      headers: { host: 'example.test' },
+    }), lan)).toBe(false)
+    expect(isLoopbackRequest(new Request('http://example.test/api/desktop-update/status', {
+      headers: { host: '10.0.0.7' },
+    }), lan)).toBe(true)
+    expect(isLoopbackRequest(new Request('http://127.0.0.1/api/desktop-update/status', {
+      headers: { host: 'example.test' },
+    }), lan)).toBe(false)
   })
 })
 
