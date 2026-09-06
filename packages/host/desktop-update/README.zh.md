@@ -42,7 +42,7 @@ kind: "package-reference"
 <details>
 <summary>实现内部细节 — 点击展开</summary>
 
-VERSION 戳是 `{semver}` 或 `{semver}.winexe.{n}`。比较先对 base 使用 semver 优先级，仅在 base 相同时比较 winexe 迭代。GitHub `/releases/latest` 会跳过预发布，因此插件列出 `/releases`。草稿以及不符合配置 zip 前缀的附件被忽略；从不下载源码 zipball。缺少 GitHub `digest` 会使下载失败：helper 绝不拷贝未校验的 zip。解压后剥掉单层包裹目录，树中必须有 `VERSION` 和 `dsh-web.exe`（或 `dsh-web`）。Apply 在 `$DSH_HOME/desktop-update` 写入 PowerShell 5.1 helper，脱离启动后退出，托盘宿主随 Node stdin 关闭。`/api` HTTP 桥把 Fetch URL 建在 `http://dsh.internal` 上，因此栅栏读取 Host 头，仅在 Host 缺失时使用请求 URL 主机名。非回环 Host 若等于本机当前某个非 internal IPv4 则允许；`example.test` 这类 Host 不允许。POST `/download` 在 zip 传输启动后即返回，设置行轮询 `/progress`；GitHub zip 请求使用与 Releases 列表相同的 User-Agent。
+VERSION 戳是 `{semver}` 或 `{semver}.winexe.{n}`。比较先对 base 使用 semver 优先级，仅在 base 相同时比较 winexe 迭代。GitHub `/releases/latest` 会跳过预发布，因此插件列出 `/releases`。草稿以及不符合配置 zip 前缀的附件被忽略；从不下载源码 zipball。缺少 GitHub `digest` 会使下载失败：helper 绝不拷贝未校验的 zip。解压后剥掉单层包裹目录，树中必须有 `VERSION` 和 `dsh-web.exe`（或 `dsh-web`）。Apply 在 `$DSH_HOME/desktop-update` 写入带 UTF-8 BOM 的 PowerShell 5.1 helper，并通过 `wscript.exe` 与 `WScript.Shell.Run` 启动——在无控制台宿主上直接 `detached` 的 powershell.exe 会在执行 `-File` 之前退出，而 `cmd.exe start` 会把引号标题当成文件名。helper 在本进程退出后用 WinForms 启动画面报告等待、拷贝与重启，每一步追加到 `apply.log`，失败时弹出 MessageBox。Apply 随后等待一秒以提交 HTTP 响应体；托盘宿主随 Node stdin 关闭。`/api` HTTP 桥把 Fetch URL 建在 `http://dsh.internal` 上，因此栅栏读取 Host 头，仅在 Host 缺失时使用请求 URL 主机名。非回环 Host 若等于本机当前某个非 internal IPv4 则允许；`example.test` 这类 Host 不允许。POST `/download` 在 zip 传输启动后即返回，设置行轮询 `/progress`；GitHub zip 请求使用与 Releases 列表相同的 User-Agent。
 
 </details>
 

@@ -103,6 +103,14 @@ describe('UpdateRow', () => {
     cleanup()
     mount({
       loaded: true,
+      status: { mode: 'applying', outdated: true, current: '1', latest: '2' },
+    })
+    expect(screen.getAllByText(zh.applying).length).toBeGreaterThan(0)
+    expect(screen.getByRole('progressbar', { name: zh.applying }).getAttribute('aria-valuenow')).toBeNull()
+
+    cleanup()
+    mount({
+      loaded: true,
       status: { mode: 'error', outdated: false, error: 'boom', current: '1' },
     })
     expect(screen.getByRole('alert').textContent).toBe('boom')

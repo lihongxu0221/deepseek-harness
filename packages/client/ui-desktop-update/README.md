@@ -1,5 +1,5 @@
 ---
-description: "General-settings row that checks GitHub for a newer packaged Windows desktop zip and drives download plus quit-and-apply."
+description: "General-settings row that checks GitHub for a newer packaged Windows desktop zip and drives download plus restart-and-apply."
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-This browser plugin contributes one General-settings row that talks to the Host [`dsh-host-desktop-update`](../../host/desktop-update/README.md) routes. It shows the installed `VERSION`, checks GitHub, downloads a newer `dsh-web-win-x64` zip with progress, and offers Quit and update. The row renders nothing until the Host reports a packaged desktop (`mode` other than `unavailable`), so source `dsh web` stays unchanged.
+This browser plugin contributes one General-settings row that talks to the Host [`dsh-host-desktop-update`](../../host/desktop-update/README.md) routes. It shows the installed `VERSION`, checks GitHub, downloads a newer `dsh-web-win-x64` zip with progress, and offers Restart and update. The row renders nothing until the Host reports a packaged desktop (`mode` other than `unavailable`), so source `dsh web` stays unchanged.
 
 ## Table of Contents
 
@@ -35,7 +35,7 @@ Mount it beside the Host updater in the web composition. The row occupies `setti
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-The apply-world controller owns same-origin Fetch to `/api/desktop-update/*` and publishes a snapshot store through the inject `hooks` compartment. Download polls `/progress` every 500ms until the Host leaves `downloading`; opening Settings while a zip is already transferring resumes that poll. The row draws a determinate progress bar from `received`/`total`. Apply treats a dropped Fetch as success because the Host exits after arming the helper.
+The apply-world controller owns same-origin Fetch to `/api/desktop-update/*` and publishes a snapshot store through the inject `hooks` compartment. Download polls `/progress` every 500ms until the Host leaves `downloading`; opening Settings while a zip is already transferring resumes that poll. The row draws a determinate progress bar from `received`/`total`. Apply treats a dropped Fetch as success because the Host exits after arming the helper; replace progress after that exit is the helper splash, not this row.
 
 </details>
 

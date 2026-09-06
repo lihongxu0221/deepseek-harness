@@ -20,3 +20,6 @@ export const EXTRACT_DIR_NAME = 'extract'
 
 /** Helper script filename. */
 export const APPLY_SCRIPT_NAME = 'apply.ps1'
+
+/** WScript launcher filename that starts {@link APPLY_SCRIPT_NAME} after Host exit. */
+export const APPLY_VBS_NAME = 'apply.vbs'

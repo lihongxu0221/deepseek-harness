@@ -10,6 +10,7 @@ import { spawn } from 'node:child_process'
 import { existsSync, readFileSync, statSync } from 'node:fs'
 import { copyFile, cp, lstat, mkdir, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve, sep } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
 import { seedBuiltinProfilePlugins } from './build-builtin-profile-plugins.ts'
 import { resolvePackagedWebExeVersion } from './packaged-web-exe-version.ts'
@@ -356,6 +357,9 @@ class WebExeBuild {
         '--config.node-linker=hoisted',
         '--config.auto-install-peers=false',
         '--config.link-workspace-packages=true',
+        // Node 26 + MSVC 18 pass clang LTO link flags; fs-ext's rebuild then
+        // fails. The winexe tree uses prebuilds; POSIX flock is unused.
+        '--config.ignore-scripts=true',
         this.staging,
       ])
       await this.restoreLegacyHoists()
@@ -501,9 +505,10 @@ class WebExeBuild {
     }
     await this.prepareNativePty(product, target)
     const launcherOutput = join(product, LAUNCHER_NAME)
-    await this.run(`pkg ${target.spec}`, pnpmBin(), [
-      'exec',
-      'pkg',
+    // `pnpm exec pkg` re-runs `pnpm install --production` when there is no TTY.
+    const pkgBin = fileURLToPath(import.meta.resolve('@yao-pkg/pkg/lib-es5/bin.js'))
+    await this.run(`pkg ${target.spec}`, process.execPath, [
+      pkgBin,
       LAUNCHER_BIN,
       '--sea',
       '--targets',

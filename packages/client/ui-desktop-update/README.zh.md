@@ -1,5 +1,5 @@
 ---
-description: "常规设置行：检查 GitHub 是否有更新的打包 Windows 桌面 zip，并驱动下载与退出替换。"
+description: "常规设置行：检查 GitHub 是否有更新的打包 Windows 桌面 zip，并驱动下载与重启替换。"
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-本浏览器插件向常规设置贡献一行，与 Host [`dsh-host-desktop-update`](../../host/desktop-update/README.zh.md) 路由通信。它显示已安装的 `VERSION`，检查 GitHub，带进度下载更新的 `dsh-web-win-x64` zip，并提供「退出并更新」。在 Host 报告打包桌面（`mode` 不是 `unavailable`）之前该行不渲染，因此源码 `dsh web` 保持不变。
+本浏览器插件向常规设置贡献一行，与 Host [`dsh-host-desktop-update`](../../host/desktop-update/README.zh.md) 路由通信。它显示已安装的 `VERSION`，检查 GitHub，带进度下载更新的 `dsh-web-win-x64` zip，并提供「重启并更新」。在 Host 报告打包桌面（`mode` 不是 `unavailable`）之前该行不渲染，因此源码 `dsh web` 保持不变。
 
 ## 目录
 
@@ -35,7 +35,7 @@ kind: "package-reference"
 <details>
 <summary>实现内部细节 — 点击展开</summary>
 
-apply 世界的控制器对 `/api/desktop-update/*` 发起同源 Fetch，并通过 inject 的 `hooks` 隔间发布 snapshot store。下载期间每 500ms 轮询 `/progress`，直到 Host 离开 `downloading`；设置页在 zip 已在传输时打开会恢复该轮询。该行用 `received`/`total` 画确定进度条。Apply 把中断的 Fetch 视为成功，因为 Host 在武装 helper 之后会退出。
+apply 世界的控制器对 `/api/desktop-update/*` 发起同源 Fetch，并通过 inject 的 `hooks` 隔间发布 snapshot store。下载期间每 500ms 轮询 `/progress`，直到 Host 离开 `downloading`；设置页在 zip 已在传输时打开会恢复该轮询。该行用 `received`/`total` 画确定进度条。Apply 把中断的 Fetch 视为成功，因为 Host 在武装 helper 之后会退出；退出之后的替换进度由 helper 启动画面承担，而不是本行。
 
 </details>
 

@@ -56,12 +56,14 @@ export function UpdateRow({
       </div>
     )
   }
-  const busy = state.status.mode === 'downloading' || state.status.mode === 'applying'
+  const applying = state.status.mode === 'applying'
+  const busy = state.status.mode === 'downloading' || applying
   const statusText = statusLine(state, t)
   const progress = state.status.progress
-  const percent = progress !== undefined && progress.total > 0
+  const percent = !applying && progress !== undefined && progress.total > 0
     ? Math.min(100, Math.round(progress.received / progress.total * 100))
     : undefined
+  const progressLabel = applying ? t('applying') : t('downloading')
   return (
     <div className={css.row}>
       <div className={css.title}>{t('title')}</div>
@@ -72,12 +74,12 @@ export function UpdateRow({
         {t('current')}: {state.status.current ?? '—'}
         {state.status.latest !== undefined ? ` · ${t('latest')}: ${state.status.latest}` : ''}
       </div>
-      {state.status.mode === 'downloading' && (
+      {busy && (
         <div className={css.progressBlock}>
           <div
             className={css.progressTrack}
             role="progressbar"
-            aria-label={t('downloading')}
+            aria-label={progressLabel}
             aria-valuemin={0}
             aria-valuemax={100}
             {...percent === undefined ? {} : { 'aria-valuenow': percent }}
@@ -88,7 +90,7 @@ export function UpdateRow({
             />
           </div>
           <div className={css.progressLabel}>
-            {t('downloading')}{percent === undefined ? '' : ` ${String(percent)}%`}
+            {progressLabel}{percent === undefined ? '' : ` ${String(percent)}%`}
           </div>
         </div>
       )}
@@ -131,6 +133,7 @@ function statusLine(
   state: DesktopUpdateRowState,
   t: UpdateRowProps['t'],
 ): string {
+  if (state.status.mode === 'applying') return t('applying')
   if (state.status.mode === 'ready') return t('ready')
   if (state.status.outdated) return t('outdated')
   if (state.status.latest !== undefined) return t('upToDate')

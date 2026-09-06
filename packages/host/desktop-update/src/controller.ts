@@ -94,7 +94,7 @@ export interface DesktopUpdateIo {
   ): Promise<void>
   /** Extract a zip into an empty directory. */
   extract(zipPath: string, destDir: string): Promise<void>
-  /** Start the detached apply helper at `scriptPath`. */
+  /** Start the apply helper at `scriptPath` so it outlives this process. */
   spawnHelper(scriptPath: string): void
   /** Exit this process after the apply response is committed. */
   exit(code: number): void

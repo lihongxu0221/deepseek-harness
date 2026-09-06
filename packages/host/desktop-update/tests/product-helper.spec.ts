@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { join } from 'node:path'
 import { digestMismatch, parseSha256Digest } from '../src/digest.ts'
-import { applyHelperScript, powershellLiteral } from '../src/helper.ts'
+import {
+  applyHelperLaunchSpec, applyHelperScript, applyHelperVbs, powershellLiteral,
+  windowsPowerShell51Path, wshCommandToken,
+} from '../src/helper.ts'
 import { isLoopbackHostname, isLoopbackRequest, localLanIpv4Addresses } from '../src/loopback.ts'
 import { peelExtractRootName } from '../src/controller.ts'
 import {
@@ -125,17 +128,49 @@ describe('loopback', () => {
 })
 
 describe('apply helper', () => {
-  it('quotes paths and skips .config during robocopy', () => {
+  it('quotes paths, skips .config during robocopy, and logs every step', () => {
     expect(powershellLiteral('C:\\a\\b\'c')).toBe('\'C:\\a\\b\'\'c\'')
+    expect(wshCommandToken('C:\\a\\b"c')).toBe('"C:\\a\\b""c"')
     const script = applyHelperScript({
       parentPid: 42,
       extractDir: 'C:\\home\\desktop-update\\extract',
       productDir: 'C:\\app',
       exePath: 'C:\\app\\dsh-web.exe',
     })
+    expect(script.charCodeAt(0)).toBe(0xFEFF)
     expect(script).toContain('/XD .config')
     expect(script).toContain('Start-Process')
     expect(script).toContain('$parentPid = 42')
     expect(script).toContain('\'C:\\app\\dsh-web.exe\'')
+    expect(script).toContain('Join-Path $PSScriptRoot \'apply.log\'')
+    expect(script).toContain('Write-ApplyLog "robocopy exit $copyCode"')
+    expect(script).toContain('Write-ApplyLog \'apply complete\'')
+    expect(script).toContain('System.Windows.Forms.ProgressBar')
+    expect(script).toContain('正在替换程序文件')
+    expect(script).toContain('Replacing program files')
+    expect(script).toContain('& robocopy.exe')
+    expect(script).not.toContain('| Out-Null')
+    expect(script).toContain('MessageBox')
+  })
+
+  it('launches the helper through wscript so -File runs after this process exits', () => {
+    expect(windowsPowerShell51Path({ SystemRoot: 'D:\\Windows' }))
+      .toBe(join('D:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'))
+    expect(windowsPowerShell51Path({})).toBe(join(
+      'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe',
+    ))
+    const powershell = join('C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
+    const scriptPath = join('C:\\home', 'desktop-update', 'apply.ps1')
+    const vbsPath = join('C:\\home', 'desktop-update', 'apply.vbs')
+    const vbs = applyHelperVbs(scriptPath, powershell)
+    expect(vbs).toContain('CreateObject("WScript.Shell")')
+    expect(vbs).toContain('sh.Run')
+    expect(vbs).toContain(', 0, False')
+    expect(vbs).toContain(wshCommandToken(scriptPath).replaceAll('"', '""'))
+    expect(vbs).toContain(wshCommandToken(powershell).replaceAll('"', '""'))
+    const launch = applyHelperLaunchSpec(vbsPath)
+    expect(launch.command).toBe('wscript.exe')
+    expect(launch.args).toEqual(['//nologo', vbsPath])
+    expect(launch.options).toEqual({ detached: true, stdio: 'ignore', windowsHide: true })
   })
 })

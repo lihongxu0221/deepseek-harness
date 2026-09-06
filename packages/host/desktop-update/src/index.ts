@@ -7,10 +7,10 @@
 import { createHash } from 'node:crypto'
 import { spawn } from 'node:child_process'
 import {
-  createReadStream, createWriteStream, existsSync, readFileSync,
+  appendFileSync, createReadStream, createWriteStream, existsSync, readFileSync, writeFileSync,
 } from 'node:fs'
 import { mkdir, readdir, rm, statfs, writeFile } from 'node:fs/promises'
-import { dirname } from 'node:path'
+import { dirname, join } from 'node:path'
 import { Readable, Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import type { Context } from '@deepseek-ai/cordis'
@@ -19,8 +19,9 @@ import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import {
   DesktopUpdateController, GITHUB_USER_AGENT, type DesktopUpdateIo, type DesktopUpdateResolvedConfig,
 } from './controller.ts'
+import { applyHelperLaunchSpec, applyHelperVbs, windowsPowerShell51Path } from './helper.ts'
 import { isLoopbackRequest } from './loopback.ts'
-import { DESKTOP_UPDATE_PATHS } from './paths.ts'
+import { APPLY_VBS_NAME, DESKTOP_UPDATE_PATHS } from './paths.ts'
 
 export type {
   DesktopUpdateMode, DesktopUpdateProgress, DesktopUpdateStatus, GitHubRelease,
@@ -37,7 +38,11 @@ export {
   readProductVersion, shouldCopyProductEntry, VERSION_FILENAME,
 } from './product.ts'
 export { digestMismatch, parseSha256Digest } from './digest.ts'
-export { applyHelperScript, powershellLiteral } from './helper.ts'
+export {
+  applyHelperLaunchSpec, applyHelperScript, applyHelperVbs, powershellLiteral,
+  windowsPowerShell51Path, wshCommandToken,
+} from './helper.ts'
+export type { ApplyHelperArgs, ApplyHelperLaunchSpec } from './helper.ts'
 export { isLoopbackHostname, isLoopbackRequest, localLanIpv4Addresses } from './loopback.ts'
 export { DESKTOP_UPDATE_PATHS } from './paths.ts'
 export {
@@ -59,6 +64,12 @@ export const DEFAULT_ASSET_PREFIX = 'dsh-web-win-x64-'
 
 /** Default GitHub list cache window. */
 export const DEFAULT_CACHE_TTL_MS = 10 * 60_000
+
+/**
+ * Delay between the committed apply response and `io.exit`. The socket write
+ * of the JSON body is asynchronous, so an immediate exit truncates it.
+ */
+export const APPLY_EXIT_DELAY_MS = 1_000
 
 /** `owner/name` with no extra slashes. */
 const REPOSITORY = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u
@@ -182,7 +193,7 @@ export function mountDesktopUpdate(
       requestBody: 'buffered',
       fetch: request => fence(request, async () => {
         const body = await controller.armApply()
-        if (body.mode === 'applying') queueMicrotask(() => { io.exit(0) })
+        if (body.mode === 'applying') setTimeout(() => { io.exit(0) }, APPLY_EXIT_DELAY_MS)
         return json(200, body)
       }),
     }),
@@ -279,11 +290,24 @@ export function createDefaultIo(): DesktopUpdateIo {
       })
     }),
     spawnHelper: (scriptPath) => {
-      const child = spawn(
-        'powershell.exe',
-        ['-NoProfile', '-WindowStyle', 'Hidden', '-ExecutionPolicy', 'Bypass', '-File', scriptPath],
-        { detached: true, stdio: 'ignore', windowsHide: true },
+      const vbsPath = join(dirname(scriptPath), APPLY_VBS_NAME)
+      writeFileSync(
+        vbsPath,
+        `\uFEFF${applyHelperVbs(scriptPath, windowsPowerShell51Path())}`,
+        'utf16le',
       )
+      const launch = applyHelperLaunchSpec(vbsPath)
+      const child = spawn(launch.command, [...launch.args], launch.options)
+      child.on('error', (error) => {
+        try {
+          appendFileSync(
+            join(dirname(scriptPath), 'apply.log'),
+            `${new Date().toISOString()} helper spawn failed: ${error.message}\n`,
+          )
+        } catch {
+          // The work directory is gone; the spawn error has nowhere else to go.
+        }
+      })
       child.unref()
     },
     exit: (code) => { process.exit(code) },

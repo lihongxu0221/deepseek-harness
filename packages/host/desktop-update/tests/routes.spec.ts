@@ -233,8 +233,7 @@ describe('mountDesktopUpdate', () => {
     await handler(DESKTOP_UPDATE_PATHS.apply)(
       new Request('http://127.0.0.1/api/desktop-update/apply', { method: 'POST' }),
     )
-    await new Promise<void>((resolve) => { queueMicrotask(resolve) })
-    expect(exits).toEqual([0])
+    await vi.waitFor(() => { expect(exits).toEqual([0]) }, { timeout: 5_000 })
     await ctx.fiber.dispose()
   })
 

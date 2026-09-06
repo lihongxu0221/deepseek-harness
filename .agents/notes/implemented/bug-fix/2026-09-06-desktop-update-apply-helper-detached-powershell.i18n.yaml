@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-09-06-desktop-update-apply-helper-detached-powershell.md
+2026-09-06-desktop-update-apply-helper-detached-powershell.md: 556d5fe3f75f635befeff73cc3512647a949e6f8
+2026-09-06-desktop-update-apply-helper-detached-powershell.zh.md: c757acd77aaca560276d90c8925b3f340de057a9

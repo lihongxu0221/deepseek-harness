@@ -12,10 +12,10 @@ winexe 桌面是约 270MB 的文件夹，以 GitHub 预发布 zip 发布。已�
 
 把更新器做成两个 Cordis 插件，而不是启动器逻辑：
 
-- [`dsh-host-desktop-update`](../../../../packages/host/desktop-update/README.zh.md) 读取 exe 旁的 `VERSION`，列出 GitHub Releases（包含预发布；`/releases/latest` 会跳过它们），下载配置的 `dsh-web-win-x64-` zip，校验 GitHub `sha256` digest，解压，并武装脱离的 PowerShell helper。
+- [`dsh-host-desktop-update`](../../../../packages/host/desktop-update/README.zh.md) 读取 exe 旁的 `VERSION`，列出 GitHub Releases（包含预发布；`/releases/latest` 会跳过它们），下载配置的 `dsh-web-win-x64-` zip，校验 GitHub `sha256` digest，解压，并通过 `wscript.exe` 武装 PowerShell helper。
 - [`dsh-client-ui-desktop-update`](../../../../packages/client/ui-desktop-update/README.zh.md) 增加一行通用设置。源码 `dsh web` 仍会加载 Host 插件并返回 `mode: unavailable`，该行显示「当前不是打包桌面」。缺失路由的 HTTP 403/404 显示为错误，而不再把整行藏掉。
 
-控制路由位于 Connection 已鉴权 Fetch 通道上的 `/api/desktop-update/*`。额外栅栏允许回环主机名以及本机当前每一个非 internal IPv4 地址（一台机器可以有多块网卡、多个地址），并拒绝其他 Host，因此 Host 不是本机的请求不能发起 270MB 下载或替换产品目录。`/api` HTTP 桥把 Fetch URL 合成在 `http://dsh.internal` 上，因此这道额外栅栏读取 Host 头，仅在 Host 缺失时回退到请求 URL 主机名。Apply 从不拷贝 `.config`。helper 等待本 PID 退出，用 `/XD .config` robocopy 解压树，再拉起 `dsh-web.exe`。随后 Node `process.exit(0)`；Windows 托盘宿主在 stdin 关闭时已经会退出。
+控制路由位于 Connection 已鉴权 Fetch 通道上的 `/api/desktop-update/*`。额外栅栏允许回环主机名以及本机当前每一个非 internal IPv4 地址（一台机器可以有多块网卡、多个地址），并拒绝其他 Host，因此 Host 不是本机的请求不能发起 270MB 下载或替换产品目录。`/api` HTTP 桥把 Fetch URL 合成在 `http://dsh.internal` 上，因此这道额外栅栏读取 Host 头，仅在 Host 缺失时回退到请求 URL 主机名。Apply 从不拷贝 `.config`。helper 等待本 PID 退出，显示 WinForms 启动画面，用 `/XD .config` robocopy 解压树，再拉起 `dsh-web.exe`。随后 Node 在一秒后 `process.exit(0)`；Windows 托盘宿主在 stdin 关闭时已经会退出。helper 启动方式由 [apply-helper 笔记](../bug-fix/2026-09-06-desktop-update-apply-helper-detached-powershell.zh.md) 拥有。
 
 版本戳是 `{semver}` 或 `{semver}.winexe.{n}`。比较对 base 使用 semver 优先级；winexe 迭代只作平局 tiebreaker。GitHub 仓库与附件前缀是 Config（默认 `lihongxu0221/deepseek-harness` 与 `dsh-web-win-x64-`）。只有用户点击才下载；启动至多列出 Releases。
 
