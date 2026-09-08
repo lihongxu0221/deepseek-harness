@@ -14,6 +14,7 @@ import * as Cordis from '@deepseek-ai/cordis'
 import * as ClientStore from '@deepseek-ai/dsh-client-store'
 import * as UiSlots from '@deepseek-ai/dsh-client-ui-slots'
 import * as UiPrimitives from '@deepseek-ai/dsh-client-ui-primitives'
+import * as UiDockkit from '@deepseek-ai/dsh-client-ui-dockkit'
 import type { PlatformModule } from './platform.ts'
 
 /**
@@ -33,6 +34,7 @@ export function getStaticModules(): Record<string, unknown> {
     '@deepseek-ai/dsh-client-store': ClientStore,
     '@deepseek-ai/dsh-client-ui-slots': UiSlots,
     '@deepseek-ai/dsh-client-ui-primitives': UiPrimitives,
+    '@deepseek-ai/dsh-client-ui-dockkit': UiDockkit,
   } satisfies Record<PlatformModule, unknown>
   // Keep these keys as literals; a computed table can drop them from the Vite
   // artifact. Seed matching is exact, so both the package name and `/client`

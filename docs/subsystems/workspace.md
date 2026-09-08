@@ -2,7 +2,7 @@
 
 English | [中文](workspace.zh.md)
 
-A workspace is the persistent record of a directory the user works in: a stable id over a canonical path, a display title, and the ordered account of sessions that belong to it. The subsystem is one package ([dsh-workspace](../../packages/workspace/workspace), `ctx.workspaceRegistry`) — an optional host-side capability, not part of the agent-loop spine, and invisible to models (no tools, no prompt text, no session events). It stores its records through the [storage domain form](storage.md) and validates session membership against [`SessionHeader.cwd`](persistence.md#sessionheader--metadata-beside-the-log), so `storageDomain` and `sessionPersistence` are mandatory startup dependencies: an unavailable persistence peer leaves the plugin pending rather than being mistaken for an empty history. Design record: [domain KV storage Agent Note](../../.agents/notes/proposed/architecture/2026-07-24-domain-kv-storage-and-workspace.md); bootstrap and GUI ordering: [Workspace UI product-flow Agent Note](../../.agents/notes/implemented/feature/2026-07-25-workspace-ui-product-flow.md).
+A workspace is the persistent record of a directory the user works in: a stable id over a canonical path, a display title, and the ordered account of sessions that belong to it. The subsystem is one package ([dsh-workspace](../../packages/workspace/workspace), `ctx.workspaceRegistry`) — an optional host-side capability, not part of the agent-loop spine, and invisible to models (no tools, no prompt text, no session events). It stores its records through the [storage domain form](storage.md) and validates session membership against [`SessionHeader.cwd`](persistence.md#sessionheader--metadata-beside-the-log), so `storageDomain` and `sessionPersistence` are mandatory startup dependencies: an unavailable persistence peer leaves the plugin pending rather than being mistaken for an empty history. Design record: [domain KV storage Agent Note](../../.agents/notes/proposed/architecture/2026-07-24-domain-kv-storage-and-workspace.md); bootstrap and GUI ordering: [Workspace UI product-flow Agent Note](../../.agents/notes/archived/feature/2026-07-25-workspace-ui-product-flow.md).
 
 Source: [`packages/workspace/workspace/src/types.ts`](../../packages/workspace/workspace/src/types.ts)
 
@@ -241,6 +241,68 @@ Host service backing the generated `ctx.remote.workspace` namespace.
 ```
 
 Source: [`packages/api/workspace-controller/src/index.ts`](../../packages/api/workspace-controller/src/index.ts)
+
+<a id="ctxworkspacefiles--workspacefiles"></a>
+
+### `ctx.workspaceFiles` — `WorkspaceFiles`
+
+Host Remote service over the composed filesystem, confined to one workspace.
+
+```ts cordis-catalog
+/**
+ * Read one page of lines from a UTF-8 text file inside the Agent's workspace.
+ * @param agent - target Agent resolved from the Session identity on the wire.
+ * @param path - workspace path, absolute or relative to the workspace root.
+ * @param range - the line window; omitted fields take the page defaults.
+ * @param signal - caller cancellation.
+ * @returns the page, the file's version at the stat before it, and whether it reaches the last line.
+ */
+@Remote async read(agent: Agent, path: string, range: WorkspaceFileRange, signal: AbortSignal): Promise<WorkspaceFileText>
+
+/**
+ * Read one byte window of a regular file inside the Agent's workspace: raw
+ * bytes, no text decoding and no binary rejection.
+ * @param agent - target Agent resolved from the Session identity on the wire.
+ * @param path - workspace path, absolute or relative to the workspace root.
+ * @param range - the byte window; omitted fields take the window defaults.
+ * @param signal - caller cancellation.
+ * @returns the window in base64, the file's version and size at the stat before it, and whether it reaches the last byte.
+ */
+@Remote async readBytes(agent: Agent, path: string, range: WorkspaceByteRange, signal: AbortSignal): Promise<WorkspaceFileBytes>
+
+/**
+ * Report one regular file's identity, version, and size without its content.
+ * @param agent - target Agent resolved from the Session identity on the wire.
+ * @param path - workspace path, absolute or relative to the workspace root.
+ * @param signal - caller cancellation.
+ * @returns the file's absolute path, current version, and byte size.
+ */
+@Remote async stat(agent: Agent, path: string, signal: AbortSignal): Promise<WorkspaceFileStat>
+
+/**
+ * List the direct children of one directory inside the Agent's workspace.
+ * @param agent - target Agent resolved from the Session identity on the wire.
+ * @param path - workspace path, absolute or relative to the workspace root.
+ * @param signal - caller cancellation.
+ * @returns the directory's children in the backend's stable name order, bounded by the entry cap.
+ */
+@Remote async list(agent: Agent, path: string, signal: AbortSignal): Promise<WorkspaceDirectoryListing>
+
+/**
+ * Stream every `fs/observed` observation of a file inside the Agent's
+ * workspace. Only Agent filesystem operations report here; the OS is not
+ * watched.
+ * @param agent - target Agent resolved from the Session identity on the wire.
+ * @param signal - generation cancellation.
+ * @returns `ready` once the Host observation queue is active and the workspace
+ *   root is resolved, then queued and live observations in emission order.
+ */
+@Remote({ mode: 'stream' }) changes(agent: Agent, signal: AbortSignal): AsyncIterable<WorkspaceFileWatchFrame>
+```
+
+Types: [Agent](core.md)
+
+Source: [`packages/api/workspace-files/src/index.ts`](../../packages/api/workspace-files/src/index.ts)
 
 <a id="ctxworkspaceregistry--workspaceregistry"></a>
 

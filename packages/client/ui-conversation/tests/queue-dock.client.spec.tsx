@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 /**
  * QueueDock rendering and operations: authoritative rows, inline editing,
- * collapse state, removal, strict steering, failure notices, and live retirement.
+ * collapse state, removal, QueueDock Steer, failure notices, and live retirement.
  */
+import type { GlobalStandardProps } from '@deepseek-ai/dsh-client-ui-slots'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { useSyncExternalStore } from 'react'
@@ -22,7 +23,11 @@ import type { InputState } from '../src/client/contract/input.ts'
 import { zh } from '../src/client/locales.ts'
 import { QueueDock, queueDockEntry, type QueueDockInjected, type QueueDockProps } from '../src/client/queue/QueueDock.tsx'
 
+// Every session-scope fixture carries the resource hook the resources plugin merges into GlobalStandardProps.
+const useResource = (() => ({ status: 'none' as const, value: undefined, failure: undefined, reload: () => {} })) as GlobalStandardProps['useResource']
+
 afterEach(cleanup)
+
 
 const SID = 's1' as SessionId
 const iid = (id: string): QueueItemId => id as QueueItemId
@@ -74,6 +79,7 @@ function kitFor(snapshot: SessionSnapshot, injected: Partial<QueueDockInjected> 
     sessionId: SID,
     t,
     useSessions: (() => { throw new Error('unused') }) as unknown as SnapshotSelectorHook<SessionListState>,
+    useResource,
     useSessionPendingInteraction: bindSnapshotSelector(
       createSnapshotStore<SessionPendingInteractionSnapshot>(new Map()),
     ),
@@ -141,10 +147,19 @@ describe('QueueDock', () => {
       }],
     }
     const source = liveSession(pending)
-    const view = render(<QueueDock {...kitFor(pending)} useSession={source.useSession} />)
+    const props = kitFor(pending)
+    const view = render(<QueueDock {...props} useSession={source.useSession} />)
     expect(view.getByText('等待上传').closest('[data-submission-echo]')).not.toBeNull()
     expect(view.getByRole('img', { name: '排队消息图片' }).getAttribute('src')).toBe('blob:queue-preview')
     expect(view.getByLabelText('排队文件 notes.txt').textContent).toContain('2.4GB')
+    expect(view.getByRole('status').textContent).toBe('发送中…')
+    for (const name of ['编辑排队消息', '删除排队消息', '插话发送']) {
+      const button = view.getByRole('button', { name }) as HTMLButtonElement
+      expect(button.disabled).toBe(true)
+      fireEvent.click(button)
+    }
+    expect(props.updateQueue).not.toHaveBeenCalled()
+    expect(view.queryByRole('textbox')).toBeNull()
 
     act(() => {
       source.push({
@@ -154,6 +169,32 @@ describe('QueueDock', () => {
     })
     expect(view.getAllByText('等待上传')).toHaveLength(1)
     expect(view.container.querySelector('[data-submission-echo]')).toBeNull()
+    expect(view.queryByRole('status')).toBeNull()
+    for (const name of ['编辑排队消息', '删除排队消息', '插话发送']) {
+      expect((view.getByRole('button', { name }) as HTMLButtonElement).disabled).toBe(false)
+    }
+    fireEvent.click(view.getByRole('button', { name: '编辑排队消息' }))
+    expect((view.getByRole('textbox') as HTMLInputElement).value).toBe('等待上传')
+  })
+
+  it('keeps sending status visible while a queue containing local submissions is collapsed', () => {
+    const pending: SessionSnapshot = {
+      ...snapshotWith([row('accepted', '已排队')]),
+      pendingSubmissions: [{
+        requestId: 'req-waiting' as never, placement: 'queued', time: 1,
+        text: '等待发送', attachments: [],
+      }],
+    }
+    const source = liveSession(pending)
+    const view = render(<QueueDock {...kitFor(pending)} useSession={source.useSession} />)
+    expect(view.getByRole('status').textContent).toBe('发送中…')
+    const header = view.getByRole('button', { name: /2 条排队消息\s*发送中…/ })
+    expect(header.getAttribute('aria-expanded')).toBe('false')
+    fireEvent.click(header)
+    expect(view.getAllByRole('status')).toHaveLength(1)
+    expect(view.getByRole('status').closest('[data-submission-echo]')).not.toBeNull()
+    act(() => { source.push(snapshotWith([row('accepted', '已排队')])) })
+    expect(view.queryByRole('status')).toBeNull()
   })
 
   it('leaves pending steering to the conversation flow', () => {
@@ -451,7 +492,7 @@ describe('QueueDock', () => {
     expect(rendered.getByLabelText('插话发送').getAttribute('title')).toBe('仅运行中可插话发送')
   })
 
-  it('renders a session-backed subagent Queue without unsupported actions', () => {
+  it('renders ordinary queue actions for a continuable child', () => {
     const snap = {
       ...snapshotWith([row('i-subagent', 'pending child follow-up')]),
       subagent: {
@@ -459,6 +500,29 @@ describe('QueueDock', () => {
           parentSessionId: 'parent' as SessionId,
           childSessionId: SID,
           mode: 'continuable' as const,
+        },
+        parentAvailable: false,
+      },
+    }
+    const source = liveSession(snap)
+    const view = render(
+      <QueueDock {...kitFor(snap)} useSession={source.useSession} />,
+    )
+
+    expect(view.getByText('pending child follow-up')).toBeTruthy()
+    expect(view.getByLabelText('编辑排队消息')).toBeTruthy()
+    expect(view.getByLabelText('删除排队消息')).toBeTruthy()
+    expect(view.getByLabelText('插话发送')).toBeTruthy()
+  })
+
+  it('keeps a one-shot child Queue read-only', () => {
+    const snap = {
+      ...snapshotWith([row('i-subagent', 'pending child follow-up')]),
+      subagent: {
+        address: {
+          parentSessionId: 'parent' as SessionId,
+          childSessionId: SID,
+          mode: 'one-shot' as const,
         },
         parentAvailable: true,
       },

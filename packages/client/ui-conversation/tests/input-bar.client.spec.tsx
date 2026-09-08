@@ -8,6 +8,7 @@
 // root listener routes them through the keymap commands); draft writes drive
 // the shell (jsdom's beforeinput lacks the ranges Lexical needs).
 
+import type { GlobalStandardProps } from '@deepseek-ai/dsh-client-ui-slots'
 import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { $getRoot, $isTextNode } from 'lexical'
@@ -30,6 +31,9 @@ import type { DraftAttachmentId } from '../src/client/contract/input.ts'
 import { InputBar } from '../src/client/skeleton/InputBar.tsx'
 import type { InputBarProps } from '../src/client/skeleton/InputBar.tsx'
 import { zh } from '../src/client/locales.ts'
+
+// Every fixture carries the resource hook the resources plugin merges into GlobalStandardProps.
+const useResource = (() => ({ status: 'none' as const, value: undefined, failure: undefined, reload: () => {} })) as GlobalStandardProps['useResource']
 
 afterEach(cleanup)
 
@@ -162,6 +166,7 @@ function bench(over?: BenchOptions) {
     useSession: bindSnapshotSelector(session),
     useConversation: bindSnapshotSelector(createSnapshotStore(conversationFixture())),
     useSessionPendingInteraction: bindSnapshotSelector(createSnapshotStore(new Map())),
+    useResource,
     useSessions: bindSnapshotSelector(createSnapshotStore<SessionListState>({
       ids: [], byId: {}, current: undefined, phase: 'ready',
       subagentsByParent: {}, jobsBySession: {}, currentAddress: undefined,
@@ -462,12 +467,6 @@ describe('Enter semantics', () => {
   it('advertises the empty-draft whole-queue steering gesture when it is available', () => {
     const { placeholder } = bench({ running: true, queue: [row('q-1')], steerQueue: vi.fn() })
     expect(placeholder).toBe('Cmd/Ctrl+Enter 插话发送全部排队消息')
-  })
-
-  it('keeps the owning placeholder or ordinary guidance when whole-queue steering is unavailable', () => {
-    expect(bench({ running: true }).placeholder).toBe('发消息或做任务… / 调用指令 @ 文件或对话')
-    expect(bench({ queue: [row('q-1')] }).placeholder).toBe('发消息或做任务… / 调用指令 @ 文件或对话')
-    expect(bench({ running: true, queue: [row('q-1')], draft: '消息' }).placeholder).toBe('发消息或做任务… / 调用指令 @ 文件或对话')
     expect(bench({
       running: true,
       queue: [row('q-1')],
@@ -475,7 +474,13 @@ describe('Enter semantics', () => {
         address: { parentSessionId: 'parent' as SessionId, childSessionId: SID, mode: 'continuable' },
         parentAvailable: true,
       },
-    }).placeholder).toBe('发消息或做任务… / 调用指令 @ 文件或对话')
+    }).placeholder).toBe('Cmd/Ctrl+Enter 插话发送全部排队消息')
+  })
+
+  it('keeps the owning placeholder or ordinary guidance when whole-queue steering is unavailable', () => {
+    expect(bench({ running: true }).placeholder).toBe('发消息或做任务… / 调用指令 @ 文件或对话')
+    expect(bench({ queue: [row('q-1')] }).placeholder).toBe('发消息或做任务… / 调用指令 @ 文件或对话')
+    expect(bench({ running: true, queue: [row('q-1')], draft: '消息' }).placeholder).toBe('发消息或做任务… / 调用指令 @ 文件或对话')
     expect(bench({
       running: true,
       queue: [row('q-1')],
@@ -566,7 +571,7 @@ describe('Enter semantics', () => {
     expect(ctrl.sink).not.toHaveBeenCalled()
   })
 
-  it('queue steering stays gated: idle, subagent, plain Enter, empty queue, or steering-only rows', () => {
+  it('queue steering stays gated by activity, gesture, capability, and queued rows', () => {
     // Idle: the gesture falls through to the machine's empty-draft no-op.
     const idle = bench({ queue: [row('q-1')], steerQueue: vi.fn() })
     fireEvent.keyDown(idle.textarea, { key: 'Enter', metaKey: true })
@@ -579,7 +584,7 @@ describe('Enter semantics', () => {
     expect(plain.steerQueue).not.toHaveBeenCalled()
     expect(plain.sink).not.toHaveBeenCalled()
 
-    // Subagent sessions keep the queue transport (no steering face).
+    // Continuable children expose the same steering face as ordinary Sessions.
     const subagent = {
       address: {
         parentSessionId: 'parent' as SessionId,
@@ -588,9 +593,10 @@ describe('Enter semantics', () => {
       },
       parentAvailable: true,
     }
-    const child = bench({ running: true, subagent, queue: [row('q-1')], steerQueue: vi.fn() })
+    const childSteerQueue = vi.fn()
+    const child = bench({ running: true, subagent, queue: [row('q-1')], steerQueue: childSteerQueue })
     fireEvent.keyDown(child.textarea, { key: 'Enter', metaKey: true })
-    expect(child.steerQueue).not.toHaveBeenCalled()
+    expect(childSteerQueue).toHaveBeenCalledTimes(1)
     expect(child.sink).not.toHaveBeenCalled()
 
     // No queued rows: the empty draft stays a no-op.
@@ -859,7 +865,7 @@ describe('running and lock semantics', () => {
     expect(stop).not.toHaveBeenCalled()
   })
 
-  it('keeps both running subagent Enter gestures on Queue transport', () => {
+  it('applies the ordinary Queue/Steer preference to a running continuable child', () => {
     const subagent = {
       address: {
         parentSessionId: 'parent' as SessionId,
@@ -870,11 +876,15 @@ describe('running and lock semantics', () => {
     }
     const plain = bench({ running: true, busyEnter: 'steer', draft: 'plain', subagent })
     fireEvent.keyDown(plain.textarea, { key: 'Enter' })
-    expect(plain.sink).toHaveBeenCalledWith('plain', [], 'queue', expect.any(AbortSignal))
+    expect(plain.sink).toHaveBeenCalledWith('plain', [], 'steer', expect.any(AbortSignal))
 
     const accelerated = bench({ running: true, draft: 'accelerated', subagent })
     fireEvent.keyDown(accelerated.textarea, { key: 'Enter', metaKey: true })
-    expect(accelerated.sink).toHaveBeenCalledWith('accelerated', [], 'queue', expect.any(AbortSignal))
+    expect(accelerated.sink).toHaveBeenCalledWith('accelerated', [], 'steer', expect.any(AbortSignal))
+
+    const opposite = bench({ running: true, busyEnter: 'steer', draft: 'opposite', subagent })
+    fireEvent.keyDown(opposite.textarea, { key: 'Enter', metaKey: true })
+    expect(opposite.sink).toHaveBeenCalledWith('opposite', [], 'queue', expect.any(AbortSignal))
   })
 
   it('disabled (session removed) locks the textarea and chrome', () => {
