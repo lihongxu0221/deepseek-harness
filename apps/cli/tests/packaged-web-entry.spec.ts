@@ -20,7 +20,7 @@ import {
 
 function wrapLauncherChildProcess(attachHiddenConsole: () => boolean) {
   const launcher = readFileSync(fileURLToPath(new URL('../packaged-web-launcher.cjs', import.meta.url)), 'utf8')
-  const guard = "if (process.platform === 'win32') {"
+  const guard = "if (process.platform === 'win32' && !isPackagedRunner) {"
   const start = launcher.indexOf(guard)
   const end = launcher.indexOf('const SCRIPT_EXTS')
   expect(start).toBeGreaterThan(-1)
@@ -94,6 +94,17 @@ describe('resolvePackagedWebEntry', () => {
     expect(wrapAt).toBeGreaterThan(-1)
     expect(wrapAt).toBeLessThan(launcher.indexOf('const SCRIPT_EXTS'))
     expect(launcher).toContain('.cjs')
+    expect(launcher).toContain('DSH_SUBPROCESS_RUNNER')
+    expect(launcher).toContain('runSelectedSubprocessRunner')
+    expect(launcher).toContain('@deepseek-ai/dsh-subprocess-local/runner')
+    expect(launcher.indexOf('DSH_SUBPROCESS_RUNNER')).toBeLessThan(
+      launcher.indexOf('const inheritHiddenConsole = attachHiddenConsole()'),
+    )
+  })
+
+  it('the packaged GUI entry rewrites argv so Plugin Market spawn()s lib/bin.js', () => {
+    const source = readFileSync(fileURLToPath(new URL('../src/packaged-web-bin.ts', import.meta.url)), 'utf8')
+    expect(source).toContain('withPackagedMarketCliArgv(process.execPath, process.argv)')
   })
 
   it('forces windowsHide onto every documented child_process call shape', () => {

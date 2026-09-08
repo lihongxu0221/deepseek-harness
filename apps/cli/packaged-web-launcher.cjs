@@ -8,14 +8,19 @@
  * from a packaged host behaves like node. That import first rewrites
  * process.argv to [execPath, script, ...scriptArgs] so the worker's
  * process.argv.slice(2) matches Node.
+ * When DSH_SUBPROCESS_RUNNER is set, this process is the private Windows
+ * Job runner: skip AllocConsole and the GUI, and load the on-disk runner.
  */
 
 'use strict'
 
 const { existsSync } = require('node:fs')
+const { createRequire } = require('node:module')
 const cp = require('node:child_process')
 const { basename, dirname, extname, join, resolve } = require('node:path')
 const { pathToFileURL } = require('node:url')
+
+const SUBPROCESS_RUNNER_ENV = 'DSH_SUBPROCESS_RUNNER'
 
 // Attach a hidden console on Windows GUI hosts, then wrap child_process so
 // callers that leave windowsHide unset inherit that console instead of
@@ -32,7 +37,6 @@ const { pathToFileURL } = require('node:url')
 function attachHiddenConsole() {
   if (process.platform !== 'win32') return false
   try {
-    const { createRequire } = require('node:module')
     const onDisk = join(dirname(process.execPath), 'lib', 'packaged-web-bin.js')
     const req = existsSync(onDisk) ? createRequire(onDisk) : createRequire(__filename)
     const koffi = req('koffi')
@@ -64,7 +68,10 @@ function attachHiddenConsole() {
   }
 }
 
-if (process.platform === 'win32') {
+const runnerSelection = process.env[SUBPROCESS_RUNNER_ENV]
+const isPackagedRunner = typeof runnerSelection === 'string' && runnerSelection !== ''
+
+if (process.platform === 'win32' && !isPackagedRunner) {
   const inheritHiddenConsole = attachHiddenConsole()
   const hideOptions = (options) => {
     if (options === undefined || options === null || typeof options !== 'object' || Array.isArray(options)) {
@@ -150,19 +157,46 @@ function resolvePackagedScriptArg(args) {
   return resolve(candidate)
 }
 
-const extra = extraPackagedArgv(process.argv, __filename)
-const script = resolvePackagedScriptArg(extra)
-if (script !== undefined) {
-  process.argv = [process.execPath, script, ...extra.slice(1)]
-}
-const entry = script ?? join(dirname(process.execPath), 'lib', 'packaged-web-bin.js')
-if (!existsSync(entry)) {
-  throw new Error(
-    `dsh-web: missing ${entry}. Keep this executable inside the built folder; do not copy the .exe alone.`,
-  )
+function resolvePackagedRunner() {
+  const onDisk = join(dirname(process.execPath), 'lib', 'packaged-web-bin.js')
+  const req = existsSync(onDisk) ? createRequire(onDisk) : createRequire(__filename)
+  return req.resolve('@deepseek-ai/dsh-subprocess-local/runner')
 }
 
-import(pathToFileURL(entry).href).catch((error) => {
-  console.error(error)
-  process.exit(1)
-})
+if (isPackagedRunner) {
+  delete process.env[SUBPROCESS_RUNNER_ENV]
+  try {
+    const extra = extraPackagedArgv(process.argv, __filename)
+    const runner = resolvePackagedRunner()
+    process.argv = [process.execPath, runner, ...extra]
+    import(pathToFileURL(runner).href).then((mod) => {
+      if (typeof mod.runSelectedSubprocessRunner !== 'function') {
+        throw new Error('dsh-web: subprocess runner export is missing')
+      }
+      return mod.runSelectedSubprocessRunner(runnerSelection)
+    }).catch((error) => {
+      console.error(error)
+      process.exit(127)
+    })
+  } catch (error) {
+    console.error(error)
+    process.exit(127)
+  }
+} else {
+  const extra = extraPackagedArgv(process.argv, __filename)
+  const script = resolvePackagedScriptArg(extra)
+  if (script !== undefined) {
+    process.argv = [process.execPath, script, ...extra.slice(1)]
+  }
+  const entry = script ?? join(dirname(process.execPath), 'lib', 'packaged-web-bin.js')
+  if (!existsSync(entry)) {
+    throw new Error(
+      `dsh-web: missing ${entry}. Keep this executable inside the built folder; do not copy the .exe alone.`,
+    )
+  }
+
+  import(pathToFileURL(entry).href).catch((error) => {
+    console.error(error)
+    process.exit(1)
+  })
+}

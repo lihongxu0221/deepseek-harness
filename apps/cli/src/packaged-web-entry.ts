@@ -158,8 +158,10 @@ export function packagedMarketCliAliasName(platform: string): string {
 
 /**
  * Rewrite `process.argv` so in-process `dshArgv()` treats this GUI as a CLI
- * entry. The Plugin Market then spawn()s this executable with `lib/bin.js`
- * instead of `cmd /c dsh`, which would flash an empty console.
+ * entry. The packaged GUI boot applies this before mounting the web profile.
+ * The Plugin Market then spawn()s this executable with `lib/bin.js`
+ * instead of `cmd /c dsh`, which would flash an empty console or install
+ * into a different harness home.
  * @param execPath - `process.execPath` of the packaged launcher.
  * @param argv - current `process.argv`.
  * @returns argv whose slot 1 is `lib/bin.js` beside the exe.

@@ -12,9 +12,11 @@
  * same way for helpers that spawn this executable as node. CLI heads such
  * as `plugin` and `--profile` run the on-disk CLI against `.config` instead
  * of claiming the GUI lock, and keep the invoking cwd so relative plugin
- * specs resolve against the caller. The GUI branch may `chdir` to the
- * executable directory. The executable's directory is prepended to
- * `PATH` so children re-invoke `dsh` by name.
+ * specs resolve against the caller. The GUI branch rewrites argv so Plugin
+ * Market dshArgv() spawn()s lib/bin.js instead of PATH dsh. The Job-runner
+ * env is handled in packaged-web-launcher.cjs before this file loads.
+ * The GUI branch may `chdir` to the executable directory. The executable's
+ * directory is prepended to `PATH` so children re-invoke `dsh` by name.
  * @module @deepseek-ai/dsh/packaged-web-bin
  */
 
@@ -36,6 +38,7 @@ import {
   prependPackagedBinToPath,
   resolvePackagedCliEntry,
   resolvePackagedScriptArg,
+  withPackagedMarketCliArgv,
   withPackagedScriptArgv,
 } from './packaged-web-entry.ts'
 import { applyPackagedWebHome, applyPackagedWebProfile } from './packaged-web-home.ts'
@@ -72,6 +75,11 @@ if (script !== undefined) {
     process.argv = [process.execPath, cliEntry, ...cli]
     await import(pathToFileURL(cliEntry).href)
   } else {
+    // Plugin Market's dshArgv() only treats argv[1] matching bin.js as this
+    // CLI. Rewrite before booting the GUI so in-process installs spawn this
+    // executable with lib/bin.js instead of PATH `dsh` (a different home, or
+    // a second GUI instance that exits 0 without running plugin add).
+    process.argv = withPackagedMarketCliArgv(process.execPath, process.argv)
     if (packagedWebShouldChdir(extra)) {
       const execDir = dirname(process.execPath)
       if (resolve(process.cwd()) !== resolve(execDir)) {
