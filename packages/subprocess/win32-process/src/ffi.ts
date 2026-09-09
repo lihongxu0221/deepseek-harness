@@ -40,6 +40,7 @@ export function isNullPtr(value: NativePtr | null | undefined): value is null | 
 export interface StartupInfoInput {
   cb: number
   dwFlags: number
+  wShowWindow?: number
   hStdInput: NativePtr
   hStdOutput: NativePtr
   hStdError: NativePtr

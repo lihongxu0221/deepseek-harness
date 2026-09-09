@@ -2,6 +2,12 @@
 
 /** STARTUPINFOW uses the standard input, output, and error handles. */
 export const STARTF_USESTDHANDLES = 0x00000100
+/** STARTUPINFOW uses the wShowWindow member. */
+export const STARTF_USESHOWWINDOW = 0x00000001
+/** ShowWindow command that hides the window. */
+export const SW_HIDE = 0
+/** CreateProcess flag that runs the process without creating a console window. */
+export const CREATE_NO_WINDOW = 0x08000000
 /** HandleInformation flag that permits child inheritance. */
 export const HANDLE_FLAG_INHERIT = 0x1
 /** Infinite WaitForSingleObject timeout. */

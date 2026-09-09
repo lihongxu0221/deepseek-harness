@@ -425,7 +425,8 @@ function spawnJobProcess(
     startupInfo = allocStartupInfo()
     encodeStartupInfo(startupInfo, {
       cb: abi.STARTUPINFOW_SIZE,
-      dwFlags: abi.STARTF_USESTDHANDLES,
+      dwFlags: abi.STARTF_USESTDHANDLES | abi.STARTF_USESHOWWINDOW,
+      wShowWindow: abi.SW_HIDE,
       hStdInput: stdio.stdin,
       hStdOutput: stdio.stdout,
       hStdError: stdio.stderr,
@@ -531,7 +532,7 @@ export function spawnCurrentTokenJobProcess(
       null,
       null,
       1,
-      abi.CREATE_SUSPENDED | abi.CREATE_UNICODE_ENVIRONMENT,
+      abi.CREATE_SUSPENDED | abi.CREATE_UNICODE_ENVIRONMENT | abi.CREATE_NO_WINDOW,
       environment,
       options.cwd,
       startupInfo,
