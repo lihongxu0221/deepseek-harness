@@ -10,10 +10,11 @@
  * `[exe, script, ...scriptArgs]` so the worker's `process.argv.slice(2)`
  * matches Node. `-e`/`--eval` inline source runs the
  * same way for helpers that spawn this executable as node. CLI heads such
- * as `plugin` and `--profile` run the on-disk CLI against `.config` instead
- * of claiming the GUI lock, and keep the invoking cwd so relative plugin
- * specs resolve against the caller. The GUI branch rewrites argv so Plugin
- * Market dshArgv() spawn()s lib/bin.js instead of PATH dsh. The Job-runner
+ * as `plugin` and `--profile` import on-disk `lib/bin.js` and call `runCli()`
+ * against `.config` instead of claiming the GUI lock, and keep the invoking
+ * cwd so relative plugin specs resolve against the caller. The GUI branch
+ * rewrites argv so Plugin Market dshArgv() spawn()s lib/bin.js instead of
+ * PATH dsh. The Job-runner
  * env is handled in packaged-web-launcher.cjs before this file loads.
  * The GUI branch may `chdir` to the executable directory. The executable's
  * directory is prepended to `PATH` so children re-invoke `dsh` by name.
@@ -36,8 +37,8 @@ import {
   packagedEvalSource,
   packagedWebShouldChdir,
   prependPackagedBinToPath,
-  resolvePackagedCliEntry,
   resolvePackagedScriptArg,
+  runImportedPackagedCli,
   withPackagedMarketCliArgv,
   withPackagedScriptArgv,
 } from './packaged-web-entry.ts'
@@ -50,7 +51,8 @@ const script = resolvePackagedScriptArg(extra)
 const evalSource = packagedEvalSource(extra)
 if (script !== undefined) {
   process.argv = withPackagedScriptArgv(process.execPath, script, extra)
-  await import(pathToFileURL(script).href)
+  const mod = await import(pathToFileURL(script).href) as { runCli?: () => Promise<void> }
+  if (typeof mod.runCli === 'function') await mod.runCli()
 } else if (evalSource !== undefined) {
   const evalPath = join(tmpdir(), `dsh-packaged-eval-${randomUUID()}.cjs`)
   writeFileSync(evalPath, evalSource, 'utf8')
@@ -71,9 +73,7 @@ if (script !== undefined) {
   const home = applyPackagedWebHome(process.execPath)
   const cli = packagedCliArgv(extra)
   if (cli !== undefined) {
-    const cliEntry = resolvePackagedCliEntry(process.execPath)
-    process.argv = [process.execPath, cliEntry, ...cli]
-    await import(pathToFileURL(cliEntry).href)
+    await runImportedPackagedCli(process.execPath, cli)
   } else {
     // Plugin Market's dshArgv() only treats argv[1] matching bin.js as this
     // CLI. Rewrite before booting the GUI so in-process installs spawn this

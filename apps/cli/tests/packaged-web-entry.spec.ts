@@ -12,6 +12,7 @@ import {
   packagedMarketCliAliasName,
   prependPackagedBinToPath,
   resolvePackagedCliEntry,
+  runImportedPackagedCli,
   withPackagedMarketCliArgv,
   resolvePackagedScriptArg,
   resolvePackagedWebEntry,
@@ -72,6 +73,8 @@ describe('resolvePackagedWebEntry', () => {
     expect(launcher).toContain('Keep this executable inside the built folder')
     expect(launcher).toContain('resolvePackagedScriptArg')
     expect(launcher).toContain('process.argv = [process.execPath, script, ...extra.slice(1)]')
+    expect(launcher).toContain('typeof mod.runCli === \'function\'')
+    expect(launcher).toContain('return mod.runCli()')
     expect(launcher).toContain('isInvocationEcho(value, process.execPath)')
     expect(launcher).toContain("INVOCATION_STEMS = new Set(['dsh', 'dsh-web'])")
     expect(launcher).toContain("join(dirname(process.execPath), 'lib', 'bin.js')")
@@ -105,6 +108,7 @@ describe('resolvePackagedWebEntry', () => {
   it('the packaged GUI entry rewrites argv so Plugin Market spawn()s lib/bin.js', () => {
     const source = readFileSync(fileURLToPath(new URL('../src/packaged-web-bin.ts', import.meta.url)), 'utf8')
     expect(source).toContain('withPackagedMarketCliArgv(process.execPath, process.argv)')
+    expect(source).toContain('runImportedPackagedCli(process.execPath, cli)')
   })
 
   it('forces windowsHide onto every documented child_process call shape', () => {
@@ -262,6 +266,55 @@ describe('packagedWebShouldChdir', () => {
     expect(packagedWebShouldChdir(['--dump-config'])).toBe(false)
     expect(packagedWebShouldChdir([])).toBe(true)
     expect(packagedWebShouldChdir(['--port', '8080'])).toBe(true)
+  })
+})
+
+describe('runImportedPackagedCli', () => {
+  it('rewrites argv and calls runCli because dynamic import is not process main', async () => {
+    const exec = join('D:\\dist', 'dsh-web.exe')
+    const cliEntry = join('D:\\dist', PACKAGED_WEB_CLI_REL)
+    const previous = process.argv
+    const seen: string[] = []
+    try {
+      await runImportedPackagedCli(
+        exec,
+        ['plugin', '--profile', 'web', 'add', 'dsh-agy-link'],
+        path => path === cliEntry,
+        async (url) => {
+          seen.push(url)
+          return {
+            runCli: async () => {
+              expect(process.argv.slice(1)).toEqual([
+                cliEntry,
+                'plugin',
+                '--profile',
+                'web',
+                'add',
+                'dsh-agy-link',
+              ])
+              seen.push('runCli')
+            },
+          }
+        },
+      )
+    } finally {
+      process.argv = previous
+    }
+    expect(seen).toHaveLength(2)
+    expect(seen[0]).toContain('bin.js')
+    expect(seen[1]).toBe('runCli')
+  })
+
+  it('refuses a CLI module that does not export runCli', async () => {
+    const exec = join('D:\\dist', 'dsh-web.exe')
+    const cliEntry = join('D:\\dist', PACKAGED_WEB_CLI_REL)
+    const previous = process.argv
+    try {
+      await expect(runImportedPackagedCli(exec, ['plugin'], path => path === cliEntry, async () => ({})))
+        .rejects.toThrow(/does not export runCli/)
+    } finally {
+      process.argv = previous
+    }
   })
 })
 

@@ -5,12 +5,14 @@
  * that names an existing .js/.cjs/.mjs file is treated as a Node script so
  * a host that spawn()s this executable with a worker path behaves like node.
  * CLI heads such as `plugin` and `--profile` import on-disk `lib/bin.js`
- * instead of claiming the single-instance GUI lock.
+ * and call its exported `runCli()`. Dynamic import does not set
+ * `import.meta.main`, so the CLI's self-executing guard never runs.
  * @module @deepseek-ai/dsh/packaged-web-entry
  */
 
 import { existsSync } from 'node:fs'
 import { basename, dirname, extname, join, resolve } from 'node:path'
+import { pathToFileURL } from 'node:url'
 
 /** Deployed Web desktop entry, relative to the launcher executable. */
 export const PACKAGED_WEB_ENTRY_REL = join('lib', 'packaged-web-bin.js')
@@ -94,6 +96,38 @@ export function resolvePackagedCliEntry(
     throw new Error(`dsh-web: missing ${entry}. ${MISSING_PACKAGED_FILE}`)
   }
   return entry
+}
+
+/** On-disk CLI module: `runCli` is the entry the packaged importer must call. */
+export interface PackagedCliModule {
+  /** Run one `dsh` invocation from the rewritten `process.argv`. */
+  runCli?: () => Promise<void>
+}
+
+/**
+ * Import on-disk `lib/bin.js` and call `runCli()`.
+ * The SEA launcher is the process entry, so a bare dynamic import leaves
+ * `import.meta.main` false and the CLI's self-executing guard does not run —
+ * Plugin Market then sees exit 0 with an unchanged profile.
+ * @param execPath - `process.execPath` of the packaged launcher.
+ * @param cli - extra argv after {@link extraPackagedArgv}, starting with a CLI head.
+ * @param exists - replaceable existence check.
+ * @param load - replaceable ESM loader.
+ * @returns after `runCli()` settles. Plugin mode calls `process.exit` first.
+ */
+export async function runImportedPackagedCli(
+  execPath: string,
+  cli: readonly string[],
+  exists: (path: string) => boolean = existsSync,
+  load: (url: string) => Promise<PackagedCliModule> = url => import(url),
+): Promise<void> {
+  const cliEntry = resolvePackagedCliEntry(execPath, exists)
+  process.argv = [execPath, cliEntry, ...cli]
+  const mod = await load(pathToFileURL(cliEntry).href)
+  if (typeof mod.runCli !== 'function') {
+    throw new Error(`dsh-web: ${cliEntry} does not export runCli`)
+  }
+  await mod.runCli()
 }
 
 /**

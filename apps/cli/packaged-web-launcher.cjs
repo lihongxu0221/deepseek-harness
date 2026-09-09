@@ -195,7 +195,11 @@ if (isPackagedRunner) {
     )
   }
 
-  import(pathToFileURL(entry).href).catch((error) => {
+  import(pathToFileURL(entry).href).then((mod) => {
+    // lib/bin.js is not the process entry when this SEA imports it, so its
+    // import.meta.main guard never runs. Call the exported CLI when present.
+    if (typeof mod.runCli === 'function') return mod.runCli()
+  }).catch((error) => {
     console.error(error)
     process.exit(1)
   })
