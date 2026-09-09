@@ -9,6 +9,7 @@ import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-test
 import { SessionId } from '@deepseek-ai/dsh-session'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
+import * as toolSchedule from '@deepseek-ai/dsh-schedule'
 import * as SubagentSpawn from '@deepseek-ai/dsh-subagent-spawn-in-process'
 import * as SubagentFork from '@deepseek-ai/dsh-subagent-fork-in-process'
 import type { ContentBlock, GenerateOptions, MessageId, StreamChunk } from '@deepseek-ai/dsh-llm'
@@ -75,7 +76,7 @@ afterEach(async () => {
 /** Boot the full continuable stack: loop, persistence, providers, and subagents. */
 async function setupWith(
   adapter: LlmAdapter,
-  options: { persistence?: boolean; sessionQuery?: boolean } = {},
+  options: { persistence?: boolean; schedule?: boolean; sessionQuery?: boolean } = {},
 ) {
   const ctx = new Context()
   await mountAgentLoopTestDependencies(ctx)
@@ -92,6 +93,7 @@ async function setupWith(
     })
   }
   await ctx.plugin(AgentLoop, { agents: [] })
+  if (options.schedule) await ctx.plugin(toolSchedule)
   if (options.sessionQuery !== false) await ctx.plugin(TestSessionQuery)
   await ctx.plugin(SubagentRuntime)
   await ctx.plugin(SubagentSpawn, { providerName: 'spawn' })
@@ -659,17 +661,26 @@ describe('continuable image Queue prompts', () => {
     const started = await ctx.subagents.startContinuable(startSpec(parent))
     await vi.waitFor(() => { expect(adapter.requests).toHaveLength(1) })
     const capability = Promise.withResolvers<{ inputModalities: string[] }>()
-    const resolve = vi.spyOn(ctx.llm, 'resolveModelInfo').mockReturnValue(capability.promise as never)
+    const readingCapability = Promise.withResolvers<undefined>()
+    vi.spyOn(ctx.llm, 'resolveModelInfo').mockImplementation(() => {
+      readingCapability.resolve(undefined)
+      return capability.promise as never
+    })
 
     const delivery = queuePrompt(ctx, parent, started.childId, [imageBlock])
-    delivery.catch(() => undefined)
-    await vi.waitFor(() => { expect(resolve).toHaveBeenCalled() })
-    releaseFirst.resolve(undefined)
-    const draining = drainManager(ctx)
-    capability.resolve({ inputModalities: ['text', 'image'] })
+    try {
+      await Promise.race([readingCapability.promise, delivery])
+      releaseFirst.resolve(undefined)
+      const draining = drainManager(ctx)
+      capability.resolve({ inputModalities: ['text', 'image'] })
 
-    await expect(delivery).rejects.toMatchObject({ code: 'DRAINING' })
-    await draining
+      await expect(delivery).rejects.toMatchObject({ code: 'DRAINING' })
+      await draining
+    } finally {
+      releaseFirst.resolve(undefined)
+      capability.resolve({ inputModalities: ['text', 'image'] })
+      await Promise.allSettled([delivery, drainManager(ctx)])
+    }
   })
 
   it('rejects a materialized image follow-up whose capability read raced a drain', async () => {
@@ -677,16 +688,24 @@ describe('continuable image Queue prompts', () => {
     const started = await ctx.subagents.startContinuable(startSpec(parent))
     await waitNoActivation(ctx, started.childId)
     const capability = Promise.withResolvers<{ inputModalities: string[] }>()
-    const resolve = vi.spyOn(ctx.llm, 'resolveModelInfo').mockReturnValue(capability.promise as never)
+    const readingCapability = Promise.withResolvers<undefined>()
+    vi.spyOn(ctx.llm, 'resolveModelInfo').mockImplementation(() => {
+      readingCapability.resolve(undefined)
+      return capability.promise as never
+    })
 
     const delivery = queuePrompt(ctx, parent, started.childId, [imageBlock])
-    delivery.catch(() => undefined)
-    await vi.waitFor(() => { expect(resolve).toHaveBeenCalled() })
-    const draining = drainManager(ctx)
-    capability.resolve({ inputModalities: ['text', 'image'] })
+    try {
+      await Promise.race([readingCapability.promise, delivery])
+      const draining = drainManager(ctx)
+      capability.resolve({ inputModalities: ['text', 'image'] })
 
-    await expect(delivery).rejects.toMatchObject({ code: 'ACTIVATION_CLOSING' })
-    await draining
+      await expect(delivery).rejects.toMatchObject({ code: 'ACTIVATION_CLOSING' })
+      await draining
+    } finally {
+      capability.resolve({ inputModalities: ['text', 'image'] })
+      await Promise.allSettled([delivery, drainManager(ctx)])
+    }
     const loaded = await loadStoredSession(ctx.sessionPersistence, started.childId)
     expect(loaded.events.some(event => event.type === 'user/message'
       && event.data.content.some(block => block.type === 'image'))).toBe(false)
@@ -1011,13 +1030,17 @@ describe('continuable child ownership', () => {
       { chunks: textResponse('child done') },
       { chunks: textResponse('grandchild'), gate: releaseGrandchild.promise },
     ])
-    const { ctx, parent } = await setupWith(adapter)
+    const { ctx, parent } = await setupWith(adapter, { schedule: true })
     const started = await ctx.subagents.startContinuable(startSpec(parent))
     const child = await vi.waitFor(() => {
       const found = ctx.agents.get(started.childId)
       expect(found).toBeDefined()
       return found!
     })
+    expect(ctx.agents.roots()).toEqual([parent])
+    expect(ctx.agents.isOwnedBy(child.id, parent)).toBe(true)
+    expect(ctx.tools.get('schedule_create', parent)).toBeDefined()
+    expect(ctx.tools.get('schedule_create', child)).toBeUndefined()
     const grandchild = await ctx.subagents.startContinuable(startSpec(child))
 
     await vi.waitFor(() => {

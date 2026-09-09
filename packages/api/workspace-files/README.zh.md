@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-`@deepseek-ai/dsh-api-workspace-files` 拥有 Host 侧 `ctx.workspaceFiles` 服务与生成的 Client 侧 `workspaceFiles` Remote 命名空间：`read` 返回一个 UTF-8 文本文件的一页行，`readBytes` 返回任意普通文件的一个原始字节窗口，`stat` 返回文件的版本与大小而不带内容，`list` 返回一个目录的直接子项，`changes` 流式推送 Agent 在 Session 工作区根内做出的每一次文件系统观察。五者都经组合后的 `ctx.fs` 运行，并把自己限定在沙箱策略为被寻址 Session 解析出的工作区根内；文件系统后端自己的 cwd 从不参与判定。Client 包经 [`api-remotes`](../../api/remotes/README.zh.md) 装配触达该命名空间。本包的 `./client` 导出注册 `file` 资源提供者，把 `stat` 与 `changes` 变成 `useResource<'file'>` 的实时文件元数据；Sidebar 的文件树 tab 经 `list` 列举目录。
+使用本包可从 Web Client 浏览和检查 Session 工作区内的文件。它按行分页读取 UTF-8 文本、按有界窗口读取原始字节、报告文件版本与大小、列举目录的直接子项，并流式推送 Agent 文件操作造成的变更。每项操作都限定在为被寻址 Session 选择的工作区根内，不受文件系统后端工作目录影响。Client 组件还可经共享 Remote API 跟随实时文件元数据并构建 Sidebar 文件树。
 
 ## 目录
 

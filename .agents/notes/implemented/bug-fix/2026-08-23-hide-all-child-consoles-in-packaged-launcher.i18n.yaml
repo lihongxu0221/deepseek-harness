@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-08-23-hide-all-child-consoles-in-packaged-launcher.md
-2026-08-23-hide-all-child-consoles-in-packaged-launcher.md: 25ff19b2df5e1592bcdf8c5fc8b29c00cd8c0e85
-2026-08-23-hide-all-child-consoles-in-packaged-launcher.zh.md: 8ddb242f367f72bed56bfe571a90b93df0d59a1d
+2026-08-23-hide-all-child-consoles-in-packaged-launcher.md: b4c39368a639176488160c41580809a42193b11c
+2026-08-23-hide-all-child-consoles-in-packaged-launcher.zh.md: 6ef9c2f46eb57ae46afb51a570f46f7ae31ad731

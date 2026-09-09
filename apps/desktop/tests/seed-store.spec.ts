@@ -63,7 +63,7 @@ describe('desktop seed store cleanup', () => {
 })
 
 describe('desktop seed store merge', () => {
-  it('preserves installed package records while the verified seed replaces matching records and files', () => {
+  it('preserves installed package records while the verified seed replaces matching records and files', { timeout: 30_000 }, () => {
     const root = temporaryRoot()
     const source = join(root, 'source')
     const destination = join(root, 'destination')

@@ -116,7 +116,7 @@
   - img
   - text: Ran for {{duration}}
 - text: {{clock}}
-- textbox "Message or run a task... / commands, @ files or sessions"
+- textbox "Message or run a task, / commands, @ files or sessions"
 - button "Commands":
   - img
 - button "Add attachment":
@@ -127,4 +127,9 @@
   - img
 - button "9% of context used"
 - button "Send message" [disabled]
-- text: 2 turns · 12 steps LLM {{duration}} · Tool call {{duration}} TTFT avg {{duration}} · {{throughput}} tok/s Cache hit 91% Input 113K tok · Output 2.4K tok
+- button "2 turns 12 steps · {{throughput}} tok/s":
+  - img
+  - text: 2 turns 12 steps{{throughput}} tok/s
+- button "115K tok · Cache hit 91%":
+  - img
+  - text: 115K tokCache hit 91%

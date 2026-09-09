@@ -667,7 +667,6 @@ describe('windows tree semantics (injected platform)', () => {
     const result = await finish(spawnSubprocess(spec('echo hello'), {
       spillDir,
       platform: 'win32',
-      parentHasConsole: false,
       spawn: (program, args, spawnOptions) => {
         options = spawnOptions
         return nodeSpawn(program, args, spawnOptions)

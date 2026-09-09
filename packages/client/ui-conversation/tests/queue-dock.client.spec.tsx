@@ -177,6 +177,42 @@ describe('QueueDock', () => {
     expect((view.getByRole('textbox') as HTMLInputElement).value).toBe('等待上传')
   })
 
+  it('loads the durable thumbnail after replacing a local image echo', async () => {
+    const pending: SessionSnapshot = {
+      ...snapshotWith([]),
+      pendingSubmissions: [{
+        requestId: 'req-image' as never, placement: 'queued', time: 1,
+        text: 'queued image',
+        attachments: [{
+          type: 'image', value: { previewUrl: 'blob:local-preview', name: 'queue.png' },
+        }],
+      }],
+    }
+    const image = Promise.withResolvers<string>()
+    const loadImage = vi.fn(() => image.promise)
+    const source = liveSession(pending)
+    const view = render(<QueueDock {...kitFor(pending, { loadImage })} useSession={source.useSession} />)
+    expect(view.getByRole('img', { name: '排队消息图片' }).getAttribute('src')).toBe('blob:local-preview')
+    expect(loadImage).not.toHaveBeenCalled()
+
+    act(() => {
+      source.push({
+        ...pending,
+        queue: [{ ...imageRow('accepted-image', 'durable-image', 'queued image'), rpcId: 'req-image' as never }],
+      })
+    })
+    expect(view.container.querySelector('[data-submission-echo]')).toBeNull()
+    expect(view.getByText('queued image')).toBeTruthy()
+    expect(view.getByRole('button', { name: '删除排队消息' })).toHaveProperty('disabled', false)
+    expect(view.queryByRole('img', { name: '排队消息图片' })).toBeNull()
+    expect(loadImage).toHaveBeenCalledOnce()
+
+    await act(async () => { image.resolve('blob:durable-image'); await image.promise })
+    const thumbnail = view.getByRole('img', { name: '排队消息图片' })
+    expect(thumbnail.getAttribute('src')).toBe('blob:durable-image')
+    expect(thumbnail.closest('li')?.hasAttribute('data-submission-echo')).toBe(false)
+  })
+
   it('keeps sending status visible while a queue containing local submissions is collapsed', () => {
     const pending: SessionSnapshot = {
       ...snapshotWith([row('accepted', '已排队')]),

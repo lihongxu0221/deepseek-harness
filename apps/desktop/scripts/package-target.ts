@@ -266,10 +266,10 @@ async function main(): Promise<void> {
   await runPnpm(['run', 'release:pack', '--family', 'vendor', '--out', buildPaths.packedVendor], buildEnv, REPOSITORY_ROOT)
   rmSync(buildPaths.packedLandlock, { recursive: true, force: true })
   mkdirSync(buildPaths.packedLandlock, { recursive: true })
-  await runPnpm(['--dir', 'native/landlock-run', 'run', 'build:ts'], buildEnv, REPOSITORY_ROOT)
+  await runPnpm(['--dir', 'native/system', 'run', 'build:ts'], buildEnv, REPOSITORY_ROOT)
   await runPnpm([
     '--dir',
-    'native/landlock-run/packages/entry',
+    'native/system/packages/entry',
     'pack',
     '--pack-destination',
     buildPaths.packedLandlock,

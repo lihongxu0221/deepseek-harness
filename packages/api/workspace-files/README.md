@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-`@deepseek-ai/dsh-api-workspace-files` owns the Host `ctx.workspaceFiles` service and the generated Client `workspaceFiles` Remote namespace: `read` returns one page of lines from a UTF-8 text file, `readBytes` returns one window of raw bytes from any regular file, `stat` returns a file's version and size without its content, `list` returns one directory's direct children, and `changes` streams every filesystem observation an Agent makes inside the Session's workspace root. All five run over the composed `ctx.fs` and confine themselves to the workspace root the sandbox policy resolves for the addressed Session; the filesystem backend's own cwd never decides. Client packages reach the namespace through the [`api-remotes`](../../api/remotes/README.md) assembly. The package's `./client` export registers the `file` resource provider that turns `stat` and `changes` into live file metadata for `useResource<'file'>`; the Sidebar's file tree tab lists directories through `list`.
+Use this package to browse and inspect files within a Session's workspace from the web client. It reads UTF-8 text one page of lines at a time, reads raw bytes in bounded windows, reports file versions and sizes, lists direct directory children, and streams changes caused by Agent file operations. Every operation stays within the workspace root selected for the addressed Session, independent of the filesystem backend's working directory. Client components can also follow live file metadata and build the Sidebar file tree through the shared Remote API.
 
 ## Table of Contents
 

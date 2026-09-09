@@ -18,6 +18,7 @@ import type { DesktopRelease } from '../src/release.ts'
 import { archivePnpmStore } from '../src/seed-store.ts'
 
 const roots: string[] = []
+const releaseWorkers: Array<() => Promise<void>> = []
 
 function temporaryRoot(): string {
   const root = mkdtempSync(join(tmpdir(), 'dsh-desktop-test-'))
@@ -162,8 +163,13 @@ function release(version = '1.0.0'): DesktopRelease {
   }
 }
 
-afterEach(() => {
-  for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true })
+afterEach(async () => {
+  const cleanups = releaseWorkers.splice(0)
+  const directories = roots.splice(0)
+  const results = await Promise.allSettled(cleanups.map(cleanup => cleanup()))
+  for (const root of directories) rmSync(root, { recursive: true, force: true })
+  const failures: unknown[] = results.flatMap((result): unknown[] => result.status === 'rejected' ? [result.reason] : [])
+  if (failures.length > 0) throw new AggregateError(failures, 'desktop worker cleanup failed')
 })
 
 describe('desktop package policy', () => {
@@ -293,7 +299,7 @@ describe('desktop project transactions', () => {
     expect(existsSync(paths.pending)).toBe(false)
   })
 
-  it('records the live pnpm worker as transaction owner until it exits', async () => {
+  it('records the live pnpm worker as transaction owner until it exits', async ({ task, signal }) => {
     const root = temporaryRoot()
     const seed = join(root, 'seed')
     const ready = join(root, 'pnpm-ready')
@@ -306,7 +312,19 @@ describe('desktop project transactions', () => {
     const runtime = { node: process.execPath, pnpm: writeBlockingFakePnpm(root, ready, releaseWorker) }
     const manager = new DesktopProjectManager(paths, runtime)
     const installing = manager.applyRelease(seed, '1.0.0', hooks())
-    await expect.poll(() => existsSync(ready)).toBe(true)
+    // Teardown observes failures even if the runner has abandoned the test body.
+    const completed = installing.then(value => ({ value }), (error: unknown) => ({ error }))
+    releaseWorkers.push(async () => {
+      writeFileSync(releaseWorker, 'continue')
+      const outcome = await completed
+      if ('error' in outcome) throw outcome.error
+    })
+    // Child startup shares the test budget; an aborted poll must not resume ownership assertions.
+    await expect.poll(() => {
+      signal.throwIfAborted()
+      return existsSync(ready)
+    }, { timeout: task.timeout }).toBe(true)
+    signal.throwIfAborted()
     const workerPid = Number.parseInt(readFileSync(ready, 'utf8'), 10)
     expect(readFileSync(paths.lock, 'utf8')).toBe(`${String(workerPid)}\n`)
     const competing = new DesktopProjectManager(paths, runtime)

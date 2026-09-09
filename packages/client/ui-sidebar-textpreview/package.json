@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-client-ui-sidebar-textpreview",
   "description": "Text preview tab type for the right Sidebar: the fallback viewer for file: addresses, drawn from the file resource with line navigation, wrap, and reload",
-  "version": "0.1.3-alpha.2",
+  "version": "0.1.5-alpha.1",
   "publishConfig": {
     "access": "public"
   },

@@ -8,7 +8,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-The resource model of the web client. A resource is one address, and a resource address is a `dsh-resource://<type>/…` URL whose host is the protocol key; the protocol's owning client package registers a provider that turns an address into a value stream, and any slot component reads that stream through the `useResource` global standard hook. A protocol that needs a scope encodes it in the path (`dsh-resource://file/session/<sessionId>/<absolute path>`); the model knows only addresses, and an address under any other scheme (`sidebar://guide`) names no resource. Use it when a component needs live data it only knows by address (a tab record, a link, a mention) and the data's owner is another client plugin.
+Use client resources when a component knows live data only by URL address, such as a tab record, link, or mention, while another client package owns the data. Resource addresses use `dsh-resource://<type>/…`; protocols that need a scope encode it in the path. Components receive the current value and later updates through the public `useResource` hook. Unsupported protocols and non-resource schemes, such as `sidebar://guide`, resolve to no resource.
 
 ## Table of Contents
 

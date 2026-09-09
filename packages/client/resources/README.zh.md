@@ -8,7 +8,7 @@ kind: "package-reference"
 
 ## 概述
 
-Web 客户端的资源模型。一份资源是一个地址，资源地址是 `dsh-resource://<type>/…` 形式的 URL，host 即协议键；协议所属的客户端包注册一个提供方把地址变成值的流，任何 slot 组件通过 `useResource` 全局标准 hook 读取这条流。需要作用域的协议把它编进路径（`dsh-resource://file/session/<sessionId>/<绝对路径>`）；模型本身只认地址，其它 scheme 的地址（`sidebar://guide`）不指向资源。当组件需要的活数据只以地址形式可知（tab 记录、链接、提及），而数据的拥有者是另一个客户端插件时，请使用它。
+当组件只知道活数据的 URL 地址，而数据由另一个客户端包拥有时，请使用客户端资源；例如 tab 记录、链接或提及。资源地址使用 `dsh-resource://<type>/…`；需要作用域的协议把作用域编进路径。组件通过公开的 `useResource` hook 接收当前值与后续更新。不支持的协议与非资源 scheme（例如 `sidebar://guide`）不指向任何资源。
 
 ## 目录
 
