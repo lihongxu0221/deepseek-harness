@@ -52,6 +52,7 @@ const PACKAGED_WEB_SCRIPT_EXTS = new Set(['.js', '.cjs', '.mjs'])
 const PACKAGED_WEB_LAUNCHER_BASENAMES = new Set([
   'packaged-web-launcher.cjs',
   'packaged-web-bin.js',
+  'runner.js',
 ])
 
 /**

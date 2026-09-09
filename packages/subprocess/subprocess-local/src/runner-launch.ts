@@ -2,7 +2,7 @@
 
 import type { StdioOptions } from 'node:child_process'
 import { accessSync, constants as fsConstants, lstatSync, statSync } from 'node:fs'
-import { extname, isAbsolute } from 'node:path'
+import { basename, extname, isAbsolute } from 'node:path'
 import { inspect } from 'node:util'
 import { fileURLToPath } from 'node:url'
 import type { SubprocessSpawnSpec } from '@deepseek-ai/dsh-subprocess'
@@ -21,11 +21,21 @@ const SOURCE_TSCONFIG_PATH = fileURLToPath(new URL('../../../../tsconfig.base.js
 const RUNNER_CONTROL_ENV_PREFIXES = ['NODE_', 'TSX_'] as const
 
 /**
+ * Whether the host executable is the packaged single-executable desktop or CLI.
+ * @param execPath - candidate executable path, defaults to `process.execPath`.
+ */
+export function isPackagedLauncher(execPath: string = process.execPath): boolean {
+  if ('pkg' in process) return true
+  const stem = basename(execPath).toLowerCase().replace(/\.exe$/u, '')
+  return stem === 'dsh' || stem === 'dsh-web'
+}
+
+/**
  * Resolve the source, built, or packaged entry that calls the same runner core.
  * @returns executable and arguments for the active runtime form.
  */
 export function spawnRunnerInvocation(): RunnerInvocation {
-  if ('pkg' in process) return [process.execPath]
+  if (isPackagedLauncher()) return [process.execPath]
   /* v8 ignore next -- built-artifact smoke imports the emitted JavaScript runner entry;
    * source-unit coverage cannot change import.meta.url. */
   if (extname(fileURLToPath(import.meta.url)) !== '.ts') {
@@ -100,10 +110,11 @@ export function consumeRunnerSelection(env: NodeJS.ProcessEnv = process.env): st
  * @returns copied target argv after the private delimiter.
  */
 export function parseRunnerTargetArgv(argv: readonly string[]): string[] {
-  if (argv[0] !== '--' || argv.length < 2) {
+  const index = argv.indexOf('--')
+  if (index < 0 || index >= argv.length - 1) {
     throw new Error('subprocess runner requires target argv after a private -- delimiter')
   }
-  return [...argv.slice(1)]
+  return [...argv.slice(index + 1)]
 }
 
 /**

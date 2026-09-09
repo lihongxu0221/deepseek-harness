@@ -34,6 +34,7 @@ import {
 } from '../src/runner-protocol.ts'
 import {
   consumeRunnerSelection,
+  isPackagedLauncher,
   parseRunnerTargetArgv,
   runnerEnvironment,
   runnerInvocationAvailable,
@@ -261,6 +262,7 @@ describe('runner launch inputs', () => {
     expect(env[SUBPROCESS_RUNNER_ENV]).toBeUndefined()
     expect(consumeRunnerSelection({})).toBeUndefined()
     expect(parseRunnerTargetArgv(['--', 'node', 'a'])).toEqual(['node', 'a'])
+    expect(parseRunnerTargetArgv(['runner.js', '--', 'node', 'a'])).toEqual(['node', 'a'])
     expect(() => parseRunnerTargetArgv(['node'])).toThrow('private -- delimiter')
     expect(runnerStdio(spec, false)).toEqual(['pipe', 'pipe', 'inherit'])
     expect(runnerStdio(spec, true)).toEqual([
@@ -339,6 +341,10 @@ describe('runner launch inputs', () => {
     } finally {
       Reflect.deleteProperty(process, 'pkg')
     }
+
+    expect(isPackagedLauncher('D:\\dist\\dsh.exe')).toBe(true)
+    expect(isPackagedLauncher('D:\\dist\\dsh-web.exe')).toBe(true)
+    expect(isPackagedLauncher('C:\\Program Files\\nodejs\\node.exe')).toBe(false)
   })
 
   it('loads the source runner from an isolated application cwd', () => {

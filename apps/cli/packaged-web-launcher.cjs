@@ -106,6 +106,7 @@ function extraPackagedArgv(argv, launcherPath) {
     || isInvocationEcho(value, process.execPath)
     || sameResolvedPath(value, launcherPath)
     || sameResolvedPath(value, join(dirname(process.execPath), 'lib', 'bin.js'))
+    || basename(value).toLowerCase() === 'runner.js'
     || LAUNCHER_BASENAMES.has(basename(value).toLowerCase())
   let index = 0
   while (index < rest.length && skip(rest[index] ?? '')) index += 1
@@ -131,7 +132,9 @@ if (isPackagedRunner) {
   try {
     const extra = extraPackagedArgv(process.argv, __filename)
     const runner = resolvePackagedRunner()
-    process.argv = [process.execPath, runner, ...extra]
+    const delimiterIndex = extra.indexOf('--')
+    const targetArgs = delimiterIndex >= 0 ? extra.slice(delimiterIndex) : extra
+    process.argv = [process.execPath, runner, ...targetArgs]
     import(pathToFileURL(runner).href).then((mod) => {
       if (typeof mod.runSelectedSubprocessRunner !== 'function') {
         throw new Error('dsh-web: subprocess runner export is missing')
