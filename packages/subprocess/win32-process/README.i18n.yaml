@@ -3,4 +3,4 @@
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/subprocess/win32-process/README.md
 README.md: 6f7137c9ffe0721e6cc1f9ab9cab8342e79469ae
-README.zh.md: 9e414cda1c929dadc6f385da66b4cbfe07f86e78
+README.zh.md: 73bd2bc820f9858978871067a9f8a2fddc6fc360

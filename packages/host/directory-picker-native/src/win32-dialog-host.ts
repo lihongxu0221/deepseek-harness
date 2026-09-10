@@ -18,8 +18,9 @@ import type { Win32DialogWorkerData } from './win32-dialog-worker.ts'
  * (source) consumers bootstrap tsx first, mirroring the dsh CLI's source
  * launch. A packaged SEA exe is not `node`, so the built arm resolves a
  * Node binary or falls back to `process.execPath` for a script-aware host.
- * The dialog is the child's first window, so Windows activates it without a
- * foreground call.
+ * The child opens its dialog as foreground on its own: `runFolderDialog`
+ * synthesizes an Alt press before `Show`, which matters when a background
+ * host spawned the child.
  * @param data - the child payload (dialog title).
  * @returns the spawned child process.
  */
