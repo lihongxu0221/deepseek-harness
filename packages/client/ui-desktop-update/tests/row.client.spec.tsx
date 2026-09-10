@@ -15,10 +15,12 @@ const t: UpdateRowProps['t'] = key => dictionary[key] ?? key
 type AttentionSnapshot = Parameters<Parameters<UpdateRowProps['useSessionPendingInteraction']>[0]>[0]
 const noAttention: AttentionSnapshot = new Map()
 const useResource = (() => ({ status: 'none' as const, value: undefined, failure: undefined, reload: () => {} })) as GlobalStandardProps['useResource']
+const usePanelInfo: GlobalStandardProps['usePanelInfo'] = selector => selector({ activePanelId: null })
 const runtime = {
   useSessions: (() => { throw new Error('unused') }) as never,
   useSessionPendingInteraction: ((selector: (snapshot: AttentionSnapshot) => unknown) => selector(noAttention)) as UpdateRowProps['useSessionPendingInteraction'],
   useResource,
+  usePanelInfo,
   useWorkspaces: (() => { throw new Error('unused') }) as never,
 }
 
