@@ -357,6 +357,8 @@ class WebExeBuild {
         '--config.node-linker=hoisted',
         '--config.auto-install-peers=false',
         '--config.link-workspace-packages=true',
+        // Electron's osx-sign patch is unused in this CLI deploy tree.
+        '--config.allow-unused-patches=true',
         // Node 26 + MSVC 18 pass clang LTO link flags; fs-ext's rebuild then
         // fails. The winexe tree uses prebuilds; POSIX flock is unused.
         '--config.ignore-scripts=true',
@@ -682,7 +684,9 @@ class WebExeBuild {
         // which removes lefthook and then fails the lefthook postinstall.
         // Unset CI too: GitHub Actions always injects CI=true.
         env: { ...process.env, LEFTHOOK: '0', CI: '' },
-        shell: process.platform === 'win32',
+        // pnpm.cmd needs a shell; node.exe in Program Files must not:
+        // shell+argv concatenation splits on the space in "Program Files".
+        shell: process.platform === 'win32' && /\.(?:cmd|bat)$/i.test(command),
       })
       child.once('error', (error) => {
         reject(new Error(`build-web-exe: ${label} failed to spawn: ${error.message} (${printable})`))
