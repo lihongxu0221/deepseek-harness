@@ -23,6 +23,7 @@ import type {
   WorkspaceRemoveFolderRequest,
   WorkspaceRenameRequest,
   WorkspaceSetPrimaryFolderRequest,
+  WorkspaceUnarchiveSessionRequest,
   WorkspaceValue,
   WorkspaceView,
 } from '../../src/types.ts'
@@ -99,6 +100,7 @@ export const workspaceWorld: RemoteTable = {
       workspace: workspace(String(request.workspaceId), { sessionIds: [request.sessionId] }),
     }),
     'workspace/archiveSession': (request: WorkspaceArchiveSessionRequest): RemoteResult<WorkspaceArchiveValue> => ok({ archivedSessionIds: [request.sessionId] }),
+    'workspace/unarchiveSession': (_request: WorkspaceUnarchiveSessionRequest): RemoteResult<WorkspaceArchiveValue> => ok({ archivedSessionIds: [] }),
     'workspace/addFolder': (request: WorkspaceAddFolderRequest): RemoteResult<WorkspaceValue> => ok({
       workspace: workspace(String(request.workspaceId), { folders: [request.path] }),
     }),

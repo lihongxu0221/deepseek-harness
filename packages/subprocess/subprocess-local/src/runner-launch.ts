@@ -7,6 +7,8 @@ import { inspect } from 'node:util'
 import { fileURLToPath } from 'node:url'
 import type { SubprocessSpawnSpec } from '@deepseek-ai/dsh-subprocess'
 import { childEnv } from './spawn.ts'
+import { controlEnvironment } from './control-spawn.ts'
+import { SUBPROCESS_CONTROL_FD } from '@deepseek-ai/dsh-subprocess/control'
 
 /** The one private environment variable consumed before target state is restored. */
 export const SUBPROCESS_RUNNER_ENV = 'DSH_SUBPROCESS_RUNNER' as const
@@ -119,7 +121,7 @@ export function parseRunnerTargetArgv(argv: readonly string[]): string[] {
 
 /**
  * Build direct Linux target stdio, or isolated Windows runner stdio with IPC
- * on fd 3 and target carriers on fd 4 through fd 6.
+ * on fd 3 and target carriers on fd 4 through fd 6; optional control uses fd 7.
  * @param spec - ordinary subprocess request whose stdio modes are preserved.
  * @param ipc - whether to isolate the runner and add its private Node IPC descriptor.
  * @param stdinCarrier - runner fd 4 carrier; Windows ignore passes an opened null-device fd.
@@ -135,8 +137,14 @@ export function runnerStdio(
     spec.stdio.stdout === 'inherit' ? 'inherit' : 'pipe',
     spec.stdio.stderr === 'inherit' ? 'inherit' : 'pipe',
   ]
-  if (!ipc) return targetStdio
-  return [
+  if (!ipc) {
+    if (spec.stdio.control === 'pipe') {
+      while (targetStdio.length < SUBPROCESS_CONTROL_FD) targetStdio.push('ignore')
+      targetStdio.push('overlapped')
+    }
+    return targetStdio
+  }
+  const runner: StdioOptions = [
     'ignore',
     'ignore',
     'ignore',
@@ -145,6 +153,8 @@ export function runnerStdio(
     spec.stdio.stdout === 'inherit' ? 1 : 'pipe',
     spec.stdio.stderr === 'inherit' ? 2 : 'pipe',
   ]
+  if (spec.stdio.control === 'pipe') runner.push('overlapped')
+  return runner
 }
 
 function windowsEnvironmentValue(
@@ -299,7 +309,7 @@ function validateNoNullByte(property: string, value: string, argument = false): 
  * @returns complete target environment after Node-equivalent validation.
  */
 export function targetEnvironment(
-  spec: Pick<SubprocessSpawnSpec, 'argv' | 'cwd' | 'env'>,
+  spec: Pick<SubprocessSpawnSpec, 'argv' | 'cwd' | 'env'> & { stdio?: SubprocessSpawnSpec['stdio'] },
 ): Record<string, string> {
   spec.argv.forEach((value, index) => {
     validateNoNullByte(index === 0 ? 'file' : `args[${String(index - 1)}]`, value, true)
@@ -312,5 +322,5 @@ export function targetEnvironment(
     validateNoNullByte(`options.env['${key}']`, key)
     validateNoNullByte(`options.env['${key}']`, value)
   }
-  return env
+  return controlEnvironment(env, spec.stdio?.control)
 }
