@@ -87,7 +87,7 @@ function dragData(): Pick<DataTransfer, 'effectAllowed' | 'dropEffect' | 'setDat
 
 function collapseRecents(): void {
   const toggle = screen.queryByRole('button', { name: '折叠或展开最近会话' })
-  if (toggle !== null) fireEvent.click(toggle)
+  if (toggle !== null && toggle.getAttribute('aria-expanded') === 'true') fireEvent.click(toggle)
 }
 
 function groupSection(label: string): HTMLElement {
@@ -368,6 +368,7 @@ describe('WorkspaceBrowser', () => {
       useSessions: hook(sessionState([old])),
       useWorkspaces: hook(workspaceState([workspace('alpha', ['old', 'blank'])])),
     })
+    collapseRecents()
     await waitFor(() => {
       expect(b.store.getSnapshot().sessionOrderByAccount.alpha).toEqual(['old'])
     })
@@ -387,6 +388,7 @@ describe('WorkspaceBrowser', () => {
     })
 
     rerender(b, { wide: true })
+    collapseRecents()
     expect(screen.getAllByRole('treeitem').slice(1).map(row => row.textContent)).toEqual([
       expect.stringContaining('blank'),
       expect.stringContaining('old'),
@@ -2103,6 +2105,7 @@ describe('Workspace tree grouping', () => {
       useWorkspaces: hook(workspaceState([root, team, child])),
       useSessions: hook(sessionState([summary('child-session', 1)])),
     })
+    collapseRecents()
     fireEvent.change(screen.getByPlaceholderText('搜索会话…'), { target: { value: 'child-session' } })
     fireEvent.click(screen.getByRole('treeitem'))
     expect(b.store.getSnapshot().groupExpansion).toEqual({ child: true })

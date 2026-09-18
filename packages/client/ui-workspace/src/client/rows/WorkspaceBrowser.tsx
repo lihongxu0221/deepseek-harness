@@ -34,7 +34,8 @@ import { WorkspacePickFlow } from '../WorkspacePicker.tsx'
 import css from './WorkspaceBrowser.module.css'
 
 /**
- * Column slide length (--ds-transition-duration-slow): rail-search focus waits it out 鈥? * focus() forces a synchronous layout and would jank the slide.
+ * Column slide length (--ds-transition-duration-slow): rail-search focus waits it out —
+ * focus() forces a synchronous layout and would jank the slide.
  */
 const EXPAND_SLIDE_MS = 300
 /** Pause between the latest keystroke and a Host content-search request. */
@@ -294,9 +295,9 @@ function SessionTree({
     () => deriveFlat(
       list,
       orderByRecency(visibleSessionIds(list, archivedSessionIds), list.byId),
-      pendingInteractions,
+      statuses,
     ),
-    [list, archivedSessionIds, pendingInteractions],
+    [list, archivedSessionIds, statuses],
   )
   const [recentsExpanded, setRecentsExpanded] = useState(false)
   useEffect(() => {
@@ -483,6 +484,11 @@ function SessionTree({
           home={home}
           t={t}
           onToggle={() => {
+            if (group.workspaceId !== undefined && group.sessionCount === 0 && children.length === 0) {
+              setGroupExpanded(group.key, true)
+              startSession(group.workspaceId)
+              return
+            }
             if (group.expanded) {
               setExpandedSessionGroups(keys => keys.filter(key => key !== group.key))
             }
