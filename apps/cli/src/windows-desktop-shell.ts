@@ -7,7 +7,7 @@
  */
 
 import { spawn } from 'node:child_process'
-import { existsSync, unlinkSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, unlinkSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseDesktopListen, type DesktopListen } from './desktop-listen.ts'
@@ -200,11 +200,26 @@ export function defaultWindowsDesktopShellIo(execPath: string, scriptDir: string
     parentPid: process.pid,
     execPath,
     scriptDir,
-    spawn: (command, args, env) => spawn(command, [...args], {
-      stdio: ['pipe', 'pipe', 'ignore'],
-      windowsHide: true,
-      env,
-    }),
+    spawn: (command, args, env) => {
+      const child = spawn(command, [...args], {
+        stdio: ['pipe', 'pipe', 'pipe'],
+        windowsHide: true,
+        env,
+      })
+      child.stdin.on('error', () => {
+        // The tray host already exited; later progress lines must not become
+        // uncaught `write EPIPE` exceptions that tear down the Node host.
+      })
+      child.stderr.setEncoding('utf8')
+      child.stderr.on('data', (chunk: string) => {
+        try {
+          appendFileSync(join(scriptDir, 'desktop-host.log'), `${new Date().toISOString()} tray stderr ${chunk}`)
+        } catch {
+          // A missing home directory must not take down the tray host.
+        }
+      })
+      return child
+    },
     writeFile: (file, contents) => {
       writeFileSync(file, '\uFEFF' + contents, 'utf8')
     },
@@ -262,7 +277,11 @@ export function startWindowsDesktopShell(io: WindowsDesktopShellIo): WindowsDesk
   })
   return {
     send(message) {
-      child.stdin.write(formatHostToShell(message) + '\n', 'utf8')
+      try {
+        child.stdin.write(formatHostToShell(message) + '\n', 'utf8')
+      } catch {
+        // stdin may already be closed if the tray exited first.
+      }
     },
     onCommand(next) {
       commandHandler = next

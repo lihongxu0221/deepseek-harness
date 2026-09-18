@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { escapeCmdStartUrl } from '@deepseek-ai/dsh-web-app'
 import {
+  desktopAppUserModelId,
   openDesktopWindow,
   parseLocalWebUrl,
   resolveChromiumAppBrowser,
@@ -77,6 +78,16 @@ describe('resolveChromiumAppBrowser', () => {
   })
 })
 
+describe('desktopAppUserModelId', () => {
+  it('is stable for one profile directory and distinct across homes', () => {
+    const left = desktopAppUserModelId('C:\\a\\.dsh\\desktop-chromium')
+    const right = desktopAppUserModelId('D:\\b\\.dsh\\desktop-chromium')
+    expect(left).toMatch(/^DeepSeek\.Harness\.Web\.[0-9a-f]{12}$/)
+    expect(left).toBe(desktopAppUserModelId('C:\\A\\.dsh\\desktop-chromium'))
+    expect(left).not.toBe(right)
+  })
+})
+
 describe('openDesktopWindow', () => {
   it('opens a waitable Edge app window on Windows', async () => {
     const edge = join('C:\\Program Files (x86)', 'Microsoft', 'Edge', 'Application', 'msedge.exe')
@@ -90,11 +101,13 @@ describe('openDesktopWindow', () => {
       },
     }))
     expect(opened).toBeDefined()
+    const userDataDir = 'C:\\Users\\tester\\.dsh\\desktop-chromium'
     expect(spawned).toEqual([{
       command: edge,
       args: [
         '--app=http://127.0.0.1:3080',
-        '--user-data-dir=C:\\Users\\tester\\.dsh\\desktop-chromium',
+        `--user-data-dir=${userDataDir}`,
+        `--app-user-model-id=${desktopAppUserModelId(userDataDir)}`,
         '--window-size=1400,900',
         '--no-first-run',
         '--no-default-browser-check',

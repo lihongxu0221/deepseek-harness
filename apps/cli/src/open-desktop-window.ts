@@ -5,6 +5,7 @@
  * @module @deepseek-ai/dsh/open-desktop-window
  */
 
+import { createHash } from 'node:crypto'
 import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
@@ -112,6 +113,18 @@ export function defaultDesktopWindowIo(): DesktopWindowIo {
 }
 
 /**
+ * Windows AppUserModelID for one packaged Chromium `--app` window.
+ * The id includes a digest of `userDataDir` so two `$DSH_HOME` trees do not
+ * share one Edge taskbar group.
+ * @param userDataDir - dedicated Chromium profile directory.
+ * @returns `Company.Product.SubProduct.token` with a 12-hex digest token.
+ */
+export function desktopAppUserModelId(userDataDir: string): string {
+  const digest = createHash('sha256').update(userDataDir.toLowerCase()).digest('hex').slice(0, 12)
+  return `DeepSeek.Harness.Web.${digest}`
+}
+
+/**
  * Resolve a Chromium-family browser that accepts `--app`.
  * @param io - filesystem and environment.
  * @returns an absolute browser path, or `undefined` when none exist.
@@ -154,6 +167,7 @@ export function openDesktopWindow(url: string, io: DesktopWindowIo = defaultDesk
       const child = io.spawn(browser, [
         `--app=${url}`,
         `--user-data-dir=${io.userDataDir}`,
+        `--app-user-model-id=${desktopAppUserModelId(io.userDataDir)}`,
         '--window-size=1400,900',
         '--no-first-run',
         '--no-default-browser-check',
