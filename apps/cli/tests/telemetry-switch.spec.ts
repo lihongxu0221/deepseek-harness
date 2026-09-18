@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { resolveApiproxyDependentDisablePatches, resolveTelemetryPatch } from '../src/profile-boot.ts'
+import { resolveTelemetryPatch } from '@deepseek-ai/dsh-app-boot'
+import { resolveApiproxyDependentDisablePatches } from '../src/profile-boot.ts'
 
 describe('resolveTelemetryPatch', () => {
   it('preserves the configured telemetry mode when the hard-disable switch is unset or empty', () => {

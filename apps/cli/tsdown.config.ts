@@ -1,7 +1,7 @@
 import { defineConfig } from 'tsdown'
 
 /**
- * The dsh CLI ships two entries: the `bin` referenced by package.json `bin`,
+ * The dsh CLI ships the command, the profile lifecycle shared with Desktop,
  * and the packaged Web desktop entry consumed from the deployed folder.
  * The thin pkg launcher is committed CommonJS (`packaged-web-launcher.cjs`)
  * because Node's SEA embedder runs that file as CJS.
@@ -11,14 +11,14 @@ import { defineConfig } from 'tsdown'
  */
 export default defineConfig([
   {
-    entry: ['lib/types/bin.js'],
+    entry: ['lib/types/bin.js', 'lib/types/profile-boot.js'],
     outDir: 'lib',
     format: ['esm'],
     platform: 'node',
     target: 'es2024',
     fixedExtension: false,
     dts: false,
-    clean: false,
+    clean: ['lib/*.js'],
   },
   {
     entry: ['lib/types/packaged-web-bin.js'],

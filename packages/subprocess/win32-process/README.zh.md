@@ -33,6 +33,8 @@ kind: "package-library"
 - **显式结算归属** — `waitForProcessExit()` 等待并关闭沙箱 process 句柄；ordinary runner 的 process polling、Job accounting 与 checked Job termination/closure 是独立操作。`drainPipe()` 在排空期间复用一个 native count slot，释放该分配并关闭管道读取句柄。每个调用方拥有自己的 result 组合与返回句柄。
 - **隐藏控制台附着** — `attachHiddenConsole()` 在本进程尚无控制台时分配一个隐藏控制台，并在之后恢复 stdin/stdout/stderr，使 CUI 子进程继承该控制台，而不把 Node 已打开的流变成 TTY。
 
+进程创建在目标代码运行前设置 `STARTF_USESHOWWINDOW` 和 `SW_HIDE`。它保留控制台继承，不添加可能导致受限令牌下 DLL 初始化失败的 `CREATE_NO_WINDOW` 或 `CREATE_NEW_CONSOLE`。已有的父进程控制台窗口不会被隐藏。
+
 Windows ACL 沙箱在这些原语上增加 SID、DACL、grant、workspace 与公共 child 策略。
 
 - **继承控制描述符**——Job 创建接受可选的 fd-7 管道。`STARTUPINFO.cbReserved2/lpReserved2` 携带八槽 CRT 描述符表，其中包含标准句柄、关闭的槽 3–6，以及槽 7 的控制管道。该表保留到 CreateProcess 返回；临时句柄继承在成功和失败时均恢复。在 Node 启动前初始化该槽可避免覆盖 Node 已分配的描述符。

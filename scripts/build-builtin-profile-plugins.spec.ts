@@ -69,7 +69,7 @@ describe('buildFreshProfileManifest', () => {
     if (template === undefined) throw new Error('the shipped web profile template is missing')
     const root = tempRoot()
     const dir = join(root, 'web')
-    initProfile(dir, template.bundles, template.patchReload)
+    initProfile(dir, template.bundles)
     expect(readProfileManifest('test', dir)).toEqual(buildFreshProfileManifest('web'))
   })
 })

@@ -10,7 +10,6 @@ import {
   Win32Error,
 } from '../src/index.ts'
 import {
-  CREATE_NO_WINDOW,
   CREATE_SUSPENDED,
   CREATE_UNICODE_ENVIRONMENT,
   JOBOBJECT_BASIC_ACCOUNTING_ACTIVE_PROCESSES_OFFSET,
@@ -156,7 +155,7 @@ describe('ordinary Job process operations', () => {
       null,
       null,
       1,
-      CREATE_SUSPENDED | CREATE_UNICODE_ENVIRONMENT | CREATE_NO_WINDOW,
+      CREATE_SUSPENDED | CREATE_UNICODE_ENVIRONMENT,
       environment,
       'C:\\work',
       expect.anything(),
@@ -202,7 +201,7 @@ describe('ordinary Job process operations', () => {
       }),
     })
     expect(spawnCurrentTokenJobProcess(bindings, options())).toEqual({ pid: 1234, process: 60n, job: 50n })
-    expect(startup).toMatchObject({ hStdInput: 104n, hStdOutput: 105n, hStdError: 106n })
+    expect(startup).toMatchObject({ dwFlags: 0x101, wShowWindow: 0, hStdInput: 104n, hStdOutput: 105n, hStdError: 106n })
     expect(uvGetOsfhandle).toHaveBeenNthCalledWith(1, 4)
     expect(uvGetOsfhandle).toHaveBeenNthCalledWith(2, 5)
     expect(uvGetOsfhandle).toHaveBeenNthCalledWith(3, 6)

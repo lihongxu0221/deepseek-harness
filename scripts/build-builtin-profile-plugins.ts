@@ -27,7 +27,6 @@ import { join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import {
   DEFAULT_PROFILE_BUNDLES,
-  DEFAULT_PROFILE_PATCH_RELOAD,
   healProfileVirtualStoreDir,
   initProfile,
   PROFILE_TEMPLATES,
@@ -122,7 +121,6 @@ export function buildFreshProfileManifest(profileName: string): ProfileManifest 
     dsh: {
       profile: {
         bundles: [...(template?.bundles ?? DEFAULT_PROFILE_BUNDLES)],
-        patchReload: template?.patchReload ?? DEFAULT_PROFILE_PATCH_RELOAD,
       },
     },
   }
@@ -328,7 +326,7 @@ export async function seedBuiltinProfilePlugins(
   const skeletonExists = existsSync(join(profileDir, 'package.json'))
   if (!skeletonExists && !dryRun) {
     log(`${BIN}: initializing profile directory ${profileDir}`)
-    initProfile(profileDir, freshBundles, template?.patchReload)
+    initProfile(profileDir, freshBundles)
   }
   // Re-read after init so the merge keeps initProfile's name and private flag.
   const existing = existsSync(join(profileDir, 'package.json')) ? readProfileManifest(BIN, profileDir) : undefined
