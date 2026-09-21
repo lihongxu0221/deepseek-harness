@@ -243,6 +243,22 @@ describe('seedBuiltinProfilePlugins', () => {
     expect(readDeps()[marketName]).toBe(builtin.plugins[marketName])
   })
 
+  it('the profile pnpm install skips lifecycle scripts', () => {
+    const source = readFileSync(new URL('./build-builtin-profile-plugins.ts', import.meta.url), 'utf8')
+    expect(source).toContain("'--ignore-scripts'")
+  })
+
+  it('fails when install does not leave plugins at the pinned version', async () => {
+    const product = join(tempRoot(), 'product')
+    const [first] = pluginNames
+    if (first === undefined) throw new Error('builtin pin list is empty')
+    await expect(seedBuiltinProfilePlugins(product, {
+      manifestPath: MANIFEST_PATH,
+      runInstall: fakeInstall(pluginNames, { [first]: '0.0.1' }).install,
+      log: () => {},
+    })).rejects.toThrow(/did not resolve at the pinned version/)
+  })
+
   it('writes nothing under dry-run', async () => {
     const product = join(tempRoot(), 'product')
     let installs = 0

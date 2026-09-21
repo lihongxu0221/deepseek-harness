@@ -471,7 +471,7 @@ function applyAllowBuilds(
 /** Run pnpm install inside the profile directory with inherited stdio. */
 async function runPnpmInstall(profileDir: string): Promise<void> {
   const command = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm'
-  const args = ['install', '--dir', profileDir, '--config.confirmModulesPurge=false']
+  const args = ['install', '--dir', profileDir, '--ignore-scripts', '--config.confirmModulesPurge=false']
   const printable = `${command} ${args.join(' ')}`
   await new Promise<void>((resolvePromise, rejectPromise) => {
     const child = spawn(command, args, {

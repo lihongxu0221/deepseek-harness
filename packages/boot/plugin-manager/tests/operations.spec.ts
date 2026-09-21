@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { PassThrough } from 'node:stream'
 import { expect, it, onTestFinished, vi } from 'vitest'
 import { initProfile, readProfileManifest } from '@deepseek-ai/dsh-app-boot'
-import { anchorPathSpec, runPluginCommand, runProfilePnpm, viewProfilePackage } from '../src/operations.ts'
+import { anchorPathSpec, PROFILE_PNPM_ISOLATION_ARGS, runPluginCommand, runProfilePnpm, viewProfilePackage } from '../src/operations.ts'
 
 const command = vi.hoisted(() => ({ run: vi.fn<(...args: unknown[]) => ReturnType<typeof result>>() }))
 vi.mock('execa', () => ({ execa: (...args: unknown[]) => command.run(...args) }))
@@ -69,7 +69,19 @@ it('can install without activation and bounds output while retaining the complet
   expect(outcome).toMatchObject({ exitCode: 0, output: '6789', truncated: true })
   expect(readFileSync(outcome.logPath, 'utf8')).toBe('0123456789')
   expect(readProfileManifest('test', dir).dsh?.profile?.bundles).toEqual([])
-  expect(command.run.mock.calls[0]?.[1]).toEqual(['add', join(context.cwd, 'extra')])
+  expect(command.run.mock.calls[0]?.[1]).toEqual([...PROFILE_PNPM_ISOLATION_ARGS, 'add', join(context.cwd, 'extra')])
+})
+
+it('isolates profile pnpm from an ancestor workspace lockfile', async () => {
+  const { dir, context } = fixture()
+  command.run.mockImplementationOnce(() => result(0, ''))
+  await runProfilePnpm(context, ['add', 'example@1'], { execution: 'service', outputBytes: 100, activateNewBundles: false })
+  expect(command.run.mock.calls[0]?.[1]).toEqual([...PROFILE_PNPM_ISOLATION_ARGS, 'add', 'example@1'])
+  command.run.mockResolvedValueOnce(Object.assign({ exitCode: 0, failed: false }, { stdout: '{}', stderr: '', timedOut: false }))
+  await viewProfilePackage(dir, 'example', { timeoutMs: 1000 })
+  expect(command.run.mock.lastCall?.[1]).toEqual([
+    ...PROFILE_PNPM_ISOLATION_ARGS, 'view', 'example', 'name', 'version', 'description', 'dsh', '--json',
+  ])
 })
 
 it.each([runPluginCommand, runProfilePnpm])('installs into the supplied application profile directory with %s', async (run) => {
@@ -217,7 +229,7 @@ it('asks the registry through pnpm view in the profile directory and reports how
   const answer = (value: object) => command.run.mockResolvedValueOnce(value as never)
   answer({ exitCode: 0, stdout: '{"name":"x"}', stderr: '', timedOut: false, isCanceled: false })
   expect(await viewProfilePackage(dir, 'x@^1', { timeoutMs: 5 })).toEqual({ exitCode: 0, stdout: '{"name":"x"}', stderr: '', timedOut: false })
-  expect(command.run).toHaveBeenLastCalledWith('pnpm', ['view', 'x@^1', 'name', 'version', 'description', 'dsh', '--json'], expect.objectContaining({
+  expect(command.run).toHaveBeenLastCalledWith('pnpm', [...PROFILE_PNPM_ISOLATION_ARGS, 'view', 'x@^1', 'name', 'version', 'description', 'dsh', '--json'], expect.objectContaining({
     cwd: dir, timeout: 5, reject: false, stdin: 'ignore',
   }))
   expect((command.run.mock.lastCall as unknown[])[2]).not.toHaveProperty('cancelSignal')
@@ -239,11 +251,11 @@ it('uses application-owned executable arguments and environment for package oper
   const runtime = { command: '/app/electron', args: ['--expose-internals', '/app/pnpm.mjs'], env: { ELECTRON_RUN_AS_NODE: '1', PATH: '/app/bin' } }
   command.run.mockImplementationOnce(() => result(0, ''))
   await runProfilePnpm(context, ['add', './extra'], { ...runtime, execution: 'service', outputBytes: 100, activateNewBundles: false })
-  expect(command.run).toHaveBeenLastCalledWith(runtime.command, [...runtime.args, 'add', resolve(context.cwd, 'extra')],
+  expect(command.run).toHaveBeenLastCalledWith(runtime.command, [...runtime.args, ...PROFILE_PNPM_ISOLATION_ARGS, 'add', resolve(context.cwd, 'extra')],
     expect.objectContaining({ env: expect.objectContaining(runtime.env) as unknown }))
   command.run.mockResolvedValueOnce(Object.assign({ exitCode: 0, failed: false }, { stdout: '{}', stderr: '', timedOut: false }))
   await viewProfilePackage(dir, 'example', { ...runtime, timeoutMs: 1000 })
   expect(command.run).toHaveBeenLastCalledWith(runtime.command,
-    [...runtime.args, 'view', 'example', 'name', 'version', 'description', 'dsh', '--json'],
+    [...runtime.args, ...PROFILE_PNPM_ISOLATION_ARGS, 'view', 'example', 'name', 'version', 'description', 'dsh', '--json'],
     expect.objectContaining({ env: expect.objectContaining(runtime.env) as unknown }))
 })

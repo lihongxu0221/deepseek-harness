@@ -96,6 +96,15 @@ async function reconcile(before: ProfileManifest, dir: string, anchor: string, o
   await saveManifest(dir, after)
 }
 
+/**
+ * Keep profile package operations off an ancestor pnpm workspace.
+ * A packaged Web home nested in a checkout otherwise inherits that
+ * workspace lockfile and `minimumReleaseAge`, so a market update can
+ * fetch from the wrong registry or refuse a package younger than the
+ * repository policy.
+ */
+export const PROFILE_PNPM_ISOLATION_ARGS = ['--config.shared-workspace-lockfile=false'] as const
+
 /** Execute pnpm inside a profile whose caller already holds the profile write lock.
  * @param context Launcher-owned profile and resolution locations.
  * @param args Pnpm arguments, before relative path anchoring.
@@ -115,7 +124,7 @@ export async function runProfilePnpm(
   let output = Buffer.alloc(0)
   let truncated = false
   const cancellation = new AbortController()
-  const child = execa(options.command ?? 'pnpm', [...options.args ?? [], ...args.map(arg => anchorPathSpec(arg, context.cwd))], {
+  const child = execa(options.command ?? 'pnpm', [...options.args ?? [], ...PROFILE_PNPM_ISOLATION_ARGS, ...args.map(arg => anchorPathSpec(arg, context.cwd))], {
     cwd: dir, env: { ...(options.execution === 'cli' ? process.env : scrubbedParentEnv()), ...options.env }, extendEnv: false, reject: false,
     stdout: options.execution === 'cli' ? 'inherit' : 'pipe',
     stderr: options.execution === 'cli' ? 'inherit' : 'pipe',
@@ -220,7 +229,7 @@ export interface PackageViewOptions {
  * @returns pnpm's exit, output, and how the lookup ended.
  */
 export async function viewProfilePackage(dir: string, spec: string, options: PackageViewOptions): Promise<PackageViewResult> {
-  const result = await execa(options.command ?? 'pnpm', [...options.args ?? [], 'view', spec, 'name', 'version', 'description', 'dsh', '--json'], {
+  const result = await execa(options.command ?? 'pnpm', [...options.args ?? [], ...PROFILE_PNPM_ISOLATION_ARGS, 'view', spec, 'name', 'version', 'description', 'dsh', '--json'], {
     cwd: dir, env: { ...scrubbedParentEnv(), ...options.env }, extendEnv: false, reject: false, stdin: 'ignore',
     timeout: options.timeoutMs, ...options.signal === undefined ? {} : { cancelSignal: options.signal },
   })
