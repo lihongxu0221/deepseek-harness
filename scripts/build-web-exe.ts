@@ -318,9 +318,14 @@ class WebExeBuild {
     await this.run('build', pnpmBin(), ['run', 'build'])
   }
 
-  /** Seed the deployed staging web profile with the builtin community plugins. */
-  async seedBuiltinPlugins(): Promise<void> {
-    await seedBuiltinProfilePlugins(this.staging, {
+  /**
+   * Seed one product or staging folder with the builtin community plugins.
+   * `refresh` overwrites conflicting dependency specs so leftover older pins
+   * become the pin-list versions.
+   * @param productDir - folder whose `.config/profiles/web` receives the pins.
+   */
+  async seedBuiltinPlugins(productDir: string = this.staging): Promise<void> {
+    await seedBuiltinProfilePlugins(productDir, {
       dryRun: this.cli.dryRun,
       refresh: true,
       log: (line): void => {
@@ -505,6 +510,9 @@ class WebExeBuild {
         })
       }
     }
+    // Restoring .config wins over the staged seed, including the single-target
+    // path where product is staging. Re-seed so builtin pins match the pin list.
+    await this.seedBuiltinPlugins(product)
     await this.prepareNativePty(product, target)
     const launcherOutput = join(product, LAUNCHER_NAME)
     // `pnpm exec pkg` re-runs `pnpm install --production` when there is no TTY.
@@ -715,9 +723,8 @@ async function main(): Promise<void> {
   }
   await pipeline.build()
   await pipeline.deployStaging()
-  // Seeding runs on the staging tree, so every packed product copy inherits
-  // the seeded .config/profiles/web while an existing product folder's own
-  // preserved .config keeps winning over the fresh seed.
+  // Seeding runs on the staging tree first. pack() then restores an existing
+  // product .config and re-seeds so builtin pins match the pin list.
   await pipeline.seedBuiltinPlugins()
   const products: string[] = []
   for (const target of cli.targets) products.push(...await pipeline.pack(target))

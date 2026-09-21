@@ -1235,11 +1235,31 @@ function renderOutletContent(
   if (list.length === 0) return <>{opts?.fallback ?? null}</>
   // Winner rows key by entry identity (see entryKeyOf); dry-cell rows key by
   // id — the disjoint prefixes keep the two namespaces from colliding.
+  // A list entry may carry `select` when a chain-shaped plugin registered into
+  // a list hole: null declines the row; a non-null result is `matched`.
   return (
     <>
-      {list.map((item, i) => item.entry !== undefined
-        ? guarded(item.entry, `e${entryKeyOf(item.entry)}`)
-        : <div data-slot-error={slotKey} key={`x${item.id ?? i}`} />)}
+      {list.map((item, i) => {
+        if (item.entry === undefined) {
+          return <div data-slot-error={slotKey} key={`x${item.id ?? i}`} />
+        }
+        const entry = item.entry
+        const rowKey = `e${entryKeyOf(entry)}`
+        if (entry.select === undefined) {
+          return guarded(entry, rowKey)
+        }
+        let matched: unknown
+        try {
+          matched = (entry.select as (owner: object) => unknown)(ownerProps)
+        } catch (error) {
+          console.error(
+            `list selector crashed in '${slotKey}' (${entry.registrant ?? 'unknown registrant'}), treating as declined:`,
+            error)
+          return null
+        }
+        if (matched === null) return null
+        return guarded(entry, rowKey, { ...ownerProps, matched })
+      })}
     </>
   )
 }

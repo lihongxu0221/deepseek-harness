@@ -168,6 +168,19 @@ describe('kind semantics', () => {
     expect(core.entries('test.list').map(e => e.options.id)).toEqual(['a', 'b', 'c'])
   })
 
+  it('list: registrant supplies id when options.id is omitted', () => {
+    const core = new SlotCore()
+    mountFrame(core)
+    // @ts-expect-error list registration requires options.id; registrant is the runtime cell id
+    core.register({ name: 'test.list', registrant: 'dsh-better-sidebar' }, Comp)
+    expect(core.entries('test.list').map(e => e.options.id)).toEqual(['dsh-better-sidebar'])
+    // @ts-expect-error list registration requires options.id
+    expect(() => core.register({ name: 'test.list', registrant: 'dsh-better-sidebar' }, Comp))
+      .toThrow('id "dsh-better-sidebar"')
+    core.register({ name: 'test.list', id: 'explicit', registrant: 'other' }, Comp)
+    expect(core.entries('test.list').map(e => e.options.id)).toEqual(['dsh-better-sidebar', 'explicit'])
+  })
+
   it('chain: missing select throws; select and priority land on the stored entry', () => {
     const core = new SlotCore()
     mountFrame(core)

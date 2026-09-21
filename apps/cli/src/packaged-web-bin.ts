@@ -14,8 +14,9 @@
  * against `.config` instead of claiming the GUI lock, and keep the invoking
  * cwd so relative plugin specs resolve against the caller. The GUI branch
  * rewrites argv so Plugin Market dshArgv() spawn()s lib/bin.js instead of
- * PATH dsh. The Job-runner
- * env is handled in packaged-web-launcher.cjs before this file loads.
+ * PATH dsh. The Job-runner env and `DSH_PTC_RUNTIME_NODE` bootstrap are
+ * handled in packaged-web-launcher.cjs before this file loads; this entry
+ * still honors that selector if it is imported as the process main.
  * The GUI branch may `chdir` to the executable directory. The executable's
  * directory is prepended to `PATH` so children re-invoke `dsh` by name.
  * @module @deepseek-ai/dsh/packaged-web-bin
@@ -24,6 +25,7 @@
 /* v8 ignore file -- packaged desktop entry; window opening is unit-tested. */
 
 import { randomUUID } from 'node:crypto'
+import { createRequire } from 'node:module'
 import { writeFileSync, rmSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -33,13 +35,17 @@ import { defaultDesktopWindowIo, DESKTOP_WINDOW_HANDOFF_MS, openDesktopWindow } 
 import { defaultPackagedWebDesktopIo, runPackagedWebDesktop } from './packaged-web-desktop.ts'
 import {
   extraPackagedArgv,
+  PACKAGED_PTC_RUNTIME_NODE_ENV,
   packagedCliArgv,
   packagedEvalSource,
+  packagedPtcFrameLimitArg,
+  packagedPtcRuntimeRequested,
   packagedWebShouldChdir,
   prependPackagedBinToPath,
   resolvePackagedScriptArg,
   runImportedPackagedCli,
   withPackagedMarketCliArgv,
+  withPackagedPtcArgv,
   withPackagedScriptArgv,
 } from './packaged-web-entry.ts'
 import { applyPackagedWebHome, applyPackagedWebProfile } from './packaged-web-home.ts'
@@ -53,6 +59,11 @@ if (script !== undefined) {
   process.argv = withPackagedScriptArgv(process.execPath, script, extra)
   const mod = await import(pathToFileURL(script).href) as { runCli?: () => Promise<void> }
   if (typeof mod.runCli === 'function') await mod.runCli()
+} else if (packagedPtcRuntimeRequested()) {
+  Reflect.deleteProperty(process.env, PACKAGED_PTC_RUNTIME_NODE_ENV)
+  const processEntry = createRequire(import.meta.url).resolve('@deepseek-ai/dsh-ptc-runtime-node/process')
+  process.argv = withPackagedPtcArgv(process.execPath, processEntry, extra)
+  await import(pathToFileURL(processEntry).href)
 } else if (evalSource !== undefined) {
   const evalPath = join(tmpdir(), `dsh-packaged-eval-${randomUUID()}.cjs`)
   writeFileSync(evalPath, evalSource, 'utf8')
@@ -69,6 +80,9 @@ if (script !== undefined) {
       // temp directory owns its eventual removal.
     }
   }
+} else if (packagedPtcFrameLimitArg(extra)) {
+  console.error('dsh-web: PTC worker argv reached the GUI path; set DSH_PTC_RUNTIME_NODE=1')
+  process.exitCode = 1
 } else {
   const home = applyPackagedWebHome(process.execPath)
   const cli = packagedCliArgv(extra)

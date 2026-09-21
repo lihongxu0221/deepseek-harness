@@ -347,6 +347,32 @@ describe('child outlets and the renderSlot binding', () => {
     expect(view.container.querySelector('main')!.textContent).toBe('')
   })
 
+  it('list select declines a null match and passes a non-null result as matched', () => {
+    const h = makeHost()
+    h.declare('k.list', { kind: 'list', scope: 'root' })
+    const seen: unknown[] = []
+    h.add('k.list', {
+      component: (props: object) => {
+        seen.push((props as { matched?: unknown }).matched)
+        return <span>kept</span>
+      },
+      options: { id: 'kept', order: 1 },
+      select: (owner: { take?: boolean }) => owner.take === true ? ['file.ts'] : null,
+    } as StoredEntry)
+    h.add('k.list', {
+      component: () => <span>always</span>,
+      options: { id: 'plain', order: 2 },
+    })
+    const { view } = mountRoot(h, { 'k.list': { kind: 'list', scope: 'root' } },
+      renderSlot => <>
+        <main>{renderSlot('k.list', { take: true })}</main>
+        <aside>{renderSlot('k.list', { take: false })}</aside>
+      </>)
+    expect(view.container.querySelector('main')!.textContent).toBe('keptalways')
+    expect(view.container.querySelector('aside')!.textContent).toBe('always')
+    expect(seen).toContainEqual(['file.ts'])
+  })
+
   it('orders list entries, honors only-filter, dispatches keyed entries by entryKey', () => {
     const h = makeHost()
     h.declare('k.list', { kind: 'list', scope: 'root' })

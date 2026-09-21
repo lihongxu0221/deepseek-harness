@@ -10,6 +10,8 @@
  * process.argv.slice(2) matches Node.
  * When DSH_SUBPROCESS_RUNNER is set, this process is the private Windows
  * Job runner: skip AllocConsole and the GUI, and load the on-disk runner.
+ * When DSH_PTC_RUNTIME_NODE is 1, this process is the PTC Node worker:
+ * import the on-disk bootstrap instead of claiming the GUI lock.
  */
 
 'use strict'
@@ -21,6 +23,7 @@ const { basename, dirname, extname, join, resolve } = require('node:path')
 const { pathToFileURL } = require('node:url')
 
 const SUBPROCESS_RUNNER_ENV = 'DSH_SUBPROCESS_RUNNER'
+const PTC_RUNTIME_NODE_ENV = 'DSH_PTC_RUNTIME_NODE'
 
 // Hide every child console on Windows. The packaged host is a GUI process
 // without its own console, so a child spawned without windowsHide — git from
@@ -34,6 +37,7 @@ const SUBPROCESS_RUNNER_ENV = 'DSH_SUBPROCESS_RUNNER'
 // Chromium-style children, so window-spawning helpers declare `false`.
 const runnerSelection = process.env[SUBPROCESS_RUNNER_ENV]
 const isPackagedRunner = typeof runnerSelection === 'string' && runnerSelection !== ''
+const isPackagedPtc = process.env[PTC_RUNTIME_NODE_ENV] === '1'
 
 if (process.platform === 'win32' && !isPackagedRunner) {
   const hideOptions = (options) => {
@@ -106,7 +110,6 @@ function extraPackagedArgv(argv, launcherPath) {
     || isInvocationEcho(value, process.execPath)
     || sameResolvedPath(value, launcherPath)
     || sameResolvedPath(value, join(dirname(process.execPath), 'lib', 'bin.js'))
-    || basename(value).toLowerCase() === 'runner.js'
     || LAUNCHER_BASENAMES.has(basename(value).toLowerCase())
   let index = 0
   while (index < rest.length && skip(rest[index] ?? '')) index += 1
@@ -121,10 +124,17 @@ function resolvePackagedScriptArg(args) {
   return resolve(candidate)
 }
 
-function resolvePackagedRunner() {
+function packagedRequire() {
   const onDisk = join(dirname(process.execPath), 'lib', 'packaged-web-bin.js')
-  const req = existsSync(onDisk) ? createRequire(onDisk) : createRequire(__filename)
-  return req.resolve('@deepseek-ai/dsh-subprocess-local/runner')
+  return existsSync(onDisk) ? createRequire(onDisk) : createRequire(__filename)
+}
+
+function resolvePackagedRunner() {
+  return packagedRequire().resolve('@deepseek-ai/dsh-subprocess-local/runner')
+}
+
+function resolvePackagedPtcProcess() {
+  return packagedRequire().resolve('@deepseek-ai/dsh-ptc-runtime-node/process')
 }
 
 if (isPackagedRunner) {
@@ -153,20 +163,43 @@ if (isPackagedRunner) {
   const script = resolvePackagedScriptArg(extra)
   if (script !== undefined) {
     process.argv = [process.execPath, script, ...extra.slice(1)]
-  }
-  const entry = script ?? join(dirname(process.execPath), 'lib', 'packaged-web-bin.js')
-  if (!existsSync(entry)) {
-    throw new Error(
-      `dsh-web: missing ${entry}. Keep this executable inside the built folder; do not copy the .exe alone.`,
-    )
-  }
-
-  import(pathToFileURL(entry).href).then((mod) => {
-    // lib/bin.js is not the process entry when this SEA imports it, so its
-    // import.meta.main guard never runs. Call the exported CLI when present.
-    if (typeof mod.runCli === 'function') return mod.runCli()
-  }).catch((error) => {
-    console.error(error)
+    import(pathToFileURL(script).href).then((mod) => {
+      if (typeof mod.runCli === 'function') return mod.runCli()
+    }).catch((error) => {
+      console.error(error)
+      process.exit(1)
+    })
+  } else if (isPackagedPtc) {
+    delete process.env[PTC_RUNTIME_NODE_ENV]
+    try {
+      const entry = resolvePackagedPtcProcess()
+      process.argv = [process.execPath, entry, ...extra]
+      import(pathToFileURL(entry).href).catch((error) => {
+        console.error(error)
+        process.exit(1)
+      })
+    } catch (error) {
+      console.error(error)
+      process.exit(1)
+    }
+  } else if (extra.length === 1 && /^\d+$/u.test(extra[0] ?? '')) {
+    console.error('dsh-web: PTC worker argv reached the GUI path; set DSH_PTC_RUNTIME_NODE=1')
     process.exit(1)
-  })
+  } else {
+    const entry = join(dirname(process.execPath), 'lib', 'packaged-web-bin.js')
+    if (!existsSync(entry)) {
+      throw new Error(
+        `dsh-web: missing ${entry}. Keep this executable inside the built folder; do not copy the .exe alone.`,
+      )
+    }
+
+    import(pathToFileURL(entry).href).then((mod) => {
+      // lib/bin.js is not the process entry when this SEA imports it, so its
+      // import.meta.main guard never runs. Call the exported CLI when present.
+      if (typeof mod.runCli === 'function') return mod.runCli()
+    }).catch((error) => {
+      console.error(error)
+      process.exit(1)
+    })
+  }
 }

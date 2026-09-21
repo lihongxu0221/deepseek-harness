@@ -4,18 +4,22 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import {
   extraPackagedArgv,
+  PACKAGED_PTC_RUNTIME_NODE_ENV,
   PACKAGED_WEB_CLI_REL,
   PACKAGED_WEB_ENTRY_REL,
   packagedCliArgv,
   packagedEvalSource,
-  packagedWebShouldChdir,
   packagedMarketCliAliasName,
+  packagedPtcFrameLimitArg,
+  packagedPtcRuntimeRequested,
+  packagedWebShouldChdir,
   prependPackagedBinToPath,
   resolvePackagedCliEntry,
-  runImportedPackagedCli,
-  withPackagedMarketCliArgv,
   resolvePackagedScriptArg,
   resolvePackagedWebEntry,
+  runImportedPackagedCli,
+  withPackagedMarketCliArgv,
+  withPackagedPtcArgv,
   withPackagedScriptArgv,
 } from '../src/packaged-web-entry.ts'
 
@@ -96,12 +100,21 @@ describe('resolvePackagedWebEntry', () => {
     expect(launcher).toContain('DSH_SUBPROCESS_RUNNER')
     expect(launcher).toContain('runSelectedSubprocessRunner')
     expect(launcher).toContain('@deepseek-ai/dsh-subprocess-local/runner')
+    expect(launcher).toContain(PACKAGED_PTC_RUNTIME_NODE_ENV)
+    expect(launcher).toContain('resolvePackagedPtcProcess')
+    expect(launcher).toContain('@deepseek-ai/dsh-ptc-runtime-node/process')
+    expect(launcher).toContain('else if (isPackagedPtc)')
+    expect(launcher).toContain('PTC worker argv reached the GUI path')
+    expect(launcher).not.toContain("basename(value).toLowerCase() === 'runner.js'")
   })
 
   it('the packaged GUI entry rewrites argv so Plugin Market spawn()s lib/bin.js', () => {
     const source = readFileSync(fileURLToPath(new URL('../src/packaged-web-bin.ts', import.meta.url)), 'utf8')
     expect(source).toContain('withPackagedMarketCliArgv(process.execPath, process.argv)')
     expect(source).toContain('runImportedPackagedCli(process.execPath, cli)')
+    expect(source).toContain('packagedPtcRuntimeRequested()')
+    expect(source).toContain('packagedPtcFrameLimitArg(extra)')
+    expect(source).toContain('withPackagedPtcArgv(process.execPath, processEntry, extra)')
   })
 
   it('forces windowsHide onto every documented child_process call shape', () => {
@@ -197,6 +210,29 @@ describe('extraPackagedArgv', () => {
     expect(extraPackagedArgv([exec, '--port', '8080'], launcher, exec)).toEqual(['--port', '8080'])
     expect(extraPackagedArgv([exec, 'web', '--port', '8080'], launcher, exec)).toEqual(['web', '--port', '8080'])
   })
+
+  it('keeps a Windows ACL runner.js extra instead of falling through to the GUI', () => {
+    const exec = resolve('D:\\dist\\dsh-web.exe')
+    const aclRunner = resolve('D:\\dist\\node_modules\\@deepseek-ai\\dsh-sandbox-windows-acl\\lib\\runner.js')
+    expect(extraPackagedArgv(
+      [exec, aclRunner, '--workspace', 'D:\\ws', '--', exec, '134217728'],
+      launcher,
+      exec,
+    )).toEqual([aclRunner, '--workspace', 'D:\\ws', '--', exec, '134217728'])
+    expect(resolvePackagedScriptArg([aclRunner], path => path === aclRunner)).toBe(aclRunner)
+  })
+
+  it('keeps a packaged PTC frame-limit extra that is not a script path', () => {
+    const exec = resolve('D:\\dist\\dsh-web.exe')
+    expect(extraPackagedArgv([exec, '134217728'], launcher, exec)).toEqual(['134217728'])
+    expect(resolvePackagedScriptArg(['134217728'], () => true)).toBeUndefined()
+    expect(packagedCliArgv(['134217728'])).toBeUndefined()
+    expect(packagedPtcFrameLimitArg(['134217728'])).toBe(true)
+    expect(packagedPtcFrameLimitArg([])).toBe(false)
+    expect(packagedPtcFrameLimitArg(['--port', '8080'])).toBe(false)
+    expect(packagedPtcRuntimeRequested({ [PACKAGED_PTC_RUNTIME_NODE_ENV]: '1' })).toBe(true)
+    expect(packagedWebShouldChdir(['134217728'])).toBe(false)
+  })
 })
 
 describe('resolvePackagedScriptArg', () => {
@@ -249,6 +285,7 @@ describe('packagedWebShouldChdir', () => {
     expect(packagedWebShouldChdir(['--dump-config'])).toBe(false)
     expect(packagedWebShouldChdir([])).toBe(true)
     expect(packagedWebShouldChdir(['--port', '8080'])).toBe(true)
+    expect(packagedWebShouldChdir(['134217728'])).toBe(false)
   })
 })
 
@@ -350,6 +387,26 @@ describe('withPackagedMarketCliArgv', () => {
     expect(withPackagedMarketCliArgv(exec, [exec, resolve('D:\\dist\\lib\\packaged-web-bin.js')])).toEqual([
       exec,
       join('D:\\dist', 'lib', 'bin.js'),
+    ])
+  })
+})
+
+describe('packagedPtcRuntimeRequested', () => {
+  it('selects only the private packaged PTC bootstrap', () => {
+    expect(packagedPtcRuntimeRequested({ [PACKAGED_PTC_RUNTIME_NODE_ENV]: '1' })).toBe(true)
+    expect(packagedPtcRuntimeRequested({ [PACKAGED_PTC_RUNTIME_NODE_ENV]: '0' })).toBe(false)
+    expect(packagedPtcRuntimeRequested({})).toBe(false)
+  })
+})
+
+describe('withPackagedPtcArgv', () => {
+  it('puts the bootstrap in argv[1] so argv[2] is the control-frame limit', () => {
+    const exec = resolve('D:\\dist\\dsh-web.exe')
+    const processEntry = resolve('D:\\dist\\node_modules\\@deepseek-ai\\dsh-ptc-runtime-node\\lib\\process.js')
+    expect(withPackagedPtcArgv(exec, processEntry, ['134217728'])).toEqual([
+      exec,
+      processEntry,
+      '134217728',
     ])
   })
 })

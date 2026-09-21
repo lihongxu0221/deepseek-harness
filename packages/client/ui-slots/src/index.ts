@@ -772,6 +772,11 @@ export type KindOptions<
     priority?: number
   }
     : SlotMap[K]['kind'] extends 'list' ? {
+      /**
+       * List cell id. Typed callers must pass it. At runtime, omitting it
+       * uses `registrant` (SlotRegistry stamps the caller's fiber name);
+       * omitting both throws.
+       */
       id: string
       order?: number
       label?: SlotLabel
@@ -841,7 +846,12 @@ type BaseOptions<
 export interface StoredEntry {
   component: unknown
   options: { key?: string; id?: string; order?: number; label?: SlotLabel; priority?: number }
-  /** Chain routing selector (type-erased like `inject`; present exactly on chain-slot entries). */
+  /**
+   * Routing selector (type-erased like `inject`). Required on chain entries.
+   * A list entry may carry one: `null` declines the row; a non-null result
+   * is `matched`. List select does not elect a single winner — every
+   * non-declining row still renders.
+   */
   select?: ((owner: never) => unknown) | undefined
   /** Registrant business face; positional params derive from the declaration (sessionId?, actions?). */
   inject?: ((...args: never[]) => Record<string, unknown>) | undefined
@@ -1128,8 +1138,9 @@ export class SlotCore {
    * an already-declared child key throws (one declarer per slot — the message
    * names the first declarer); mounting one shared store handle under slots
    * of different scopes throws. Kind constraints: keyed — missing `key`
-   * throws; list — missing `id` throws; chain — missing `select` throws (the
-   * selector is the entry's routing seat, see {@link ChainSelect}).
+   * throws; list — missing `id` throws unless `registrant` supplies the cell
+   * id; chain — missing `select` throws (the selector is the entry's routing
+   * seat, see {@link ChainSelect}).
    *
    * Shadowing (single/keyed/list): entries sharing one cell (single — the
    * slot itself; keyed — same `key`; list — same `id`) coexist at distinct
@@ -1212,6 +1223,7 @@ export class SlotCore {
     const priority = options.priority ?? 0
     const occupantHint = (occupant: StoredEntry) =>
       `at priority ${priority}${occupant.registrant !== undefined ? ` (registered by ${occupant.registrant})` : ''} — register at a different priority to shadow it (lowest renders)`
+    let listId: string | undefined
     switch (spec.kind) {
       case 'single': {
         const occupant = rec.entries.find(e => (e.options.priority ?? 0) === priority)
@@ -1227,11 +1239,13 @@ export class SlotCore {
         break
       }
       case 'list': {
-        if (options.id === undefined) throw new Error(`list slot "${options.name}" requires options.id`)
-        const occupant = rec.entries.find(e => e.options.id === options.id && (e.options.priority ?? 0) === priority)
+        const resolved = options.id ?? options.registrant
+        if (resolved === undefined) throw new Error(`list slot "${options.name}" requires options.id`)
+        const occupant = rec.entries.find(e => e.options.id === resolved && (e.options.priority ?? 0) === priority)
         if (occupant) {
-          throw new Error(`list slot "${options.name}" already has an entry with id "${options.id}" ${occupantHint(occupant)}`)
+          throw new Error(`list slot "${options.name}" already has an entry with id "${resolved}" ${occupantHint(occupant)}`)
         }
+        listId = resolved
         break
       }
       case 'chain':
@@ -1262,7 +1276,7 @@ export class SlotCore {
       component,
       options: {
         ...(options.key !== undefined ? { key: options.key } : {}),
-        ...(options.id !== undefined ? { id: options.id } : {}),
+        ...(listId !== undefined ? { id: listId } : options.id !== undefined ? { id: options.id } : {}),
         ...(options.order !== undefined ? { order: options.order } : {}),
         ...(options.label !== undefined ? { label: options.label } : {}),
         ...(options.priority !== undefined ? { priority: options.priority } : {}),

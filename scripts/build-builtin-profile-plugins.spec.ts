@@ -8,6 +8,8 @@ import {
   loadBuiltinManifest,
   planAllowBuildsAppend,
   planProfileMerge,
+  pluginInstalledAtPin,
+  readInstalledPluginVersion,
   seedBuiltinProfilePlugins,
 } from './build-builtin-profile-plugins.ts'
 
@@ -18,7 +20,10 @@ function tempRoot(): string {
 }
 
 /** Fake install that records the profile directory and materializes resolvable plugin markers. */
-function fakeInstall(names: readonly string[]): { runs: string[]; install: (dir: string) => Promise<void> } {
+function fakeInstall(
+  names: readonly string[],
+  versions: Readonly<Record<string, string>> = {},
+): { runs: string[]; install: (dir: string) => Promise<void> } {
   const runs: string[] = []
   return {
     runs,
@@ -27,7 +32,10 @@ function fakeInstall(names: readonly string[]): { runs: string[]; install: (dir:
       for (const name of names) {
         const packageDir = join(dir, 'node_modules', ...name.split('/'))
         mkdirSync(packageDir, { recursive: true })
-        writeFileSync(join(packageDir, 'package.json'), JSON.stringify({ name }))
+        writeFileSync(join(packageDir, 'package.json'), JSON.stringify({
+          name,
+          version: versions[name] ?? '1.0.0',
+        }))
       }
     },
   }
@@ -123,6 +131,7 @@ describe('planProfileMerge', () => {
 describe('seedBuiltinProfilePlugins', () => {
   const builtin = loadBuiltinManifest(MANIFEST_PATH)
   const pluginNames = Object.keys(builtin.plugins)
+  const pinInstall = (): ReturnType<typeof fakeInstall> => fakeInstall(pluginNames, builtin.plugins)
 
   function profileDirOf(product: string): string {
     return join(product, '.config', 'profiles', builtin.profile)
@@ -130,7 +139,7 @@ describe('seedBuiltinProfilePlugins', () => {
 
   it('seeds a fresh product directory end to end', async () => {
     const product = join(tempRoot(), 'product')
-    const fake = fakeInstall(pluginNames)
+    const fake = pinInstall()
     const logs: string[] = []
     const result = await seedBuiltinProfilePlugins(product, { runInstall: fake.install, log: line => logs.push(line) })
 
@@ -154,7 +163,7 @@ describe('seedBuiltinProfilePlugins', () => {
 
   it('is a no-op on an already seeded profile', async () => {
     const product = join(tempRoot(), 'product')
-    const fake = fakeInstall(pluginNames)
+    const fake = pinInstall()
     await seedBuiltinProfilePlugins(product, { manifestPath: MANIFEST_PATH, runInstall: fake.install, log: () => {} })
     const result = await seedBuiltinProfilePlugins(product, { manifestPath: MANIFEST_PATH, runInstall: fake.install, log: () => {} })
     expect(result.upToDate).toBe(true)
@@ -178,7 +187,7 @@ describe('seedBuiltinProfilePlugins', () => {
 
   it('reinstalls without manifest churn when a plugin stopped resolving', async () => {
     const product = join(tempRoot(), 'product')
-    const fake = fakeInstall(pluginNames)
+    const fake = pinInstall()
     await seedBuiltinProfilePlugins(product, { manifestPath: MANIFEST_PATH, runInstall: fake.install, log: () => {} })
     rmSync(join(profileDirOf(product), 'node_modules', ...pluginNames[0]!.split('/')), { recursive: true, force: true })
     const result = await seedBuiltinProfilePlugins(product, { manifestPath: MANIFEST_PATH, runInstall: fake.install, log: () => {} })
@@ -188,9 +197,29 @@ describe('seedBuiltinProfilePlugins', () => {
     expect(fake.runs.length).toBe(2)
   })
 
+  it('reinstalls when a plugin resolves at a different version than the pin', async () => {
+    const product = join(tempRoot(), 'product')
+    const fake = pinInstall()
+    await seedBuiltinProfilePlugins(product, { manifestPath: MANIFEST_PATH, runInstall: fake.install, log: () => {} })
+    const profileDir = profileDirOf(product)
+    const drifted = pluginNames[0]!
+    writeFileSync(
+      join(profileDir, 'node_modules', ...drifted.split('/'), 'package.json'),
+      JSON.stringify({ name: drifted, version: '0.0.1' }),
+    )
+    expect(readInstalledPluginVersion(profileDir, drifted)).toBe('0.0.1')
+    expect(pluginInstalledAtPin(profileDir, drifted, builtin.plugins[drifted]!)).toBe(false)
+    const result = await seedBuiltinProfilePlugins(product, { manifestPath: MANIFEST_PATH, runInstall: fake.install, log: () => {} })
+    expect(result.changed).toBe(false)
+    expect(result.ranInstall).toBe(true)
+    expect(result.upToDate).toBe(false)
+    expect(fake.runs.length).toBe(2)
+    expect(readInstalledPluginVersion(profileDir, drifted)).toBe(builtin.plugins[drifted])
+  })
+
   it('keeps user-pinned specs until refresh opts in', async () => {
     const product = join(tempRoot(), 'product')
-    const fake = fakeInstall(pluginNames)
+    const fake = pinInstall()
     await seedBuiltinProfilePlugins(product, { manifestPath: MANIFEST_PATH, runInstall: fake.install, log: () => {} })
     const profileDir = profileDirOf(product)
     const manifestPath = join(profileDir, 'package.json')

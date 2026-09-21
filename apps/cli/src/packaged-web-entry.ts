@@ -4,6 +4,10 @@
  * profile module fallback can symlink real packages. A first extra argument
  * that names an existing .js/.cjs/.mjs file is treated as a Node script so
  * a host that spawn()s this executable with a worker path behaves like node.
+ * Windows ACL confinement uses that script path (`…/runner.js`) as argv[1];
+ * dropping it would leave only `--workspace` and fall through to the GUI
+ * single-instance guest path, which exits 0. `DSH_PTC_RUNTIME_NODE=1` with no
+ * script extra imports the PTC Node bootstrap instead of claiming the GUI lock.
  * CLI heads such as `plugin` and `--profile` import on-disk `lib/bin.js`
  * and call its exported `runCli()`. Dynamic import does not set
  * `import.meta.main`, so the CLI's self-executing guard never runs.
@@ -42,6 +46,13 @@ const PACKAGED_WEB_INVOCATION_STEMS = new Set(['dsh', 'dsh-web'])
 /** PATH token the Plugin Market's `dshArgv()` fallback spawns. */
 export const PACKAGED_MARKET_CLI_NAME = 'dsh'
 
+/**
+ * Private selector the PTC Node provider sets on a packaged `process.execPath`
+ * spawn. The extra argv is only the control-frame byte limit, which is not a
+ * script path, so the launcher must not treat that child as a GUI instance.
+ */
+export const PACKAGED_PTC_RUNTIME_NODE_ENV = 'DSH_PTC_RUNTIME_NODE'
+
 const MISSING_PACKAGED_FILE =
   'Keep this executable inside the built folder; do not copy the .exe alone.'
 
@@ -52,7 +63,6 @@ const PACKAGED_WEB_SCRIPT_EXTS = new Set(['.js', '.cjs', '.mjs'])
 const PACKAGED_WEB_LAUNCHER_BASENAMES = new Set([
   'packaged-web-launcher.cjs',
   'packaged-web-bin.js',
-  'runner.js',
 ])
 
 /**
@@ -153,7 +163,18 @@ export function packagedCliArgv(args: readonly string[]): string[] | undefined {
  * @returns true only for the GUI branch.
  */
 export function packagedWebShouldChdir(extra: readonly string[]): boolean {
-  return packagedCliArgv(extra) === undefined
+  return packagedCliArgv(extra) === undefined && !packagedPtcFrameLimitArg(extra)
+}
+
+/**
+ * Whether extra argv is only the PTC control-frame byte limit.
+ * A packaged spawn passes that number and no script path. Without the
+ * `DSH_PTC_RUNTIME_NODE` selector this would take the GUI guest path and exit 0.
+ * @param extra - extra argv after {@link extraPackagedArgv}.
+ * @returns true when the only extra is a positive integer frame limit.
+ */
+export function packagedPtcFrameLimitArg(extra: readonly string[]): boolean {
+  return extra.length === 1 && /^\d+$/u.test(extra[0] ?? '')
 }
 
 /**
@@ -210,7 +231,8 @@ export function withPackagedMarketCliArgv(execPath: string, argv: readonly strin
  * Drop the Node/SEA program slot, the invocation echo the SEA preserves in
  * the next slot (the token as typed — `dsh`, `dsh.exe`, or any absolute
  * spelling of the executable), the launcher file name, and `lib/bin.js`
- * when the market spawn()s this executable as a CLI entry.
+ * when the market spawn()s this executable as a CLI entry. A `runner.js`
+ * extra is a real worker (Windows ACL confinement) and is kept.
  * @param argv - `process.argv`.
  * @param launcherPath - path of the running launcher or on-disk entry.
  * @param execPath - `process.execPath`; injectable for tests.
@@ -321,4 +343,30 @@ export function withPackagedScriptArgv(
   extra: readonly string[],
 ): string[] {
   return [execPath, script, ...extra.slice(1)]
+}
+
+/**
+ * Whether this process is a packaged PTC Node worker rather than a GUI or CLI.
+ * @param env - process environment; production passes `process.env`.
+ * @returns true when the PTC provider selected the private packaged bootstrap.
+ */
+export function packagedPtcRuntimeRequested(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env[PACKAGED_PTC_RUNTIME_NODE_ENV] === '1'
+}
+
+/**
+ * Node-shaped argv for the packaged PTC bootstrap.
+ * The child reads the control-frame limit from `process.argv[2]`; a packaged
+ * spawn otherwise leaves only that number in extra argv.
+ * @param execPath - `process.execPath` of the packaged launcher.
+ * @param processEntry - resolved `@deepseek-ai/dsh-ptc-runtime-node/process` path.
+ * @param extra - extra argv after {@link extraPackagedArgv}; typically the limit.
+ * @returns `[execPath, processEntry, ...extra]`.
+ */
+export function withPackagedPtcArgv(
+  execPath: string,
+  processEntry: string,
+  extra: readonly string[],
+): string[] {
+  return [execPath, processEntry, ...extra]
 }

@@ -16,8 +16,10 @@
  * bundle entries are appended after the user's entries, missing dependency
  * specs are set to the pinned exact version, and a present-but-different spec
  * stays user-owned unless `refresh` opts in. When no manifest field changed
- * and every plugin already resolves from the profile, the step is a no-op that
- * skips pnpm entirely, so offline rebuilds stay offline.
+ * and every plugin already resolves from the profile at the pinned version, the
+ * step is a no-op that skips pnpm entirely, so offline rebuilds stay offline.
+ * A plugin that resolves at a different version is missing for this pass, so
+ * the install runs even when the manifest already names the pin.
  * @module scripts/build-builtin-profile-plugins
  */
 
@@ -234,9 +236,57 @@ export interface SeedResult {
   readonly conflicts: Readonly<Record<string, string>>
 }
 
-/** Whether the plugin package resolves from the profile's own node_modules. */
-function pluginResolvable(profileDir: string, name: string): boolean {
-  return existsSync(join(profileDir, 'node_modules', ...name.split('/'), 'package.json'))
+/**
+ * Read the installed `version` field of one plugin under the profile.
+ * @param profileDir - the profile directory that owns `node_modules`.
+ * @param name - npm package name.
+ * @returns the installed version, or `undefined` when the package is missing or unreadable.
+ */
+export function readInstalledPluginVersion(profileDir: string, name: string): string | undefined {
+  const packageJson = join(profileDir, 'node_modules', ...name.split('/'), 'package.json')
+  if (!existsSync(packageJson)) return undefined
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(packageJson, 'utf8'))
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return undefined
+    const version = (parsed as { version?: unknown }).version
+    return typeof version === 'string' && version !== '' ? version : undefined
+  } catch (error: unknown) {
+    // Ignore JSON parse failures from a truncated or non-JSON package.json so
+    // the seed reinstalls rather than reporting the pin as current.
+    void error
+    return undefined
+  }
+}
+
+/**
+ * Whether one builtin pin is already installed at the pinned version.
+ * Presence alone is not enough: a leftover tarball at an older version is
+ * the packaged-web rebuild case that otherwise reports "up to date".
+ * @param profileDir - the profile directory that owns `node_modules`.
+ * @param name - npm package name.
+ * @param version - the exact pin from the builtin manifest.
+ * @returns true only when the installed `version` field equals the pin.
+ */
+export function pluginInstalledAtPin(profileDir: string, name: string, version: string): boolean {
+  return readInstalledPluginVersion(profileDir, name) === version
+}
+
+/**
+ * Builtin pins that still need an install. A user-owned conflict is present
+ * enough; every other pin must sit at the pinned version.
+ * @param profileDir - the profile directory that owns `node_modules`.
+ * @param plugins - builtin name → pin.
+ * @param conflicts - name → user-owned spec kept by the merge.
+ * @returns names that are missing or at the wrong version.
+ */
+function pluginsNeedingInstall(
+  profileDir: string,
+  plugins: Readonly<Record<string, string>>,
+  conflicts: Readonly<Record<string, string>>,
+): string[] {
+  return Object.entries(plugins).filter(([name, pin]) => conflicts[name] !== undefined
+    ? readInstalledPluginVersion(profileDir, name) === undefined
+    : !pluginInstalledAtPin(profileDir, name, pin)).map(([name]) => name)
 }
 
 /**
@@ -301,13 +351,14 @@ export function planAllowBuildsAppend(
 /**
  * Seed one product directory's web profile with the builtin plugins. Creates
  * the profile skeleton on first run, merges the pinned plugins into the
- * manifest, installs them with pnpm when anything is missing, and verifies
- * every plugin resolves afterwards. Safe to run repeatedly: an up-to-date
- * profile makes this a no-op without touching the network.
+ * manifest, installs them with pnpm when anything is missing or sits at a
+ * different version than the pin, and verifies every plugin resolves at the
+ * pin afterwards. Safe to run repeatedly: an up-to-date profile makes this a
+ * no-op without touching the network.
  * @param productDir - the packaged product folder whose `.config` receives the profile.
  * @param options - see {@link SeedOptions}.
  * @returns what the pass changed.
- * @throws when the profile manifest is unreadable or a plugin fails to resolve after install.
+ * @throws when the profile manifest is unreadable or a plugin fails to resolve at the pin after install.
  */
 export async function seedBuiltinProfilePlugins(
   productDir: string,
@@ -336,7 +387,7 @@ export async function seedBuiltinProfilePlugins(
   }
 
   const changed = plan.manifest !== existing
-  const missingBefore = Object.keys(builtin.plugins).filter(name => !pluginResolvable(profileDir, name))
+  const missingBefore = pluginsNeedingInstall(profileDir, builtin.plugins, plan.conflicts)
   const allowBuildsChanged = dryRun
     ? false
     : applyAllowBuilds(profileDir, builtin.allowBuilds, log)
@@ -377,10 +428,10 @@ export async function seedBuiltinProfilePlugins(
   await runInstall(profileDir)
   healProfileVirtualStoreDir(profileDir)
 
-  const unresolved = Object.keys(builtin.plugins).filter(name => !pluginResolvable(profileDir, name))
+  const unresolved = pluginsNeedingInstall(profileDir, builtin.plugins, plan.conflicts)
   if (unresolved.length > 0) {
     throw new Error(
-      `${BIN}: builtin plugins did not resolve in ${profileDir} after install: ${unresolved.join(', ')}`,
+      `${BIN}: builtin plugins did not resolve at the pinned version in ${profileDir} after install: ${unresolved.join(', ')}`,
     )
   }
   log(`${BIN}: builtin plugins ready: ${Object.keys(builtin.plugins).join(', ')}`)
