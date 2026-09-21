@@ -14,7 +14,7 @@ import type {} from '@deepseek-ai/dsh-fs'
 import { snapshotJsonValue } from '@deepseek-ai/dsh-util-values'
 import { validateBindings } from './bindings.ts'
 import { JsonChannel } from './channel.ts'
-import { bootstrapArgs } from './launch.ts'
+import { bootstrapArgs, isPackagedPtcHost } from './launch.ts'
 import type { LaunchConfig } from './launch.ts'
 import { OutputLedger } from './output-ledger.ts'
 import { drainOutput } from './output-stream.ts'
@@ -218,7 +218,7 @@ export class NodePtcRuntime extends PtcRuntime {
       // Abort callbacks can settle execution before or during an awaited operation.
       // oxlint-disable-next-line typescript/no-unnecessary-condition
       if (settled) return await result.promise
-      const packaged = 'pkg' in process && this.config.bootstrapPath === undefined
+      const packaged = isPackagedPtcHost() && this.config.bootstrapPath === undefined
       const heapFlag = `--max-old-space-size=${this.config.maxOldGenerationSizeMb}`
       const argv = [executable, ...packaged ? [] : [heapFlag], ...bootstrapArgs(this.ctx.fs, this.config, this.config.maxMessageBytes)]
       confined = policy.mode === 'danger-full-access' ? undefined : await this.ctx.sandbox.confine(argv, { ...policy, mode: policy.mode }, signal)

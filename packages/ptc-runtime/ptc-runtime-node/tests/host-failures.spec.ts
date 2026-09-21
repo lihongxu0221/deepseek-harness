@@ -514,4 +514,22 @@ describe('Node runtime host failures', () => {
       else Object.defineProperty(process, 'pkg', prior)
     }
   })
+
+  it('selects the packaged bootstrap for a dsh-web host without process.pkg', async () => {
+    const h = await setup()
+    h.onBoot(() => { h.emit({ type: 'done' }) })
+    const launcher = 'D:\\dist\\dsh-web.exe'
+    const execPath = Object.getOwnPropertyDescriptor(process, 'execPath')
+    h.resolveExecutable.mockResolvedValue(launcher)
+    try {
+      Object.defineProperty(process, 'execPath', { configurable: true, value: launcher })
+      expect((await h.start()).error).toBeUndefined()
+      const spec = h.spawn.mock.calls[0]?.[0]
+      expect(spec?.env?.DSH_PTC_RUNTIME_NODE).toBe('1')
+      expect(spec?.argv).toEqual([launcher, '134217728'])
+    } finally {
+      if (execPath === undefined) Reflect.deleteProperty(process, 'execPath')
+      else Object.defineProperty(process, 'execPath', execPath)
+    }
+  })
 })

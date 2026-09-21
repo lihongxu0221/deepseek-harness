@@ -1,5 +1,5 @@
 /** Select source or built bootstrap assets in the mounted execution world. */
-import { dirname, resolve } from 'node:path'
+import { basename, dirname, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import type { FileSystem } from '@deepseek-ai/dsh-fs'
 
@@ -12,6 +12,19 @@ export interface LaunchConfig {
 }
 
 /**
+ * Whether this host is a packaged `dsh` / `dsh-web` executable.
+ * SEA builds may omit `process.pkg`; the stem matches
+ * `isPackagedLauncher` in subprocess-local.
+ * @param execPath - candidate executable; defaults to `process.execPath`.
+ * @returns true when PTC must set `DSH_PTC_RUNTIME_NODE` instead of GUI argv.
+ */
+export function isPackagedPtcHost(execPath: string = process.execPath): boolean {
+  if ('pkg' in process) return true
+  const stem = basename(execPath).toLowerCase().replace(/\.exe$/u, '')
+  return stem === 'dsh' || stem === 'dsh-web'
+}
+
+/**
  * Select explicit arguments without inheriting host loader or inspector flags.
  * @param fs - Filesystem mapping host bootstrap assets into the process world.
  * @param config - Optional preinstalled built bootstrap.
@@ -20,7 +33,7 @@ export interface LaunchConfig {
  */
 export function bootstrapArgs(fs: FileSystem, config: LaunchConfig, maxMessageBytes: number): string[] {
   if (config.bootstrapPath !== undefined) return [config.bootstrapPath, String(maxMessageBytes)]
-  if ('pkg' in process) return [String(maxMessageBytes)]
+  if (isPackagedPtcHost()) return [String(maxMessageBytes)]
   const mapped = (path: string): string => {
     const result = fs.processPathFromHostPath(path)
     if (result === undefined) throw new Error(`PTC runtime bootstrap is unavailable in the subprocess execution world: ${path}`)

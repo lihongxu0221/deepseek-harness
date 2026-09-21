@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest'
 import type { FileSystem } from '@deepseek-ai/dsh-fs'
-import { bootstrapArgs } from '../src/launch.ts'
+import { bootstrapArgs, isPackagedPtcHost } from '../src/launch.ts'
 
 it('uses an explicit installed bootstrap without pretending it maps the host file', () => {
   const fs = { processPathFromHostPath: () => { throw new Error('must not map') } } as unknown as FileSystem
@@ -10,6 +10,13 @@ it('uses an explicit installed bootstrap without pretending it maps the host fil
 it('fails when the execution world cannot read the source bootstrap', () => {
   const fs = { processPathFromHostPath: () => undefined } as unknown as FileSystem
   expect(() => bootstrapArgs(fs, {}, 2048)).toThrow('unavailable in the subprocess execution world')
+})
+
+it('treats packaged dsh and dsh-web stems as PTC hosts without process.pkg', () => {
+  expect(isPackagedPtcHost('D:\\dist\\dsh-web.exe')).toBe(true)
+  expect(isPackagedPtcHost('D:\\dist\\dsh.exe')).toBe(true)
+  expect(isPackagedPtcHost('/usr/local/bin/dsh-web')).toBe(true)
+  expect(isPackagedPtcHost('C:\\Program Files\\nodejs\\node.exe')).toBe(false)
 })
 
 it('selects the private packaged bootstrap through the existing executable', () => {
