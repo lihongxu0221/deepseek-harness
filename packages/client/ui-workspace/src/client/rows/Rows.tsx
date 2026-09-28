@@ -2,8 +2,8 @@
  * Workspace browser tree row components (figma Cell set 14:3080): pure presentational —
  * all data and callbacks arrive via props. Hover swaps (folder->chevron,
  * time->ellipsis, action buttons) are CSS-only, and a session row's clipped
- * title marquees programmatically while the row is hovered. Workspace row
- * menus are visual-only except Rename/Delete. A Session row's "..." menu and
+ * title marquees programmatically while the row is hovered. The workspace
+ * row menu keeps Edit project, Remove folder, Pin, Rename, and Delete. A Session row's "..." menu and
  * its hover buttons are the `sidebar.workspaces.session.menu.item` and
  * `sidebar.workspaces.session.row.action` lists, rendered through the
  * browser's `renderSlot` with the menu's open state as the occurrence's hook
@@ -158,17 +158,36 @@ function createdLabel(createdAt: number, t: RowTranslate): string {
 }
 
 /** Hover-card body: workspace title, display directory path, absolute creation time. */
-function WorkspaceHoverContent({ label, cwd, createdAt, t }: {
+function WorkspaceHoverContent({ label, cwd, createdAt, pinned = false, onPin, onEdit, t }: {
   label: string
   cwd: string | undefined
   createdAt: number
+  pinned?: boolean
+  onPin?: (() => void) | undefined
+  onEdit?: (() => void) | undefined
   t: RowTranslate
 }) {
   return (
     <div className={css.hoverContent}>
       <div className={css.hoverTitle}>{label}</div>
-      <div className={css.hoverPath}>{cwd}</div>
+      {onPin !== undefined && (
+        <button
+          type="button"
+          className={clsx(css.hoverPin, pinned && css.hoverPinActive)}
+          aria-label={pinned ? t('hover.unpin') : t('hover.pin')}
+          aria-pressed={pinned}
+          onClick={onPin}
+        >
+          <IconPinFillRegular size={14} />
+        </button>
+      )}
+      {cwd !== undefined && <div className={css.hoverPath}>{cwd}</div>}
       <div className={css.hoverTime}>{createdLabel(createdAt, t)}</div>
+      {onEdit !== undefined && (
+        <button type="button" className={css.hoverEdit} onClick={onEdit}>
+          {t('menu.editProject')}
+        </button>
+      )}
     </div>
   )
 }
@@ -223,7 +242,13 @@ export function ProjectRowItem({ group, containsCurrentDescendant = false, onTog
   onToggle: () => void
   onCreate: () => void
   /** Real-Workspace actions; absent for the ungrouped bucket (no menu shown). */
-  actions?: { rename: () => void; delete: () => void } | undefined
+  actions?: {
+    rename: () => void
+    delete: () => void
+    edit?: () => void
+    removeFolder?: (path: string) => void
+    pin?: () => void
+  } | undefined
   /** Present only for real Workspace rows in the grouped view. */
   drag?: WorkspaceRowDragProps | undefined
   /** Host account home; POSIX home-rooted hover paths display as `~`. */
@@ -235,7 +260,19 @@ export function ProjectRowItem({ group, containsCurrentDescendant = false, onTog
   const label = row.workspaceId === undefined ? t('group.ungrouped') : row.label
   const active = containsCurrentDescendant || (group.expanded && group.containsCurrent)
   const [menuOpen, setMenuOpen] = useState(false)
+  const extraFolders = group.folders ?? []
   const workspaceMenuItems = [
+    ...(actions?.edit === undefined ? [] : [{ id: 'edit', label: t('menu.editProject'), icon: <IconEditOutlineRegular /> }]),
+    ...(actions?.removeFolder === undefined || extraFolders.length === 0
+      ? []
+      : [{
+        id: 'remove-folder',
+        label: t('menu.removeFolder'),
+        submenu: extraFolders.map(folder => ({ id: `remove:${folder}`, label: folder })),
+      }]),
+    ...(actions?.pin === undefined
+      ? []
+      : [{ id: 'pin', label: t(group.pinned ? 'hover.unpin' : 'hover.pin'), icon: <IconPinFillRegular /> }]),
     { id: 'rename', label: t('rename'), icon: <IconEditOutlineRegular /> },
     { id: 'delete', label: t('delete.workspace'), icon: <IconTrashOutlineRegular />, danger: true },
   ]
@@ -273,9 +310,21 @@ export function ProjectRowItem({ group, containsCurrentDescendant = false, onTog
             items={workspaceMenuItems}
             onSelect={(id) => {
               setMenuOpen(false)
+              if (id === 'edit') {
+                actions.edit?.()
+                return
+              }
+              if (id === 'pin') {
+                actions.pin?.()
+                return
+              }
+              if (id.startsWith('remove:')) {
+                actions.removeFolder?.(id.slice('remove:'.length))
+                return
+              }
               // Unknown ids leave before the dispatch: a future menu row must
               // not inherit the destructive branch as an else fallback.
-              /* v8 ignore next -- Menu can emit only the rename and delete rows supplied above. */
+              /* v8 ignore next -- Menu emits only the rows this menu built. */
               if (id !== 'rename' && id !== 'delete') return
               if (id === 'rename') actions.rename()
               else actions.delete()
@@ -317,6 +366,9 @@ export function ProjectRowItem({ group, containsCurrentDescendant = false, onTog
         label={row.label}
         cwd={row.cwd === undefined ? undefined : abbreviateHomePath(row.cwd, home)}
         createdAt={row.createdAt}
+        pinned={row.pinned}
+        onPin={actions?.pin}
+        onEdit={actions?.edit}
         t={t}
       />}
       openDelayMs={800}
@@ -542,12 +594,14 @@ export function SearchResultItem({ result, currentId, onOpen, onUnarchive, t }: 
  * @returns the session row.
  */
 export function SessionNodeItem({
-  node, currentId, now, onOpen, onRenameRequest, renderSlot, onReveal, drag, t,
+  node, currentId, now, onOpen, onRenameRequest, renderSlot, onReveal, drag, rowKey, t,
 }: {
   node: SessionNode
   currentId: string | undefined
   now: number
   onOpen: (id: SessionNode['id']) => void
+  /** Stable animation key when the same Session also renders in another section. */
+  rowKey?: string
   /** Open the rename dialog from a title double-click (id + current title). */
   onRenameRequest: (id: SessionNode['id'], currentTitle: string) => void
   /** Scroll this row into view after search navigation, then acknowledge it. */
@@ -586,7 +640,7 @@ export function SessionNodeItem({
   const ownRow = (
     <div
       ref={rowRef}
-      data-row-key={`session:${node.id}`}
+      data-row-key={rowKey ?? `session:${node.id}`}
       className={clsx(
         css.sessionRow, selected && css.selected, menuOpen && css.menuOpen,
         row.archived && css.archived,

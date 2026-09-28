@@ -71,6 +71,8 @@ export interface GroupNode {
   /** Backing Workspace id; absent only for the ungrouped bucket. */
   workspaceId: WorkspaceId | undefined
   cwd: string | undefined
+  /** Extra directories besides the primary path; empty for the ungrouped bucket. */
+  folders: readonly string[]
   /** Workspace creation time (epoch ms); absent only for the ungrouped bucket. */
   createdAt: number | undefined
   label: string
@@ -79,6 +81,8 @@ export interface GroupNode {
   expanded: boolean
   /** The group contains the selected session (active folder tint; supplied here so the renderer never scans). */
   containsCurrent: boolean
+  /** True when this Workspace sits in the browser-local pinned prefix. */
+  pinned: boolean
   /** Visible session rows (empty while the group is folded). */
   sessions: readonly SessionNode[]
 }
@@ -111,12 +115,23 @@ export interface TreeView {
   expandedGroups: readonly string[]
   /** Browser-local order for Sessions without a backing Workspace account. */
   ungroupedOrder?: readonly string[]
+  /** Workspace ids kept at the front of the grouped list, in pin order. */
+  pinnedWorkspaceIds?: readonly string[]
+}
+
+/** Workspace row plus extra folders the feed may project beside the typed view. */
+type ListedWorkspace = WorkspaceView & { readonly folders?: readonly string[] }
+
+/** Extra folders only. The published view omits the field; the feed still projects it. */
+function listedFolders(workspace: ListedWorkspace): readonly string[] {
+  return workspace.folders ?? []
 }
 
 interface Group {
   key: string
   workspaceId: WorkspaceId | undefined
   cwd: string | undefined
+  folders: readonly string[]
   createdAt: number | undefined
   label: string
   sessions: SessionSummary[]
@@ -301,11 +316,12 @@ function buildGroup(
   key: string,
   workspaceId: WorkspaceId | undefined,
   cwd: string | undefined,
+  folders: readonly string[],
   createdAt: number | undefined,
   label: string,
   members: readonly SessionSummary[],
 ): Group {
-  return { key, workspaceId, cwd, createdAt, label, sessions: [...members] }
+  return { key, workspaceId, cwd, folders, createdAt, label, sessions: [...members] }
 }
 
 /** Apply a stored Ungrouped order and append newly loose Sessions by recency. */
@@ -333,7 +349,7 @@ function orderedUngrouped(
  */
 function groupByWorkspace(
   list: SessionListState,
-  workspaces: readonly WorkspaceView[],
+  workspaces: readonly ListedWorkspace[],
   archived: ReadonlySet<SessionId>,
   archivedFilter: ArchivedFilter,
   ungroupedOrder: readonly string[] | undefined,
@@ -354,7 +370,7 @@ function groupByWorkspace(
     // a Workspace without archived Sessions contributes no group.
     if (archivedFilter === 'only' && members.length === 0) continue
     groups.push(buildGroup(
-      workspace.workspaceId, workspace.workspaceId, workspace.path,
+      workspace.workspaceId, workspace.workspaceId, workspace.path, listedFolders(workspace),
       Date.parse(workspace.createdAt), workspace.title, members,
     ))
   }
@@ -367,6 +383,7 @@ function groupByWorkspace(
       UNGROUPED_KEY,
       undefined,
       undefined,
+      [],
       undefined,
       '',
       orderedUngrouped(stray, ungroupedOrder, list.byId),
@@ -435,7 +452,7 @@ function sessionNode(
  */
 export function deriveGroups(
   list: SessionListState,
-  workspaces: readonly WorkspaceView[],
+  workspaces: readonly ListedWorkspace[],
   rowState: SessionRowState,
   statuses: SessionStatuses,
   view: TreeView,
@@ -447,18 +464,34 @@ export function deriveGroups(
   const currentGroup = current === undefined
     ? undefined
     : owningGroupKey(workspaces, current)
+  const pinnedIds = view.pinnedWorkspaceIds ?? []
+  const pinnedSet = new Set(pinnedIds)
+  const grouped = groupByWorkspace(list, workspaces, archived, rowState.archivedFilter, view.ungroupedOrder)
+  const byKey = new Map(grouped.map(group => [group.key, group]))
+  const ordered: Group[] = []
+  for (const id of pinnedIds) {
+    const group = byKey.get(id)
+    if (group === undefined) continue
+    ordered.push(group)
+    byKey.delete(id)
+  }
+  for (const group of grouped) {
+    if (byKey.has(group.key)) ordered.push(group)
+  }
   const groups: GroupNode[] = []
-  for (const g of groupByWorkspace(list, workspaces, archived, rowState.archivedFilter, view.ungroupedOrder)) {
+  for (const g of ordered) {
     const expanded = expandedGroups.has(g.key)
     groups.push({
       key: g.key,
       workspaceId: g.workspaceId,
       cwd: g.cwd,
+      folders: g.folders,
       createdAt: g.createdAt,
       label: g.label,
       sessionCount: g.sessions.length,
       expanded,
       containsCurrent: g.key === currentGroup,
+      pinned: g.workspaceId !== undefined && pinnedSet.has(g.workspaceId),
       sessions: expanded
         ? sectionMembers(g.sessions, pinned, archived)
           .map(session => sessionNode(session, list, statuses, pinned, archived))

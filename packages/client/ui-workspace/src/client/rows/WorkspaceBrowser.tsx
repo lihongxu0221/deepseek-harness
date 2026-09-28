@@ -21,7 +21,7 @@ import {
   IconChevronsUpDownOutlineRegular, IconClockOutlineRegular, IconCloseFillRegular,
   IconFlatListOutlineRegular, IconFolderCloseRegular, IconProjectAddOutlineRegular,
   IconQueueOutlineRegular, IconSearchOutlineRegular, IconSlidersTwoOutlineRegular,
-  IconWorkspaceTreeOutlineRegular, Menu, Modal, Toast, Tooltip,
+  IconTriangleRightFillRegular, IconWorkspaceTreeOutlineRegular, Menu, Modal, Toast, Tooltip,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type {
   SessionListState, SessionSearchResultItem,
@@ -34,13 +34,19 @@ import type { WorkspaceBrowserProps } from '../contract/slots.ts'
 import type { ArchivedFilter, GroupNode, SessionNode, SessionOrderBy, SessionRowState } from '../tree.ts'
 import {
   deriveFlat, deriveGroups, deriveSearchResults, orderByRecency, owningGroupKey, owningParentFolder,
-  pinCurrentBlank, reconcileManualOrder, sessionMemberIds, UNGROUPED_KEY,
+  pinCurrentBlank, reconcileManualOrder, sessionMemberIds, UNGROUPED_KEY, visibleSessionIds,
 } from '../tree.ts'
 import { ProjectRowItem, SearchResultItem, SessionNodeItem } from './Rows.tsx'
 import { AnimatedRows } from './AnimatedRows.tsx'
 import { FLAT_SESSION_ORDER_KEY, type SessionGroupBy } from '../stores.ts'
+import { WorkspaceEditDialog } from '../WorkspaceEditDialog.tsx'
 import { WorkspacePickFlow } from '../WorkspacePicker.tsx'
 import css from './WorkspaceBrowser.module.css'
+
+/** Extra folders the feed projects beside the published Workspace view. */
+function workspaceExtraFolders(workspace: WorkspaceView & { readonly folders?: readonly string[] }): readonly string[] {
+  return workspace.folders ?? []
+}
 
 /**
  * Column slide length (--ds-transition-duration-slow): rail-search focus waits it out —
@@ -255,6 +261,21 @@ type SessionTreeProps = Pick<
   onDeleteRequest: (workspaceId: WorkspaceId, currentTitle: string) => void
   /** Open the rename dialog from a row title double-click. */
   onSessionRenameRequest: (sessionId: SessionNode['id'], currentTitle: string) => void
+  /** Browser-local pinned Workspace ids, in pin order. */
+  pinnedWorkspaceIds: readonly string[]
+  /** Pin or unpin a Workspace in the grouped list. */
+  pinWorkspace: (workspaceId: string) => void
+  unpinWorkspace: (workspaceId: string) => void
+  /** Whether the Workspaces section is expanded. */
+  workspacesOpen: boolean
+  setWorkspacesOpen: (open: boolean) => void
+  /** Whether the Recents section is expanded. */
+  recentsOpen: boolean
+  setRecentsOpen: (open: boolean) => void
+  /** Open the browser-owned project editor. */
+  onEditRequest: (workspaceId: WorkspaceId) => void
+  /** Drop one extra folder from this Workspace. */
+  onRemoveFolderRequest: (workspaceId: WorkspaceId, path: string) => void
   /** One Session chosen from search that must be exposed and scrolled into view. */
   revealSessionId?: SessionId | undefined
   /** Acknowledge that the chosen Session row has been revealed. */
@@ -283,6 +304,9 @@ function SessionTree({
   rowState, onLeaveArchivedOnly,
   workspaceReady, animationResetKey, usePanelInfo,
   onRenameRequest, onDeleteRequest, onSessionRenameRequest,
+  pinnedWorkspaceIds, pinWorkspace, unpinWorkspace,
+  workspacesOpen, setWorkspacesOpen, recentsOpen, setRecentsOpen,
+  onEditRequest, onRemoveFolderRequest,
   renderSlot,
   insertWorkspaceBefore,
   nestWorkspaces, groupExpansion, setGroupExpanded,
@@ -337,9 +361,20 @@ function SessionTree({
     () => deriveGroups(list, workspaces, rowState, statuses, {
       expandedGroups,
       ungroupedOrder: ungroupedSessionIds,
+      pinnedWorkspaceIds,
     }),
-    [list, workspaces, rowState, statuses, expandedGroups, ungroupedSessionIds],
+    [list, workspaces, rowState, statuses, expandedGroups, pinnedWorkspaceIds, ungroupedSessionIds],
   )
+  const recents = useMemo(
+    () => deriveFlat(
+      list,
+      orderByRecency(visibleSessionIds(list, rowState.archivedSessionIds, rowState.archivedFilter), list.byId),
+      rowState,
+      statuses,
+    ),
+    [list, rowState, statuses],
+  )
+  const [recentsLimit, setRecentsLimit] = useState(COLLAPSED_SESSION_LIMIT)
   useEffect(() => {
     for (let key = revealGroup; key !== undefined; key = parents.get(key)) {
       if (groupExpansion[key] === false || (key === revealGroup && groupExpansion[key] !== true)) {
@@ -411,7 +446,7 @@ function SessionTree({
     && workspaceDrag?.over?.id === rootGroups[0].workspaceId
     && workspaceDrag.over.half === 'before'
 
-  const rowKeys: string[] = groups.length === 0 ? ['empty'] : []
+  const rowKeys: string[] = []
   const renderGroup = (group: GroupNode, depth: number): ReactNode => {
     const workspaceId = group.workspaceId
     const children = childrenByParent.get(group.key) ?? []
@@ -500,6 +535,11 @@ function SessionTree({
           home={home}
           t={t}
           onToggle={() => {
+            if (group.workspaceId !== undefined && group.sessionCount === 0 && children.length === 0) {
+              setGroupExpanded(group.key, true)
+              startSession(group.workspaceId)
+              return
+            }
             if (group.expanded) {
               setSessionLimits(limits => ({ ...limits, [group.key]: COLLAPSED_SESSION_LIMIT }))
             }
@@ -515,13 +555,27 @@ function SessionTree({
           actions={group.workspaceId === undefined
             ? undefined
             : {
+              edit: () => {
+                /* v8 ignore next -- narrowing guard: the actions object exists only for real-workspace groups. */
+                if (group.workspaceId !== undefined) onEditRequest(group.workspaceId)
+              },
               rename: () => {
-              /* v8 ignore next -- narrowing guard: the actions object exists only for real-workspace groups. */
+                /* v8 ignore next -- narrowing guard: the actions object exists only for real-workspace groups. */
                 if (group.workspaceId !== undefined) onRenameRequest(group.workspaceId, group.label)
               },
               delete: () => {
-              /* v8 ignore next -- narrowing guard: the actions object exists only for real-workspace groups. */
+                /* v8 ignore next -- narrowing guard: the actions object exists only for real-workspace groups. */
                 if (group.workspaceId !== undefined) onDeleteRequest(group.workspaceId, group.label)
+              },
+              removeFolder: (path) => {
+                /* v8 ignore next -- narrowing guard: the actions object exists only for real-workspace groups. */
+                if (group.workspaceId !== undefined) onRemoveFolderRequest(group.workspaceId, path)
+              },
+              pin: () => {
+                /* v8 ignore next -- narrowing guard: the actions object exists only for real-workspace groups. */
+                if (group.workspaceId === undefined) return
+                if (group.pinned) unpinWorkspace(group.workspaceId)
+                else pinWorkspace(group.workspaceId)
               },
             }}
         />
@@ -604,21 +658,88 @@ function SessionTree({
     )
   }
 
-  const groupRows = rootGroups.map(group => renderGroup(group, 0))
+  const visibleRecents = recentsOpen ? collapsedSessionRows(recents, recentsLimit) : { rows: [], hiddenCount: recents.length }
+  const recentsFullyShown = visibleRecents.hiddenCount === 0
+  const groupRows = workspacesOpen ? rootGroups.map(group => renderGroup(group, 0)) : null
+  if (workspacesOpen && groups.length === 0) rowKeys.unshift('empty')
+  if (recentsOpen) {
+    for (const node of visibleRecents.rows) rowKeys.push(`recent:${node.id}`)
+    if (visibleRecents.hiddenCount > 0) rowKeys.push('recent-overflow')
+  }
   return (
     <div className={clsx(css.treeBody, css.wide)}>
-      {workspaceDropAtListStart && <span className={css.listTopDropIndicator} aria-hidden="true" />}
+      {workspaceDropAtListStart && workspacesOpen && <span className={css.listTopDropIndicator} aria-hidden="true" />}
       <AnimatedRows
-        className={clsx(css.list, workspaceDropAtListStart && css.listTopDropActive)}
+        className={clsx(css.list, workspaceDropAtListStart && workspacesOpen && css.listTopDropActive)}
         label={t('section.sessions')}
         rowKeys={rowKeys}
         ready={list.phase === 'ready' && workspaceReady && !nativeDragActive}
-        resetKey={JSON.stringify([animationResetKey, sessionLimits])}
+        resetKey={JSON.stringify([animationResetKey, sessionLimits, workspacesOpen, recentsOpen, recentsLimit])}
       >
-        {groups.length === 0 && (
-          <EmptySessions rowState={rowState} onLeaveArchivedOnly={onLeaveArchivedOnly} t={t} />
-        )}
-        {groupRows}
+        <div className={css.treeSection}>
+          <button
+            type="button"
+            className={css.treeSectionHeader}
+            aria-expanded={workspacesOpen}
+            aria-label={t('section.workspaces.toggle')}
+            onClick={() => { setWorkspacesOpen(!workspacesOpen) }}
+          >
+            <IconTriangleRightFillRegular className={clsx(css.treeSectionArrow, workspacesOpen && css.treeSectionArrowOpen)} />
+            {t('section.workspaces')}
+          </button>
+          {workspacesOpen && groups.length === 0 && (
+            rowState.archivedFilter === 'only'
+              ? <EmptySessions rowState={rowState} onLeaveArchivedOnly={onLeaveArchivedOnly} t={t} />
+              : <div className={css.empty} data-row-key="empty">{t('empty.workspaces')}</div>
+          )}
+          {groupRows}
+        </div>
+        <div className={css.treeSection}>
+          <button
+            type="button"
+            className={css.treeSectionHeader}
+            aria-expanded={recentsOpen}
+            aria-label={t('section.recents.toggle')}
+            onClick={() => {
+              if (recentsOpen) setRecentsLimit(COLLAPSED_SESSION_LIMIT)
+              setRecentsOpen(!recentsOpen)
+            }}
+          >
+            <IconTriangleRightFillRegular className={clsx(css.treeSectionArrow, recentsOpen && css.treeSectionArrowOpen)} />
+            {t('section.recents')}
+          </button>
+          {recentsOpen && recents.length === 0 && (
+            <div className={css.empty}>{t('empty.recents')}</div>
+          )}
+          {recentsOpen && visibleRecents.rows.map(node => (
+            <SessionNodeItem
+              key={node.id}
+              node={node}
+              currentId={current}
+              now={now}
+              onOpen={open}
+              onRenameRequest={onSessionRenameRequest}
+              renderSlot={renderSlot}
+              rowKey={`recent:${node.id}`}
+              t={t}
+            />
+          ))}
+          {recentsOpen && visibleRecents.hiddenCount > 0 && (
+            <button
+              type="button"
+              className={css.sessionOverflowButton}
+              data-row-key="recent-overflow"
+              aria-expanded={recentsFullyShown}
+              onClick={() => {
+                setRecentsLimit(limit => visibleRecents.hiddenCount <= COLLAPSED_SESSION_LIMIT
+                  ? Infinity
+                  : limit + COLLAPSED_SESSION_LIMIT)
+              }}
+            >
+              {t('sessions.expand', { n: visibleRecents.hiddenCount })}
+            </button>
+          )}
+        </div>
       </AnimatedRows>
       <span className={css.fade} />
     </div>
@@ -851,6 +972,9 @@ export function WorkspaceBrowser({
   insertWorkspaceBefore,
   unarchiveSession,
   createWorkspace,
+  addFolder,
+  removeFolder,
+  setPrimaryFolder,
   searchSessions,
   searchResultLimit,
   useDirectoryFlow,
@@ -895,6 +1019,9 @@ export function WorkspaceBrowser({
   // Persisted view blobs written before the archived filter existed rehydrate
   // without the field; they read as the default hide-archived view.
   const archivedFilter = useStore(s => s.archivedFilter ?? 'default')
+  const pinnedWorkspaceIds = useStore(s => Array.isArray(s.pinnedWorkspaceIds) ? s.pinnedWorkspaceIds : [])
+  const workspacesOpen = useStore(s => s.workspacesOpen !== false)
+  const recentsOpen = useStore(s => s.recentsOpen !== false)
   const groupExpansion = useStore(s => s.groupExpansion)
   const sessionOrderByAccount = useStore(s => s.sessionOrderByAccount)
   // Archived sessions are not openable: the row stays visible under the
@@ -1204,6 +1331,107 @@ export function WorkspaceBrowser({
     })
   }
 
+  const [addFolderTarget, setAddFolderTarget] = useState<WorkspaceId | null>(null)
+  const addFolderTargetRef = useRef<WorkspaceId | null>(null)
+  const [editTarget, setEditTarget] = useState<{
+    workspaceId: WorkspaceId
+    currentTitle: string
+    path: string
+    originalFolders: readonly string[]
+  } | null>(null)
+  const [editTitle, setEditTitle] = useState('')
+  const [editPath, setEditPath] = useState('')
+  const [editFolders, setEditFolders] = useState<string[]>([])
+  const [editSaving, setEditSaving] = useState(false)
+  const [editError, setEditError] = useState<string | null>(null)
+  const editTrimmed = editTitle.trim()
+  const editDuplicate = editTarget !== null && editTrimmed !== '' && editTrimmed !== editTarget.currentTitle
+    && storedWorkspaces.some(workspace =>
+      workspace.workspaceId !== editTarget.workspaceId && workspace.title === editTrimmed)
+  const editorPickingFolder = addFolderTarget !== null
+  const closeEdit = () => {
+    if (editSaving || editorPickingFolder) return
+    setEditTarget(null)
+    setEditError(null)
+    addFolderTargetRef.current = null
+    setAddFolderTarget(null)
+  }
+  const confirmEdit = () => {
+    if (editTarget === null || editSaving || editorPickingFolder || editTrimmed === '' || editDuplicate) return
+    const workspaceId = editTarget.workspaceId
+    const originalOwned = [editTarget.path, ...editTarget.originalFolders]
+    const nextOwned = [editPath, ...editFolders]
+    const toAdd = nextOwned.filter(folder => !originalOwned.includes(folder))
+    const toRemove = originalOwned.filter(folder => !nextOwned.includes(folder))
+    const renameNeeded = editTrimmed !== editTarget.currentTitle
+    const primaryNeeded = editPath !== editTarget.path
+    if (!renameNeeded && !primaryNeeded && toAdd.length === 0 && toRemove.length === 0) {
+      setEditTarget(null)
+      addFolderTargetRef.current = null
+      setAddFolderTarget(null)
+      return
+    }
+    setEditSaving(true)
+    setEditError(null)
+    void (async () => {
+      try {
+        let snapshot = editTarget
+        const rememberHost = (view: WorkspaceView & { folders?: readonly string[] }, added?: string) => {
+          const folders = view.folders ?? (added === undefined
+            ? snapshot.originalFolders
+            : [...snapshot.originalFolders, added].filter(folder => folder !== view.path))
+          snapshot = {
+            workspaceId: snapshot.workspaceId,
+            currentTitle: view.title,
+            path: view.path,
+            originalFolders: [...folders],
+          }
+          setEditTarget(snapshot)
+        }
+        if (renameNeeded) {
+          await renameWorkspace(workspaceId, editTrimmed)
+          rememberHost({
+            workspaceId,
+            path: snapshot.path,
+            title: editTrimmed,
+            sessionIds: [],
+            createdAt: '',
+            updatedAt: '',
+            folders: snapshot.originalFolders,
+          })
+        }
+        for (const folder of toAdd) rememberHost(await addFolder(workspaceId, folder), folder)
+        if (primaryNeeded) {
+          const view = await setPrimaryFolder(workspaceId, editPath)
+          const projected = workspaceExtraFolders(view)
+          rememberHost({
+            ...view,
+            folders: projected.length > 0 || snapshot.originalFolders.length === 0
+              ? projected
+              : [snapshot.path, ...snapshot.originalFolders.filter(folder => folder !== editPath)],
+          })
+        }
+        for (const folder of toRemove) {
+          const view = await removeFolder(workspaceId, folder)
+          const projected = workspaceExtraFolders(view)
+          rememberHost({
+            ...view,
+            folders: projected.length > 0 || snapshot.originalFolders.length === 0
+              ? projected.filter(item => item !== folder)
+              : snapshot.originalFolders.filter(item => item !== folder && item !== view.path),
+          })
+        }
+        setEditSaving(false)
+        setEditTarget(null)
+        addFolderTargetRef.current = null
+        setAddFolderTarget(null)
+      } catch (reason) {
+        setEditSaving(false)
+        setEditError(reason instanceof Error ? reason.message : String(reason))
+      }
+    })()
+  }
+
   return (
     <div className={clsx(css.root, !wide && css.rail)}>
       <div className={css.sectionHeader}>
@@ -1397,6 +1625,28 @@ export function WorkspaceBrowser({
                 rowState={rowState}
                 onLeaveArchivedOnly={leaveArchivedOnly}
                 startSession={startSession}
+                pinnedWorkspaceIds={pinnedWorkspaceIds}
+                pinWorkspace={actions.pinWorkspace}
+                unpinWorkspace={actions.unpinWorkspace}
+                workspacesOpen={workspacesOpen}
+                setWorkspacesOpen={actions.setWorkspacesOpen}
+                recentsOpen={recentsOpen}
+                setRecentsOpen={actions.setRecentsOpen}
+                onEditRequest={(workspaceId) => {
+                  const workspace = storedWorkspaces.find(item => item.workspaceId === workspaceId)
+                  if (workspace === undefined) return
+                  setEditTarget({
+                    workspaceId,
+                    currentTitle: workspace.title,
+                    path: workspace.path,
+                    originalFolders: workspace.folders ?? [],
+                  })
+                  setEditTitle(workspace.title)
+                  setEditPath(workspace.path)
+                  setEditFolders([...(workspace.folders ?? [])])
+                  setEditError(null)
+                }}
+                onRemoveFolderRequest={(workspaceId, path) => { void removeFolder(workspaceId, path) }}
                 open={guardedOpen}
                 insertWorkspaceBefore={insertWorkspaceBefore}
                 revealSessionId={revealSessionId}

@@ -4,7 +4,7 @@
  * stay local until Save.
  */
 import {
-  Button, IconCloseOutline16, IconFolderClose16, IconProjectAddOutline16, Input, Modal,
+  Button, IconCloseOutlineRegular, IconFolderCloseRegular, IconProjectAddOutlineRegular, Input, Modal,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { WorkspaceBrowserProps } from './contract/slots.ts'
 import css from './WorkspaceEditDialog.module.css'
@@ -87,7 +87,7 @@ export function WorkspaceEditDialog({
       )}
     >
       <Input
-        icon={<IconFolderClose16 />}
+        icon={<IconFolderCloseRegular />}
         {...(css.name === undefined ? {} : { className: css.name })}
         value={title}
         aria-label={t('field.projectName')}
@@ -105,7 +105,7 @@ export function WorkspaceEditDialog({
       <div className={css.section}>{t('edit.project.sources')}</div>
       <ul className={css.folders}>
         <li className={css.folderRow}>
-          <IconFolderClose16 />
+          <IconFolderCloseRegular />
           <span className={css.folderName} title={path}>{folderLabel(path)}</span>
           <span className={css.primary}>{t('edit.project.primary')}</span>
           <button
@@ -114,12 +114,12 @@ export function WorkspaceEditDialog({
             aria-label={t('edit.project.removeFolder.aria', { name: folderLabel(path) })}
             disabled
           >
-            <IconCloseOutline16 size={14} />
+            <IconCloseOutlineRegular size={14} />
           </button>
         </li>
         {folders.map(folder => (
           <li className={css.folderRow} key={folder}>
-            <IconFolderClose16 />
+            <IconFolderCloseRegular />
             <span className={css.folderName} title={folder}>{folderLabel(folder)}</span>
             <button
               type="button"
@@ -136,7 +136,7 @@ export function WorkspaceEditDialog({
               disabled={busy}
               onClick={() => { onRemoveFolder(folder) }}
             >
-              <IconCloseOutline16 size={14} />
+              <IconCloseOutlineRegular size={14} />
             </button>
           </li>
         ))}
@@ -148,7 +148,7 @@ export function WorkspaceEditDialog({
           disabled={busy}
           onClick={onAddFolder}
         >
-          <IconProjectAddOutline16 />
+          <IconProjectAddOutlineRegular />
           {t('edit.project.addFolder')}
         </button>
       )}
