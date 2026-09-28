@@ -6,9 +6,9 @@
  * private paths and are deliberately new after a restart.
  *
  * Fail-closed: `add` throws on any grant failure and the caller disposes the
- * instance (revoking every path granted so far); `dispose` revokes every
- * revocable grant, leaves the standing workspace edits in place, and reports
- * every cleanup failure.
+ * instance (revoking every path granted so far); `revoke` drops one standing
+ * extra-folder ACE when that folder leaves the workspace; `dispose` revokes
+ * revocable paths and reports every cleanup failure.
  * @module @deepseek-ai/dsh-sandbox-windows-acl/grant
  */
 
@@ -110,6 +110,20 @@ export class AclWriteGrant {
   /** Every directory currently carrying the grant, in grant order. */
   get paths(): readonly string[] {
     return [...this.standingPaths, ...this.revocablePaths]
+  }
+
+  /**
+   * Remove the write ACE from one standing directory and drop it from this
+   * grant. The sandbox seam calls this for an extra folder that left the
+   * workspace; it never passes the primary root, which stays the reuse cache.
+   * An unknown or revocable path is a no-op. Fail-closed: a revoke error
+   * leaves the path recorded so a later call can retry.
+   * @param path - standing directory that should lose the ACE.
+   */
+  revoke(path: string): void {
+    if (!this.standingPaths.includes(path) || this.revocablePaths.includes(path)) return
+    revokeWrite(this.api, path, this.sidPtr)
+    this.standingPaths.splice(this.standingPaths.indexOf(path), 1)
   }
 
   /** Revoke every revocable grant (standing security descriptor edits stay) and free the SIDs; reports every cleanup failure. */

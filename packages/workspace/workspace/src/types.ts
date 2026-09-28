@@ -71,6 +71,14 @@ export interface Workspace {
    */
   readonly path: string
 
+  /**
+   * Extra canonical directories this workspace also owns. A path may be an
+   * extra folder of several workspaces and may also be another workspace's
+   * primary; only {@link path} is unique across the registry. Does not include
+   * {@link path}.
+   */
+  readonly folders: readonly string[]
+
   /** Display title. Defaults to the final path segment, or a filesystem root's own spelling; duplicates are allowed. */
   readonly title: string
 
@@ -96,6 +104,27 @@ export interface Workspace {
    * @returns resolution after durability.
    */
   setTitle(title: string): Promise<void>
+
+  /**
+   * Add an extra directory to this workspace.
+   * @param path - Existing directory to own, in any path spelling.
+   * @returns resolution after durability.
+   */
+  addFolder(path: string): Promise<void>
+
+  /**
+   * Remove an extra directory from this workspace. Removing {@link path} rejects.
+   * @param path - Extra folder to drop, in any path spelling.
+   * @returns resolution after durability.
+   */
+  removeFolder(path: string): Promise<void>
+
+  /**
+   * Make an owned extra folder the primary directory. The previous primary becomes an extra folder.
+   * @param path - Owned extra folder to promote, in any path spelling.
+   * @returns resolution after durability.
+   */
+  setPrimaryFolder(path: string): Promise<void>
 
   /**
    * Prepend a session to this workspace's candidate account. An already

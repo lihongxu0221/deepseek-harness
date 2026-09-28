@@ -14,7 +14,12 @@ import type { DomainGlobal, KvTable } from '@deepseek-ai/dsh-storage-domain'
 import { WorkspaceEntity } from './entity.ts'
 import type { WorkspaceEntityHost } from './entity.ts'
 
-export { WorkspaceMoveInvalidError } from './entity.ts'
+export {
+  WorkspaceFolderConflictError,
+  WorkspaceFolderPrimaryError,
+  WorkspaceFolderUnknownError,
+  WorkspaceMoveInvalidError,
+} from './entity.ts'
 import { defaultWorkspaceTitle, fullyQualifiedWorkspacePath, realpathNormalize } from './paths.ts'
 import { workspaceDomainSpec } from './spec.ts'
 import type { WorkspaceDomainState, WorkspaceRecord } from './spec.ts'

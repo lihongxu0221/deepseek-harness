@@ -28,14 +28,14 @@ const VIEWPORT_MARGIN = 8
  * @param props.inline - keep the anchor in prose; show a contained preview on hover or keyboard focus.
  * @param props.disabled - suppress opening; turning true dismisses an open card.
  * @param props.copyText - optional primary value copied by activation and
- * included in the card's accessible name.
+ * included in the card's accessible name. Nested buttons, links, and fields do not copy.
  * @param props.copyLabel - localized accessible activation-label prefix.
  * @param props.copiedLabel - localized visible success label.
  * @returns anchor wrapper with the conditional portaled card.
  */
 export function HoverCard({
   anchor, content, openDelayMs = 500, disabled = false,
-  copyText, copyLabel, copiedLabel, variant = 'compact', widthAnchorRef, inline = false,
+  copyText, copyLabel, copiedLabel, variant = 'compact', widthAnchorRef, inline = false, className,
 }: {
   anchor: ReactNode
   /** Inline media preview using the shared menu material and keyboard focus. */
@@ -45,6 +45,7 @@ export function HoverCard({
   disabled?: boolean
   variant?: 'compact' | 'preview'
   widthAnchorRef?: RefObject<HTMLElement | null>
+  className?: string
 } & ({ copyText?: string | undefined; copyLabel: string; copiedLabel: string } | {
   copyText?: undefined
   copyLabel?: string
@@ -226,7 +227,7 @@ export function HoverCard({
   const card = open && pos !== null && !suppressed && (
     <div
       ref={cardRef}
-      className={clsx(css.card, variant === 'preview' && css.preview, inline && css.media, copyable && css.copyable, copied && css.feedback)}
+      className={clsx(css.card, variant === 'preview' && css.preview, inline && css.media, copyable && css.copyable, copied && css.feedback, className)}
       data-closing={closing || undefined}
       style={{
         ...pos, minHeight: copied && copyHeightRef.current !== null ? copyHeightRef.current : undefined,
@@ -237,6 +238,7 @@ export function HoverCard({
       aria-label={copyable ? `${copyLabel}: ${copyText}` : undefined}
       onClick={copyable
         ? (e) => {
+          if ((e.target as HTMLElement).closest('button, a, input, textarea, select') !== null) return
           const selection = window.getSelection()
           if (selection !== null && !selection.isCollapsed) {
             for (let i = 0; i < selection.rangeCount; i += 1) {

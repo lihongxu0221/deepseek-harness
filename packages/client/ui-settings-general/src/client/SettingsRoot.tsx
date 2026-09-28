@@ -117,6 +117,23 @@ export function SettingsRoot(props: SettingsRootComponentProps) {
   const { open, activeId } = useStore(state => state)
   const shortcut = useShortcuts(rows => rows.find(row => row.id === 'settings.open'))
   const { close, openSection } = actions
+  const closePanel = useCallback(() => {
+    close()
+    if (window.location.hash === '#settings') {
+      const next = window.location.pathname + window.location.search
+      window.history.replaceState(null, '', next.length > 0 ? next : '/')
+    }
+  }, [close])
+  useEffect(() => {
+    if (window.location.hash === '#settings') actions.open()
+  }, [actions])
+  useEffect(() => {
+    const onHashChange = (): void => {
+      if (window.location.hash === '#settings') actions.open()
+    }
+    window.addEventListener('hashchange', onHashChange)
+    return () => { window.removeEventListener('hashchange', onHashChange) }
+  }, [actions])
   const [requestedOnboarding, setRequestedOnboarding] = useState<string | undefined>()
   const [completedOnboarding, setCompletedOnboarding] = useState<ReadonlySet<string>>(() => new Set())
   const [showRecovery, setShowRecovery] = useState(false)
@@ -249,7 +266,7 @@ export function SettingsRoot(props: SettingsRootComponentProps) {
           renderSlot={renderSlot}
           activeId={activeId}
           onSelect={actions.select}
-          onClose={close}
+          onClose={closePanel}
         />
       )}
       {/* Dialog chrome and `#root` inert ownership live inside each step's

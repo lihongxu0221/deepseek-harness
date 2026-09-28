@@ -1385,6 +1385,29 @@ export interface Config {
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-hooks-codex -->
 
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-host-desktop-update -->
+<a id="deepseek-aidsh-host-desktop-update"></a>
+
+## `@deepseek-ai/dsh-host-desktop-update`
+
+- `inject`: `connection`
+- `source`: [`packages/host/desktop-update/src/index.ts:78`](../packages/host/desktop-update/src/index.ts)
+
+```ts config-catalog
+/** Plugin configuration. */
+export interface Config {
+  /** GitHub `owner/name` that publishes winexe zips. @default lihongxu0221/deepseek-harness */
+  readonly repository?: string
+  /** Required zip asset filename prefix. @default dsh-web-win-x64- */
+  readonly assetPrefix?: string
+  /** Probe GitHub after load when this is a packaged desktop. @default true */
+  readonly checkOnBoot?: boolean
+  /** GitHub list cache window in milliseconds. @default 600000 */
+  readonly cacheTtlMs?: number
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-host-desktop-update -->
+
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-host-directory-picker-browse -->
 <a id="deepseek-aidsh-host-directory-picker-browse"></a>
 
@@ -4326,6 +4349,7 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 | `@deepseek-ai/dsh-client-ui-conversation` | — | [`packages/client/ui-conversation/src/index.ts`](../packages/client/ui-conversation/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-cordis` | — | [`packages/extensions/ui-cordis/src/index.ts`](../packages/extensions/ui-cordis/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-deliverables` | `systemPrompt` · `connection` · `sessionQuery` · `sessionController` · `workspaceFiles` · `fs` · `sandboxPolicy` · `workspaceChanges` | [`packages/client/ui-deliverables/src/index.ts`](../packages/client/ui-deliverables/src/index.ts) |
+| `@deepseek-ai/dsh-client-ui-desktop-update` | — | [`packages/client/ui-desktop-update/src/index.ts`](../packages/client/ui-desktop-update/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-directory-picker-browse` | — | [`packages/client/ui-directory-picker-browse/src/index.ts`](../packages/client/ui-directory-picker-browse/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-directory-picker-native` | — | [`packages/client/ui-directory-picker-native/src/index.ts`](../packages/client/ui-directory-picker-native/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-goal` | — | [`packages/client/ui-goal/src/index.ts`](../packages/client/ui-goal/src/index.ts) |

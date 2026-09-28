@@ -5,6 +5,9 @@ import type { Workspace } from '@deepseek-ai/dsh-workspace'
 import {
   WorkspaceActiveSessionError,
   WorkspaceArchivedSessionPinError,
+  WorkspaceFolderConflictError,
+  WorkspaceFolderPrimaryError,
+  WorkspaceFolderUnknownError,
   WorkspaceId,
   WorkspaceMoveInvalidError,
   WorkspaceOrderInvalidError,
@@ -13,6 +16,7 @@ import {
 import { RemoteError, remoteErrorOf } from '@deepseek-ai/dsh-typert-protocol'
 import { workspaceView } from './feed.ts'
 import type {
+  WorkspaceAddFolderRequest,
   WorkspaceArchiveSessionRequest,
   WorkspaceArchiveValue,
   WorkspaceCreateRequest,
@@ -24,7 +28,9 @@ import type {
   WorkspaceOrderValue,
   WorkspacePinSessionRequest,
   WorkspacePinValue,
+  WorkspaceRemoveFolderRequest,
   WorkspaceRenameRequest,
+  WorkspaceSetPrimaryFolderRequest,
   WorkspaceUnarchiveSessionRequest,
   WorkspaceUnpinSessionRequest,
   WorkspaceValue,
@@ -101,6 +107,57 @@ export class WorkspaceCommands {
         throw workspaceNotFound(request.workspaceId)
       }
       return { deleted: true }
+    })
+  }
+
+  /**
+   * Add an extra folder to one Workspace.
+   * @param request - Workspace identity and directory path.
+   * @returns the updated Workspace projection.
+   */
+  addFolder(request: WorkspaceAddFolderRequest): Promise<WorkspaceValue> {
+    return this.enqueue(async () => {
+      const workspace = this.requireWorkspace(request.workspaceId)
+      try {
+        await workspace.addFolder(request.path)
+      } catch (error) {
+        throw folderMutationError(request.path, error)
+      }
+      return { workspace: workspaceView(workspace) }
+    })
+  }
+
+  /**
+   * Drop an extra folder from one Workspace. The directory is kept.
+   * @param request - Workspace identity and extra-folder path.
+   * @returns the updated Workspace projection.
+   */
+  removeFolder(request: WorkspaceRemoveFolderRequest): Promise<WorkspaceValue> {
+    return this.enqueue(async () => {
+      const workspace = this.requireWorkspace(request.workspaceId)
+      try {
+        await workspace.removeFolder(request.path)
+      } catch (error) {
+        throw folderMutationError(request.path, error)
+      }
+      return { workspace: workspaceView(workspace) }
+    })
+  }
+
+  /**
+   * Promote an owned extra folder to the Workspace primary directory.
+   * @param request - Workspace identity and extra-folder path.
+   * @returns the updated Workspace projection.
+   */
+  setPrimaryFolder(request: WorkspaceSetPrimaryFolderRequest): Promise<WorkspaceValue> {
+    return this.enqueue(async () => {
+      const workspace = this.requireWorkspace(request.workspaceId)
+      try {
+        await workspace.setPrimaryFolder(request.path)
+      } catch (error) {
+        throw folderMutationError(request.path, error)
+      }
+      return { workspace: workspaceView(workspace) }
     })
   }
 
@@ -244,6 +301,30 @@ function workspaceNotFound(workspaceId: WorkspaceId): RemoteError<'workspace/not
     'workspace/not-found',
     `Workspace "${workspaceId}" not found`,
     { workspaceId },
+  )
+}
+
+function folderMutationError(path: string, error: unknown): RemoteError {
+  if (error instanceof WorkspaceFolderPrimaryError) {
+    return new RemoteError('workspace/folder-primary', error.message, { path: error.path }, { cause: error })
+  }
+  if (error instanceof WorkspaceFolderUnknownError) {
+    return new RemoteError('workspace/folder-unknown', error.message, { path: error.path }, { cause: error })
+  }
+  if (error instanceof WorkspaceFolderConflictError) {
+    return new RemoteError(
+      'workspace/folder-conflict',
+      error.message,
+      { path: error.path, ownerId: error.ownerId },
+      { cause: error },
+    )
+  }
+  if (remoteErrorOf(error) !== undefined) throw error
+  return new RemoteError(
+    'workspace/invalid-path',
+    'cannot mutate folder "' + path + '": ' + errorMessage(error),
+    { path },
+    { cause: error },
   )
 }
 
