@@ -21,7 +21,10 @@ export interface WorkspaceView {
   readonly path: string
   /** User-visible title. */
   readonly title: string
-  /** Extra canonical directories, excluding the primary path. */
+  /**
+   * Extra canonical directories besides {@link path}. Absent on older
+   * projections; consumers treat that as none.
+   */
   readonly folders?: readonly string[]
   /** Sessions accounted to this Workspace in manual order. */
   readonly sessionIds: readonly SessionId[]
@@ -86,6 +89,24 @@ export interface WorkspaceRenameRequest {
   readonly title: string
 }
 
+/** Extra folder added to an existing Workspace. */
+export interface WorkspaceAddFolderRequest {
+  readonly workspaceId: WorkspaceId
+  readonly path: string
+}
+
+/** Extra folder dropped from a Workspace. The directory is kept. */
+export interface WorkspaceRemoveFolderRequest {
+  readonly workspaceId: WorkspaceId
+  readonly path: string
+}
+
+/** Extra folder promoted to the Workspace primary directory. */
+export interface WorkspaceSetPrimaryFolderRequest {
+  readonly workspaceId: WorkspaceId
+  readonly path: string
+}
+
 /** Workspace mutation returning the complete changed row. */
 export interface WorkspaceValue {
   readonly workspace: WorkspaceView
@@ -110,24 +131,6 @@ export interface WorkspaceInsertBeforeRequest {
 /** Complete Workspace registry order after a mutation. */
 export interface WorkspaceOrderValue {
   readonly workspaceIds: readonly WorkspaceId[]
-}
-
-/** Extra folder added to an existing Workspace. */
-export interface WorkspaceAddFolderRequest {
-  readonly workspaceId: WorkspaceId
-  readonly path: string
-}
-
-/** Extra folder dropped from a Workspace. The directory is kept. */
-export interface WorkspaceRemoveFolderRequest {
-  readonly workspaceId: WorkspaceId
-  readonly path: string
-}
-
-/** Extra folder promoted to the Workspace primary directory. */
-export interface WorkspaceSetPrimaryFolderRequest {
-  readonly workspaceId: WorkspaceId
-  readonly path: string
 }
 
 /** DOM-insertBefore-like Session membership order mutation. */

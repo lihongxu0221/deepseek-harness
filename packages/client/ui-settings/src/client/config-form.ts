@@ -65,7 +65,7 @@ export class ConfigFormController<T> implements ConfigForm<T> {
    * namespace carries this form's writes (reads ride the mirror).
    * @param spec - namespace identity and optional narrowing decoder.
    * @param mirror - the shared describe mirror this form derives from.
-   * @param persistence - client-selected Host persistence; non-loopback pages may remain process-local.
+   * @param persistence - `host` derives from the shared mirror; `memory` is the test-only unavailable stand-in.
    * @param schema - settings-owned schema operations.
    */
   constructor(
@@ -255,8 +255,8 @@ export class ConfigForms extends Service {
   /**
    * @param ctx - the providing plugin's context.
    * @param config - the shared describe mirror every shared form derives from,
-   * the settings-owned schema operations, and the Host persistence the provider
-   * resolved from `remote.$host`.
+   * the settings-owned schema operations, and the Host persistence the
+   * providing plugin selected (`host` in production; `memory` is test-only).
    */
   constructor(ctx: Context, config: {
     mirror: SettingsDescribeMirror

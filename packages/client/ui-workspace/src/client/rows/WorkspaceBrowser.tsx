@@ -1521,6 +1521,8 @@ export function WorkspaceBrowser({
                 aria-label={t('workspace.add')}
                 aria-keyshortcuts={addShortcut?.aria}
                 onClick={() => {
+                  addFolderTargetRef.current = null
+                  setAddFolderTarget(null)
                   requestAddWorkspace()
                 }}
               >
@@ -1532,20 +1534,49 @@ export function WorkspaceBrowser({
         {/* Add flow + its error dialog (same package — direct composition). */}
         <WorkspacePickFlow
           t={t}
-          open={wsPickerOpen}
+          open={wsPickerOpen || addFolderTarget !== null}
           anchorRef={wsPlusRef}
           useWorkspaces={useWorkspaces}
-          createWorkspace={createWorkspace}
+          createWorkspace={async ({ path }) => {
+            const target = addFolderTargetRef.current
+            if (target !== null) {
+              if (editTarget !== null) {
+                setEditFolders((folders) => {
+                  if (path === editPath || folders.includes(path)) return folders
+                  return [...folders, path]
+                })
+                const existing = storedWorkspaces.find(workspace => workspace.workspaceId === target)
+                /* v8 ignore next -- the editor is only open for a listed Workspace. */
+                if (existing === undefined) throw new Error('unknown workspace')
+                return existing
+              }
+              return addFolder(target, path)
+            }
+            return createWorkspace({ path })
+          }}
           useDirectoryFlow={useDirectoryFlow}
-          renderDirectoryFlow={owner => renderSlot('sidebar.workspaces.directoryFlow', owner)}
+          renderDirectoryFlow={owner => renderSlot('sidebar.workspaces.directoryFlow', {
+            ...owner,
+            onCancel: () => {
+              owner.onCancel()
+              addFolderTargetRef.current = null
+              setAddFolderTarget(null)
+            },
+          })}
           addOnly
           onBusyChange={setDirectoryBusy}
           side="right"
           onPick={(workspaceId) => {
+            const addingFolder = addFolderTargetRef.current !== null
+            addFolderTargetRef.current = null
+            setAddFolderTarget(null)
             closeAddWorkspace()
-            startSession(workspaceId)
+            if (!addingFolder && editTarget === null) startSession(workspaceId)
           }}
-          onClose={() => { closeAddWorkspace() }}
+          onClose={() => {
+            closeAddWorkspace()
+            if (editTarget === null) setAddFolderTarget(null)
+          }}
         />
       </div>
 

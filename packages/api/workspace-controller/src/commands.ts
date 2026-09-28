@@ -3,11 +3,11 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { Workspace } from '@deepseek-ai/dsh-workspace'
 import {
-  WorkspaceActiveSessionError,
-  WorkspaceArchivedSessionPinError,
   WorkspaceFolderConflictError,
   WorkspaceFolderPrimaryError,
   WorkspaceFolderUnknownError,
+  WorkspaceActiveSessionError,
+  WorkspaceArchivedSessionPinError,
   WorkspaceId,
   WorkspaceMoveInvalidError,
   WorkspaceOrderInvalidError,
@@ -26,9 +26,9 @@ import type {
   WorkspaceInsertBeforeRequest,
   WorkspaceInsertSessionBeforeRequest,
   WorkspaceOrderValue,
+  WorkspaceRemoveFolderRequest,
   WorkspacePinSessionRequest,
   WorkspacePinValue,
-  WorkspaceRemoveFolderRequest,
   WorkspaceRenameRequest,
   WorkspaceSetPrimaryFolderRequest,
   WorkspaceUnarchiveSessionRequest,
@@ -111,6 +111,26 @@ export class WorkspaceCommands {
   }
 
   /**
+   * Move one Workspace within the durable registry order.
+   * @param request - moved Workspace and optional anchor.
+   * @returns the complete resulting Workspace order.
+   */
+  async insertBefore(request: WorkspaceInsertBeforeRequest): Promise<WorkspaceOrderValue> {
+    try {
+      const workspaceIds = await this.ctx.workspaceRegistry.insertBefore(
+        WorkspaceId(request.workspaceId),
+        request.beforeWorkspaceId === undefined
+          ? undefined
+          : WorkspaceId(request.beforeWorkspaceId),
+      )
+      return { workspaceIds: [...workspaceIds] }
+    } catch (error) {
+      if (!(error instanceof WorkspaceOrderInvalidError)) throw error
+      throw workspaceNotFound(error.workspaceId)
+    }
+  }
+
+  /**
    * Add an extra folder to one Workspace.
    * @param request - Workspace identity and directory path.
    * @returns the updated Workspace projection.
@@ -159,26 +179,6 @@ export class WorkspaceCommands {
       }
       return { workspace: workspaceView(workspace) }
     })
-  }
-
-  /**
-   * Move one Workspace within the durable registry order.
-   * @param request - moved Workspace and optional anchor.
-   * @returns the complete resulting Workspace order.
-   */
-  async insertBefore(request: WorkspaceInsertBeforeRequest): Promise<WorkspaceOrderValue> {
-    try {
-      const workspaceIds = await this.ctx.workspaceRegistry.insertBefore(
-        WorkspaceId(request.workspaceId),
-        request.beforeWorkspaceId === undefined
-          ? undefined
-          : WorkspaceId(request.beforeWorkspaceId),
-      )
-      return { workspaceIds: [...workspaceIds] }
-    } catch (error) {
-      if (!(error instanceof WorkspaceOrderInvalidError)) throw error
-      throw workspaceNotFound(error.workspaceId)
-    }
   }
 
   /**
@@ -322,7 +322,7 @@ function folderMutationError(path: string, error: unknown): RemoteError {
   if (remoteErrorOf(error) !== undefined) throw error
   return new RemoteError(
     'workspace/invalid-path',
-    'cannot mutate folder "' + path + '": ' + errorMessage(error),
+    `cannot mutate folder "${path}": ${errorMessage(error)}`,
     { path },
     { cause: error },
   )

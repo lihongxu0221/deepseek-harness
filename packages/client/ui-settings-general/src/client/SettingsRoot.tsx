@@ -171,8 +171,8 @@ export function SettingsRoot(props: SettingsRootComponentProps) {
   useEffect(() => {
     const appeared = onboardingStepSeen.current === undefined && onboardingStep !== undefined
     onboardingStepSeen.current = onboardingStep
-    if (appeared && open) close()
-  }, [onboardingStep, open, close])
+    if (appeared && open) closePanel()
+  }, [onboardingStep, open, closePanel])
 
   useLayoutEffect(() => {
     const previous = previousConnectionState.current
@@ -234,7 +234,7 @@ export function SettingsRoot(props: SettingsRootComponentProps) {
         {renderSlot('settings.launcher', {
           wide, settingsOpen: open, openSettings: actions.open,
           ...(shortcut?.keys.length ? { settingsShortcut: { keys: shortcut.keys, aria: shortcut.aria } } : {}),
-          openOnboarding: (id) => { close(); setRequestedOnboarding(id) },
+          openOnboarding: (id) => { closePanel(); setRequestedOnboarding(id) },
         }, { fallback: <Tooltip disabled={open} label={t('trigger')} shortcutKeys={shortcut?.keys}>
           <button
             type="button"

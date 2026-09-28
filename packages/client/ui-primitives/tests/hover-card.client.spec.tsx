@@ -25,6 +25,7 @@ function mount(props: {
   copyText?: string
   copyLabel?: string
   copiedLabel?: string
+  className?: string
 } = {}) {
   const view = render(
     <HoverCard
@@ -106,6 +107,44 @@ describe('HoverCard', () => {
     expect(card.parentElement).toBe(document.body)
     expect(card.style.left).toBe('208px')
     expect(card.style.top).toBe('40px')
+  })
+
+  it('appends className to the portaled card', () => {
+    const { wrapper } = mount({ className: 'wide-card' })
+    fireEvent.pointerEnter(wrapper)
+    act(() => { vi.advanceTimersByTime(500) })
+    expect((screen.getByText('card body').parentElement as HTMLElement).className).toMatch(/wide-card/)
+  })
+
+  it('does not copy when a nested control is activated', async () => {
+    const writeText = vi.fn(async () => {})
+    const restoreClipboard = installClipboard(writeText)
+    const onPin = vi.fn()
+    try {
+      const view = render(
+        <HoverCard
+          anchor={<span>row</span>}
+          content={<div>card body<button type="button" onClick={onPin}>Pin</button></div>}
+          copyText="/full/path"
+          copyLabel="Copy path"
+          copiedLabel="Copied"
+        />,
+      )
+      const anchor = screen.getByText('row')
+      stubAnchorRect(anchor, { top: 40, right: 200 })
+      fireEvent.pointerEnter(anchor.parentElement as HTMLElement)
+      act(() => { vi.advanceTimersByTime(500) })
+      const pin = screen.getByRole('button', { name: 'Pin' })
+      await act(async () => { fireEvent.click(pin) })
+      expect(onPin).toHaveBeenCalledOnce()
+      expect(writeText).not.toHaveBeenCalled()
+      await act(async () => { fireEvent.keyDown(pin, { key: 'Enter' }) })
+      await act(async () => { fireEvent.keyDown(pin, { key: ' ' }) })
+      expect(writeText).not.toHaveBeenCalled()
+      view.unmount()
+    } finally {
+      restoreClipboard()
+    }
   })
 
   it('insets a preview by 24px on each side and follows anchor resizing', () => {

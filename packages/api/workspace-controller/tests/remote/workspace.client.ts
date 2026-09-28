@@ -8,6 +8,7 @@
 import { ok, type RemoteTable, type StreamScript } from '@deepseek-ai/dsh-remote-mock'
 import type { RemoteFailure, RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
 import type {
+  WorkspaceAddFolderRequest,
   WorkspaceArchiveSessionRequest,
   WorkspaceArchiveValue,
   WorkspaceCreateRequest,
@@ -19,9 +20,11 @@ import type {
   WorkspaceInsertBeforeRequest,
   WorkspaceInsertSessionBeforeRequest,
   WorkspaceOrderValue,
+  WorkspaceRemoveFolderRequest,
   WorkspacePinSessionRequest,
   WorkspacePinValue,
   WorkspaceRenameRequest,
+  WorkspaceSetPrimaryFolderRequest,
   WorkspaceUnarchiveSessionRequest,
   WorkspaceUnpinSessionRequest,
   WorkspaceValue,
@@ -105,6 +108,15 @@ export const workspaceWorld: RemoteTable = {
     }),
     'workspace/archiveSession': (request: WorkspaceArchiveSessionRequest): RemoteResult<WorkspaceArchiveValue> => ok({ archivedSessionIds: [request.sessionId] }),
     'workspace/unarchiveSession': (_request: WorkspaceUnarchiveSessionRequest): RemoteResult<WorkspaceArchiveValue> => ok({ archivedSessionIds: [] }),
+    'workspace/addFolder': (request: WorkspaceAddFolderRequest): RemoteResult<WorkspaceValue> => ok({
+      workspace: workspace(String(request.workspaceId), { folders: [request.path] }),
+    }),
+    'workspace/removeFolder': (request: WorkspaceRemoveFolderRequest): RemoteResult<WorkspaceValue> => ok({
+      workspace: workspace(String(request.workspaceId), { folders: [] }),
+    }),
+    'workspace/setPrimaryFolder': (request: WorkspaceSetPrimaryFolderRequest): RemoteResult<WorkspaceValue> => ok({
+      workspace: workspace(String(request.workspaceId), { path: request.path, folders: [] }),
+    }),
     'workspace/pinSession': (request: WorkspacePinSessionRequest): RemoteResult<WorkspacePinValue> => ok({ pinnedSessionIds: [request.sessionId] }),
     'workspace/unpinSession': (_request: WorkspaceUnpinSessionRequest): RemoteResult<WorkspacePinValue> => ok({ pinnedSessionIds: [] }),
   },

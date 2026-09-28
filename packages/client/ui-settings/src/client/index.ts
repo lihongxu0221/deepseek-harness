@@ -35,8 +35,9 @@ export const inject = ['remote', 'remote.settings']
  */
 export function apply(ctx: Context): void {
   const schema = new SettingsSchemaService(ctx)
-  // Every form uses the persistence mode resolved from the connected Host.
-  const persistence = ctx.remote.$host.isLoopback ? 'host' : 'memory'
+  // Production always persists on the serving Host, including a trusted LAN
+  // origin. `memory` remains available to tests that construct forms directly.
+  const persistence = 'host' as const
   const mirror = new SettingsDescribeMirror(ctx, persistence)
   ctx.effect(() => {
     const disposers = [

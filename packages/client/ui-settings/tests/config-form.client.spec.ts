@@ -543,13 +543,13 @@ describe('ConfigForms.get', () => {
     expect(theme.getSnapshot()).toMatchObject({ revision: 1 })
   })
 
-  it('binds a remote browser in memory mode without starting a settings read', async () => {
-    const describeCall = vi.fn()
-    const mirror = new SettingsDescribeMirror(ctxWith({ describe: describeCall }), 'memory')
+  it('binds a LAN browser in host mode so settings persist on the serving host', async () => {
+    const describeCall = vi.fn().mockResolvedValue(described({ preference: 'dark' }, 1))
+    const mirror = new SettingsDescribeMirror(ctxWith({ describe: describeCall }), 'host')
     const ctx = new Context()
     let scope!: ConfigForm<UiTestSettings>
     new TestRemote(ctx, { settings: { describe: describeCall } })
-    await ctx.plugin(ConfigForms, { mirror, schema: settingsSchema, persistence: 'memory' }).await()
+    await ctx.plugin(ConfigForms, { mirror, schema: settingsSchema, persistence: 'host' }).await()
     const fiber = ctx.plugin({
       inject: ['remote', 'configForms'],
       apply: (plugin: Context) => {
@@ -557,8 +557,8 @@ describe('ConfigForms.get', () => {
       },
     })
     await fiber.await()
-    expect(scope.getSnapshot()).toMatchObject({ status: 'unavailable', mode: 'memory', writable: false })
+    expect(scope.getSnapshot().mode).toBe('host')
+    await vi.waitFor(() => { expect(describeCall).toHaveBeenCalled() })
     await fiber.dispose()
-    expect(describeCall).not.toHaveBeenCalled()
   })
 })

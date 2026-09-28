@@ -3,6 +3,7 @@ import {
   ClientWorkspaceModel, type WorkspaceRemote,
 } from '../src/client/index.ts'
 import type {
+  WorkspaceAddFolderRequest,
   WorkspaceArchiveSessionRequest,
   WorkspaceArchiveValue,
   WorkspaceCreateRequest,
@@ -13,9 +14,11 @@ import type {
   WorkspaceInsertBeforeRequest,
   WorkspaceInsertSessionBeforeRequest,
   WorkspaceOrderValue,
+  WorkspaceRemoveFolderRequest,
   WorkspacePinSessionRequest,
   WorkspacePinValue,
   WorkspaceRenameRequest,
+  WorkspaceSetPrimaryFolderRequest,
   WorkspaceUnarchiveSessionRequest,
   WorkspaceUnpinSessionRequest,
   WorkspaceValue,
@@ -94,6 +97,18 @@ class FakeWorkspaceRemote implements WorkspaceRemote {
     request: WorkspaceUnarchiveSessionRequest,
   ) => Promise<RemoteResult<WorkspaceArchiveValue>> = request =>
     Promise.resolve(remoteOk({ archivedSessionIds: [request.sessionId] }))
+  onAddFolder: (request: WorkspaceAddFolderRequest) => Promise<RemoteResult<WorkspaceValue>> = request =>
+    Promise.resolve(remoteOk({
+      workspace: { ...workspace(String(request.workspaceId)), folders: [request.path] },
+    }))
+  onRemoveFolder: (request: WorkspaceRemoveFolderRequest) => Promise<RemoteResult<WorkspaceValue>> = request =>
+    Promise.resolve(remoteOk({
+      workspace: { ...workspace(String(request.workspaceId)), folders: [] },
+    }))
+  onSetPrimaryFolder: (request: WorkspaceSetPrimaryFolderRequest) => Promise<RemoteResult<WorkspaceValue>> = request =>
+    Promise.resolve(remoteOk({
+      workspace: { ...workspace(String(request.workspaceId)), path: request.path, folders: [] },
+    }))
   onPinSession: (
     request: WorkspacePinSessionRequest,
   ) => Promise<RemoteResult<WorkspacePinValue>> = request =>
@@ -136,6 +151,21 @@ class FakeWorkspaceRemote implements WorkspaceRemote {
   unarchiveSession(request: WorkspaceUnarchiveSessionRequest): Promise<RemoteResult<WorkspaceArchiveValue>> {
     this.record('unarchiveSession', request)
     return this.onUnarchiveSession(request)
+  }
+
+  addFolder(request: WorkspaceAddFolderRequest): Promise<RemoteResult<WorkspaceValue>> {
+    this.record('addFolder', request)
+    return this.onAddFolder(request)
+  }
+
+  removeFolder(request: WorkspaceRemoveFolderRequest): Promise<RemoteResult<WorkspaceValue>> {
+    this.record('removeFolder', request)
+    return this.onRemoveFolder(request)
+  }
+
+  setPrimaryFolder(request: WorkspaceSetPrimaryFolderRequest): Promise<RemoteResult<WorkspaceValue>> {
+    this.record('setPrimaryFolder', request)
+    return this.onSetPrimaryFolder(request)
   }
 
   pinSession(request: WorkspacePinSessionRequest): Promise<RemoteResult<WorkspacePinValue>> {
@@ -372,6 +402,38 @@ describe('ClientWorkspaceModel', () => {
     await expect(model.unarchiveSession(sid('fresh'))).resolves.toMatchObject({ ok: true })
     expect(model.getSnapshot().archivedSessionIds).toEqual([])
     expect(remote.calls).toContainEqual({ method: 'unarchiveSession', request: { sessionId: 'fresh' } })
+
+    remote.onAddFolder = request => Promise.resolve(remoteOk({
+      workspace: {
+        ...workspace(String(request.workspaceId), [sid('second'), sid('first')], '2026-04-01T00:00:00.000Z'),
+        folders: [request.path],
+      },
+    }))
+    await expect(model.addFolder(wid('one'), '/extra')).resolves.toMatchObject({ ok: true })
+    expect(model.getSnapshot().items[0]?.folders).toEqual(['/extra'])
+    remote.onAddFolder = () => Promise.resolve(workspaceError(
+      new RemoteError('workspace/invalid-path', 'missing', { path: '/gone' }),
+    ))
+    await expect(model.addFolder(wid('one'), '/gone')).resolves.toMatchObject({ ok: false })
+    expect(model.getSnapshot().items[0]?.folders).toEqual(['/extra'])
+
+    remote.onSetPrimaryFolder = request => Promise.resolve(remoteOk({
+      workspace: {
+        ...workspace(String(request.workspaceId), [sid('second'), sid('first')], '2026-05-01T00:00:00.000Z'),
+        path: request.path,
+        folders: [],
+      },
+    }))
+    await expect(model.setPrimaryFolder(wid('one'), '/extra')).resolves.toMatchObject({ ok: true })
+    expect(model.getSnapshot().items[0]).toMatchObject({ path: '/extra', folders: [] })
+    remote.onRemoveFolder = request => Promise.resolve(remoteOk({
+      workspace: {
+        ...workspace(String(request.workspaceId), [sid('second'), sid('first')], '2026-06-01T00:00:00.000Z'),
+        folders: [],
+      },
+    }))
+    await expect(model.removeFolder(wid('one'), '/extra')).resolves.toMatchObject({ ok: true })
+    expect(model.getSnapshot().items[0]?.folders).toEqual([])
   })
 
   it('keeps the latest unarchive reply when overlapping requests settle out of order', async () => {

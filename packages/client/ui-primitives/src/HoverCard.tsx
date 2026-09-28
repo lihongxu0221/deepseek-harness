@@ -251,6 +251,7 @@ export function HoverCard({
       onKeyDown={copyable
         ? (e) => {
           if (e.key !== 'Enter' && e.key !== ' ') return
+          if ((e.target as HTMLElement).closest('button, a, input, textarea, select') !== null) return
           e.preventDefault()
           void copy(copyText)
         }
