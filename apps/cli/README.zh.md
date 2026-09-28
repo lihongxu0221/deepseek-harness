@@ -36,6 +36,8 @@ dsh --help                          # the launcher's own help
 
 profile 目录包含一个 `package.json`，其中记录树外插件依赖，以及 profile manifest（元数据清单）`dsh.profile`、其中按顺序排列的 `bundles` 列表；还包含一个 `cordis.patch.yml`，其中保存用户自己的 patch 层。在 YAML 中启用的 `dsh-hmr` 监视 profile manifest、profile 与 home 级 patch 文件，再通过统一串行重载重新组合所有层。未启用 HMR 时，更改在重启后生效。监听器注册期间发生的编辑与后续编辑使用相同的非致命重载错误报告。[插件管理器](../../packages/boot/plugin-manager/README.zh.md) 与 `dsh plugin` 共享包操作和 profile 写锁；更新依赖会保留已停用的组合包选择。CLI 包操作继承认证环境和终端描述符，支持交互式构建批准；service 调用保留清理后的环境并捕获诊断。
 
+安装和 profile 启动会按声明的 DSH peer 范围，检查与 `dsh --version` 显示值相同的运行时版本。不兼容插件需要用户明确确认精确版本豁免。[插件管理器的兼容性参考](../../packages/boot/plugin-manager/README.zh.md#version-compatibility-and-exemptions)说明 `version-exemptions`、`allow-version`、`revoke-version`、持久化规则与风险。
+
 配置树以空根为起点，依次叠加以下配置层：
 - `dsh.profile.bundles` 中各组合包的 patch
 - profile 自身的 `cordis.patch.yml`，然后是 home 级的 `$DSH_HOME/cordis.patch.yml`
@@ -43,19 +45,14 @@ profile 目录包含一个 `package.json`，其中记录树外插件依赖，以
 
 `dsh.profile.bundles` 中列出的组合包先从 dsh 安装目录解析（`@deepseek-ai/dsh-base`、`@deepseek-ai/dsh-web-app`、`@deepseek-ai/dsh-headless`、`@deepseek-ai/dsh-sdk-app`、`@deepseek-ai/dsh-sdk-minimal`、`@deepseek-ai/dsh-acp-app`），再从 profile 自身的 `node_modules` 解析；pnpm 会将树外插件安装到该目录。
 
-使用 `--dump-default-config` 和 `--dump-config` 可在不启动的情况下检查组合后的配置树。
+使用 `--dump-default-config` 和 `--dump-config` 可在不启动的情况下检查组合后的配置树。`--dump-config-schema` 会导入组合树中插件声明的 schema，并打印描述 entry 与 patch 的 JSON Schema，而不是配置值；检查不受信任的插件前，请阅读 [schema dump 的安全性与范围](reference/README.zh.md#config-schema-dump)。
 
 层的确切优先级、flag、关闭行为、部署默认值和源码执行方式，以 [CLI 行为参考](reference/README.zh.md)为准。[启动与重载失败表](../../packages/boot/app-boot/README.zh.md#startup-and-reload-failures)对比 optional、required 插件启动失败与配置 HMR 的行为。
 
-## 打包桌面可执行文件
-
-`dist-exe/dsh-web-<platform>-<arch>/` 是双击即用的 Web GUI 文件夹。`dsh-web.exe` 只是薄启动器，必须与旁边的 `lib/`、`config/` 和 `node_modules/` 一起保留。整个文件夹可独立运行：exe 内嵌 Node，打开界面不需要安装系统 Node.js 或 Python。若第一个额外参数是已存在的 `.js`/`.cjs`/`.mjs` 文件（包括 Windows ACL 的 `runner.js`），启动器会导入该脚本而不是 GUI，以便原生辅助程序把 exe 当作 Node 使用。导入前会把 argv 改写成 `[exe, script, ...scriptArgs]`，让 worker 的 `process.argv.slice(2)` 与 Node 一致。当 `DSH_PTC_RUNTIME_NODE` 为 `1` 且额外参数不是脚本时，启动器会导入磁盘上的 PTC Node bootstrap，而不是去占用 GUI 锁，因此打包后的 `run_code` worker 不会作为第二个桌面实例以退出码 0 结束。若第一个额外参数是 `plugin`，启动器会对 `.config` 运行 CLI 的 plugin 命令，而不是去占用单实例 GUI 锁。通过 shell 按名称再次调用（`cmd /c dsh plugin …`）时走同一分发：SEA 会把 argv[0] 规范化为可执行路径，并把按输入原样的 token（`dsh`）保留到下一个槽位，该调用回声会被跳过，不会把调用挤进 GUI 访客路径。插件市场的探测与安装会隐藏 Windows 上的 `cmd.exe` 控制台窗口。`-e`/`--eval <source>` 会执行内联源码，这正是把 exe 当作 Node 拉起的助手（插件市场的重启助手）求值程序的方式。Windows 上会把可执行文件所在目录前置到 `PATH`，子进程按名称调用 `dsh` 时不再依赖用户 PATH 是否包含该文件夹。打包步骤会把启动器复制为 `dsh-web` 旁边的 `dsh.exe`（Windows）或 `dsh`，让这个 PATH 名在产品目录里存在。双击会启动 `web` profile，在 Edge 或 Chrome 的应用模式窗口中打开带进程 token 的本地 URL，并把该文件夹当作调用目录。托盘的“打开 URL”项使用同一条已认证地址。若未设置 `$DSH_HOME`，用户数据写在 exe 旁边的 `.config/`，作用等同于 `~/.dsh`。打包步骤会按 `scripts/builtin-profile-plugins.json` 的钉扎版本把插件种进 `.config/profiles/web`，首次启动就已带上市场和 UI 插件；再次构建会保留已有 `.config`，并重新播种，使内置钉扎与钉扎列表一致，包括磁盘上仍是旧版本的安装。种子里的 `@linxin666/dsh-remote-web-ui` 和 `@linxin666/dsh-client-ui-task-board` 会 inject `apiProxy`，本产品不提供该服务，因此启动器会禁用这两行并挂载其余钉扎插件。Windows 上启动器是 GUI 进程：闪窗显示启动进度，随后打开主界面；关闭窗口后托盘图标仍保持服务。右键托盘图标可显示主界面、打开监听 URL、启动或停止服务、打开系统设置，或退出。macOS/Linux 关闭应用窗口或控制台即可停止。这不是 JSON-RPC 的 `dsh-jsonrpc-agent-pkg` 可执行文件。
-
-在仓库根目录运行 `build-exe.bat`（Windows）或 `pnpm run build:web-exe`。打包器会在启动器旁写入 `VERSION`；推送 `winexeBuilder` 或 `winexeNew` 会打上 `<package-version>.winexe.<GitHub run>` 并发布预发布 zip。设置 → 通用设置 可检查该 GitHub Releases 列表是否有更新的 zip，并在保留 `.config` 的前提下替换程序文件。
-
 ## 可选覆盖层
 
-`config/examples/` 交付 GitHub 评审 webhook、会话内 Schedule、记忆 MCP 服务器与运行时 Cordis 工具的可选覆盖层。它们绝不属于默认 profile；设置与安全说明由[用户指南](../../docs/user/guide/index.zh.md)和[开发实战指南](../../docs/user/develop/practice/index.zh.md)负责。
+`config/examples/` 交付 GitHub 评审 webhook、记忆 MCP 服务器与运行时 Cordis 工具的可选覆盖层。它们绝不属于默认 profile；设置与安全说明由[用户指南](../../docs/user/guide/index.zh.md)和[开发实战指南](../../docs/user/develop/practice/index.zh.md)负责。
+
 ## 开发
 
 生产运行需要已构建的包与前端产物。请在仓库根目录单独运行 `pnpm run build`，然后使用 `pnpm dsh <args...>` 运行 TypeScript 入口并转发所有参数；模块解析约定以[源码执行参考](reference/README.zh.md#source-execution)为准。

@@ -3,9 +3,8 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { Workspace } from '@deepseek-ai/dsh-workspace'
 import {
-  WorkspaceFolderConflictError,
-  WorkspaceFolderPrimaryError,
-  WorkspaceFolderUnknownError,
+  WorkspaceActiveSessionError,
+  WorkspaceArchivedSessionPinError,
   WorkspaceId,
   WorkspaceMoveInvalidError,
   WorkspaceOrderInvalidError,
@@ -14,7 +13,6 @@ import {
 import { RemoteError, remoteErrorOf } from '@deepseek-ai/dsh-typert-protocol'
 import { workspaceView } from './feed.ts'
 import type {
-  WorkspaceAddFolderRequest,
   WorkspaceArchiveSessionRequest,
   WorkspaceArchiveValue,
   WorkspaceCreateRequest,
@@ -24,10 +22,11 @@ import type {
   WorkspaceInsertBeforeRequest,
   WorkspaceInsertSessionBeforeRequest,
   WorkspaceOrderValue,
-  WorkspaceRemoveFolderRequest,
+  WorkspacePinSessionRequest,
+  WorkspacePinValue,
   WorkspaceRenameRequest,
-  WorkspaceSetPrimaryFolderRequest,
   WorkspaceUnarchiveSessionRequest,
+  WorkspaceUnpinSessionRequest,
   WorkspaceValue,
 } from './types.ts'
 
@@ -126,57 +125,6 @@ export class WorkspaceCommands {
   }
 
   /**
-   * Add an extra folder to one Workspace.
-   * @param request - Workspace identity and directory path.
-   * @returns the updated Workspace projection.
-   */
-  addFolder(request: WorkspaceAddFolderRequest): Promise<WorkspaceValue> {
-    return this.enqueue(async () => {
-      const workspace = this.requireWorkspace(request.workspaceId)
-      try {
-        await workspace.addFolder(request.path)
-      } catch (error) {
-        throw folderMutationError(request.path, error)
-      }
-      return { workspace: workspaceView(workspace) }
-    })
-  }
-
-  /**
-   * Drop an extra folder from one Workspace. The directory is kept.
-   * @param request - Workspace identity and extra-folder path.
-   * @returns the updated Workspace projection.
-   */
-  removeFolder(request: WorkspaceRemoveFolderRequest): Promise<WorkspaceValue> {
-    return this.enqueue(async () => {
-      const workspace = this.requireWorkspace(request.workspaceId)
-      try {
-        await workspace.removeFolder(request.path)
-      } catch (error) {
-        throw folderMutationError(request.path, error)
-      }
-      return { workspace: workspaceView(workspace) }
-    })
-  }
-
-  /**
-   * Promote an owned extra folder to the Workspace primary directory.
-   * @param request - Workspace identity and extra-folder path.
-   * @returns the updated Workspace projection.
-   */
-  setPrimaryFolder(request: WorkspaceSetPrimaryFolderRequest): Promise<WorkspaceValue> {
-    return this.enqueue(async () => {
-      const workspace = this.requireWorkspace(request.workspaceId)
-      try {
-        await workspace.setPrimaryFolder(request.path)
-      } catch (error) {
-        throw folderMutationError(request.path, error)
-      }
-      return { workspace: workspaceView(workspace) }
-    })
-  }
-
-  /**
    * Move one accounted Session within a Workspace's manual order.
    * @param request - Workspace, Session, and optional anchor identities.
    * @returns the updated Workspace projection.
@@ -204,16 +152,32 @@ export class WorkspaceCommands {
   }
 
   /**
-   * Add one known Session to the registry-global archive set.
-   * @param request - Session identity to archive.
+   * Add one known Session to the registry-global archive set. Without
+   * `stopActivity` a Session with running work is refused as
+   * `workspace/session-active` with the activity the registry's providers
+   * reported; with it, the providers stop that work first.
+   * @param request - Session identity to archive and whether to stop its work.
    * @returns the complete resulting archive set.
    */
   async archiveSession(request: WorkspaceArchiveSessionRequest): Promise<WorkspaceArchiveValue> {
     try {
-      await this.ctx.workspaceRegistry.archiveSession(request.sessionId)
+      await this.ctx.workspaceRegistry.archiveSession(
+        request.sessionId,
+        request.stopActivity === true ? { stopActivity: true } : {},
+      )
     } catch (error) {
-      if (!(error instanceof WorkspaceUnknownSessionError)) throw error
-      throw new RemoteError('session/not-found', error.message, { sessionId: request.sessionId }, { cause: error })
+      if (error instanceof WorkspaceUnknownSessionError) {
+        throw new RemoteError('session/not-found', error.message, { sessionId: request.sessionId }, { cause: error })
+      }
+      if (error instanceof WorkspaceActiveSessionError) {
+        throw new RemoteError(
+          'workspace/session-active',
+          error.message,
+          { sessionId: request.sessionId, activity: error.activity },
+          { cause: error },
+        )
+      }
+      throw error
     }
     return { archivedSessionIds: [...this.ctx.workspaceRegistry.archivedSessionIds] }
   }
@@ -228,6 +192,38 @@ export class WorkspaceCommands {
   async unarchiveSession(request: WorkspaceUnarchiveSessionRequest): Promise<WorkspaceArchiveValue> {
     await this.ctx.workspaceRegistry.unarchiveSession(request.sessionId)
     return { archivedSessionIds: [...this.ctx.workspaceRegistry.archivedSessionIds] }
+  }
+
+  /**
+   * Add one known unarchived Session to the registry-global pin set.
+   * @param request - Session identity to pin.
+   * @returns the complete resulting pin set, most recently pinned first.
+   */
+  async pinSession(request: WorkspacePinSessionRequest): Promise<WorkspacePinValue> {
+    try {
+      await this.ctx.workspaceRegistry.pinSession(request.sessionId)
+    } catch (error) {
+      if (error instanceof WorkspaceUnknownSessionError) {
+        throw new RemoteError('session/not-found', error.message, { sessionId: request.sessionId }, { cause: error })
+      }
+      if (error instanceof WorkspaceArchivedSessionPinError) {
+        throw new RemoteError('gateway/bad-request', error.message, {}, { cause: error })
+      }
+      throw error
+    }
+    return { pinnedSessionIds: [...this.ctx.workspaceRegistry.pinnedSessionIds] }
+  }
+
+  /**
+   * Drop one Session from the registry-global pin set. An id that is not
+   * pinned is not an error: the call is idempotent, so a lost race with
+   * another surface resolves as a no-op.
+   * @param request - Session identity to unpin.
+   * @returns the complete resulting pin set, most recently pinned first.
+   */
+  async unpinSession(request: WorkspaceUnpinSessionRequest): Promise<WorkspacePinValue> {
+    await this.ctx.workspaceRegistry.unpinSession(request.sessionId)
+    return { pinnedSessionIds: [...this.ctx.workspaceRegistry.pinnedSessionIds] }
   }
 
   private requireWorkspace(workspaceId: WorkspaceId): Workspace {
@@ -248,30 +244,6 @@ function workspaceNotFound(workspaceId: WorkspaceId): RemoteError<'workspace/not
     'workspace/not-found',
     `Workspace "${workspaceId}" not found`,
     { workspaceId },
-  )
-}
-
-function folderMutationError(path: string, error: unknown): RemoteError {
-  if (error instanceof WorkspaceFolderPrimaryError) {
-    return new RemoteError('workspace/folder-primary', error.message, { path: error.path }, { cause: error })
-  }
-  if (error instanceof WorkspaceFolderUnknownError) {
-    return new RemoteError('workspace/folder-unknown', error.message, { path: error.path }, { cause: error })
-  }
-  if (error instanceof WorkspaceFolderConflictError) {
-    return new RemoteError(
-      'workspace/folder-conflict',
-      error.message,
-      { path: error.path, ownerId: error.ownerId },
-      { cause: error },
-    )
-  }
-  if (remoteErrorOf(error) !== undefined) throw error
-  return new RemoteError(
-    'workspace/invalid-path',
-    `cannot mutate folder "${path}": ${errorMessage(error)}`,
-    { path },
-    { cause: error },
   )
 }
 
