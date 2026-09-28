@@ -67,7 +67,7 @@ const workspace = (id: string, sessionIds: string[], title = id): WorkspaceView 
   sessionIds: sessionIds.map(sid), createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z',
 })
 const workspaceState = (
-  items: readonly WorkspaceView[],
+  items: readonly (WorkspaceView & { readonly folders?: readonly string[] })[],
   archivedSessionIds: readonly SessionId[] = [],
   pinnedSessionIds: readonly SessionId[] = [],
 ): WorkspaceSnapshot => ({
@@ -2601,11 +2601,11 @@ describe('Workspace tree grouping', () => {
     rerender(b, {})
     const row = screen.getByText('root').closest('[role="treeitem"]') as HTMLElement
     expect(row.getAttribute('aria-expanded')).toBe('true')
-    fireEvent.click(row)
-    expect(startSession).not.toHaveBeenCalled()
-    expect(row.getAttribute('aria-expanded')).toBe('false')
     fireEvent.click(screen.getByText('child'))
     expect(startSession).toHaveBeenCalledWith(wid('child'))
+    fireEvent.click(row)
+    expect(startSession).toHaveBeenCalledOnce()
+    expect(row.getAttribute('aria-expanded')).toBe('false')
   })
 
   it('shows a recent session only after the recents section is expanded', () => {
@@ -2635,7 +2635,8 @@ describe('Workspace tree grouping', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: '置顶' }))
     expect(b.store.getSnapshot().pinnedWorkspaceIds).toEqual([wid('alpha')])
     fireEvent.click(screen.getByRole('button', { name: '工作区“alpha”的操作' }))
-    fireEvent.mouseEnter(screen.getByRole('menuitem', { name: '移除文件夹' }))
+    const removeFolderItem = screen.getByRole('menuitem', { name: '移除文件夹' })
+    fireEvent.mouseEnter(removeFolderItem.parentElement as HTMLElement)
     fireEvent.click(screen.getByRole('menuitem', { name: '/projects/extra' }))
     expect(removeFolder).toHaveBeenCalledWith(wid('alpha'), '/projects/extra')
     fireEvent.click(screen.getByRole('button', { name: '工作区“alpha”的操作' }))
@@ -2643,7 +2644,48 @@ describe('Workspace tree grouping', () => {
     expect(screen.getByRole('dialog', { name: '编辑项目' })).toBeTruthy()
     fireEvent.change(screen.getByLabelText('项目名称'), { target: { value: 'Renamed' } })
     fireEvent.click(screen.getByRole('button', { name: '保存' }))
-    await Promise.resolve()
-    expect(renameWorkspace).toHaveBeenCalledWith(wid('alpha'), 'Renamed')
+    await waitFor(() => { expect(renameWorkspace).toHaveBeenCalledWith(wid('alpha'), 'Renamed') })
+  })
+
+  it('saves folder diffs and reports a project rename failure', async () => {
+    const addFolder = vi.fn(async () => workspace('alpha', []))
+    const removeFolder = vi.fn(async () => workspace('alpha', []))
+    const setPrimaryFolder = vi.fn(async () => workspace('alpha', []))
+    const renameWorkspace = vi.fn(async () => { throw new Error('busy') })
+    const b = mount({
+      addFolder,
+      removeFolder,
+      setPrimaryFolder,
+      renameWorkspace,
+      useWorkspaces: hook(workspaceState([{
+        ...workspace('alpha', []),
+        folders: ['/projects/extra'],
+      }])),
+      renderSlot: ((_name: string, owner: DirectoryFlowOwnerProps) => owner.open
+        ? <button type="button" onClick={() => { owner.onPicked('/projects/added') }}>Pick directory</button>
+        : null) as WorkspaceBrowserProps['renderSlot'],
+    })
+    fireEvent.click(screen.getByRole('button', { name: '工作区“alpha”的操作' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '编辑项目' }))
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    expect(renameWorkspace).not.toHaveBeenCalled()
+    expect(screen.queryByRole('dialog', { name: '编辑项目' })).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: '工作区“alpha”的操作' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '编辑项目' }))
+    fireEvent.click(screen.getByRole('button', { name: '设为主要' }))
+    fireEvent.click(screen.getByRole('button', { name: '移除文件夹“alpha”' }))
+    fireEvent.click(screen.getByRole('button', { name: '添加文件夹' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Pick directory' }))
+    fireEvent.change(screen.getByLabelText('项目名称'), { target: { value: 'Nope' } })
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    await waitFor(() => { expect(screen.getByRole('alert').textContent).toBe('busy') })
+    expect(addFolder).not.toHaveBeenCalled()
+
+    renameWorkspace.mockResolvedValue(undefined)
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    await waitFor(() => { expect(setPrimaryFolder).toHaveBeenCalled() })
+    expect(removeFolder).toHaveBeenCalled()
+    expect(addFolder).toHaveBeenCalledWith(wid('alpha'), '/projects/added')
   })
 })

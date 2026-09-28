@@ -146,7 +146,7 @@ describe('workspace browser rows', () => {
     const onCreate = vi.fn()
     const group: GroupNode = {
       key: 'project', workspaceId: wid('project'), cwd: '/projects/project', createdAt: 0, label: 'Project',
-      sessionCount: 1, expanded: true, containsCurrent: true, sessions: [],
+      sessionCount: 1, expanded: true, containsCurrent: true, pinned: false, folders: [], sessions: [],
     }
     render(<ProjectRowItem group={group} onToggle={onToggle} onCreate={onCreate} t={t}
       newShortcut={{ id: 'session.new' as never, label: 'New', aliases: [], binding: null,
@@ -475,7 +475,8 @@ describe('workspace browser rows', () => {
       fireEvent.click(screen.getByRole('menuitem', { name: '取消置顶' }))
       expect(onPin).toHaveBeenCalledOnce()
       fireEvent.click(screen.getByRole('button', { name: '工作区“Project”的操作' }))
-      fireEvent.mouseEnter(screen.getByRole('menuitem', { name: '移除文件夹' }))
+      const removeFolderItem = screen.getByRole('menuitem', { name: '移除文件夹' })
+      fireEvent.mouseEnter(removeFolderItem.parentElement as HTMLElement)
       fireEvent.click(screen.getByRole('menuitem', { name: '/projects/extra' }))
       expect(onRemoveFolder).toHaveBeenCalledWith('/projects/extra')
       fireEvent.pointerEnter(screen.getByRole('treeitem').parentElement as HTMLElement)
