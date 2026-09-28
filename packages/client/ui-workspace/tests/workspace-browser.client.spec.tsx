@@ -103,6 +103,11 @@ const renderDirectoryFlowOnly: WorkspaceBrowserProps['renderSlot'] = (name: stri
     ? <div data-testid="directory-flow" />
     : null
 
+function collapseRecents(): void {
+  const toggle = screen.queryByRole('button', { name: '折叠或展开最近会话' })
+  if (toggle !== null && toggle.getAttribute('aria-expanded') === 'true') fireEvent.click(toggle)
+}
+
 function mount(overrides: Partial<WorkspaceBrowserProps> = {}) {
   const controls = createWorkspaceShortcutControls()
   const store = createWorkspaceViewStore().create()
@@ -134,6 +139,9 @@ function mount(overrides: Partial<WorkspaceBrowserProps> = {}) {
     unarchiveSession: vi.fn(async () => {}),
     insertWorkspaceBefore: vi.fn(async () => {}),
     createWorkspace: vi.fn(async () => workspace('created', [])),
+    addFolder: vi.fn(async () => workspace('created', [])),
+    removeFolder: vi.fn(async () => workspace('created', [])),
+    setPrimaryFolder: vi.fn(async () => workspace('created', [])),
     useDirectoryFlow: bindSnapshotSelector({ getSnapshot: () => true, subscribe: () => () => {} }),
     useHostInfo: selector => selector({ home: undefined, isLoopback: true }),
     renderSlot: renderDirectoryFlowOnly,
@@ -141,6 +149,7 @@ function mount(overrides: Partial<WorkspaceBrowserProps> = {}) {
     ...overrides,
   }
   const view = render(<WorkspaceBrowser {...props} />)
+  collapseRecents()
   return { view, props, store, controls }
 }
 
@@ -1778,7 +1787,7 @@ describe('WorkspaceBrowser', () => {
     vi.useFakeTimers()
     try {
       const b = mount()
-      expect(screen.getByText('暂无会话')).toBeTruthy()
+      expect(screen.getByText('暂无工作区')).toBeTruthy()
       b.store.actions.setGroupBy('flat')
       rerender(b, {})
       expect(screen.getByText('暂无会话')).toBeTruthy()
@@ -2561,5 +2570,80 @@ describe('Workspace tree grouping', () => {
     fireEvent.dragEnd(alpha)
     expect(b.props.insertWorkspaceBefore).toHaveBeenCalledOnce()
     expect(b.props.insertWorkspaceBefore).toHaveBeenCalledWith(wid('alpha'), wid('gamma'))
+  })
+
+  it('toggles the Workspaces section and starts a session only from an empty leaf', () => {
+    const startSession = vi.fn()
+    mount({
+      startSession,
+      useWorkspaces: hook(workspaceState([workspace('empty', []), workspace('busy', ['kept'])])),
+      useSessions: hook(sessionState([summary('kept', 1)])),
+    })
+    fireEvent.click(screen.getByRole('button', { name: '折叠或展开工作区' }))
+    expect(screen.queryByText('empty')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: '折叠或展开工作区' }))
+    fireEvent.click(screen.getByText('empty'))
+    expect(startSession).toHaveBeenCalledWith(wid('empty'))
+    fireEvent.click(screen.getByText('busy'))
+    expect(startSession).toHaveBeenCalledOnce()
+    expect(screen.getByText('kept')).toBeTruthy()
+  })
+
+  it('toggles an ancestor instead of starting a session', () => {
+    const startSession = vi.fn()
+    const parent = { ...workspace('root', []), path: '/projects/root' }
+    const child = { ...workspace('child', []), path: '/projects/root/child' }
+    const b = mount({
+      startSession,
+      useWorkspaces: hook(workspaceState([parent, child])),
+    })
+    act(() => { b.store.actions.setGroupBy('workspace-tree') })
+    rerender(b, {})
+    const row = screen.getByText('root').closest('[role="treeitem"]') as HTMLElement
+    expect(row.getAttribute('aria-expanded')).toBe('true')
+    fireEvent.click(row)
+    expect(startSession).not.toHaveBeenCalled()
+    expect(row.getAttribute('aria-expanded')).toBe('false')
+    fireEvent.click(screen.getByText('child'))
+    expect(startSession).toHaveBeenCalledWith(wid('child'))
+  })
+
+  it('shows a recent session only after the recents section is expanded', () => {
+    mount({
+      useSessions: hook(sessionState([summary('recent', 1)])),
+      useWorkspaces: hook(workspaceState([workspace('alpha', ['recent'])])),
+    })
+    const toggle = screen.getByRole('button', { name: '折叠或展开最近会话' })
+    expect(toggle.getAttribute('aria-expanded')).toBe('false')
+    expect(screen.queryByText('recent')).toBeNull()
+    fireEvent.click(toggle)
+    expect(screen.getByText('recent')).toBeTruthy()
+  })
+
+  it('pins a workspace, edits its project, and removes an extra folder', async () => {
+    const removeFolder = vi.fn(async () => workspace('alpha', []))
+    const renameWorkspace = vi.fn(async () => {})
+    const b = mount({
+      removeFolder,
+      renameWorkspace,
+      useWorkspaces: hook(workspaceState([{
+        ...workspace('alpha', []),
+        folders: ['/projects/extra'],
+      }, workspace('beta', [])])),
+    })
+    fireEvent.click(screen.getByRole('button', { name: '工作区“alpha”的操作' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '置顶' }))
+    expect(b.store.getSnapshot().pinnedWorkspaceIds).toEqual([wid('alpha')])
+    fireEvent.click(screen.getByRole('button', { name: '工作区“alpha”的操作' }))
+    fireEvent.mouseEnter(screen.getByRole('menuitem', { name: '移除文件夹' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '/projects/extra' }))
+    expect(removeFolder).toHaveBeenCalledWith(wid('alpha'), '/projects/extra')
+    fireEvent.click(screen.getByRole('button', { name: '工作区“alpha”的操作' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '编辑项目' }))
+    expect(screen.getByRole('dialog', { name: '编辑项目' })).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('项目名称'), { target: { value: 'Renamed' } })
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    await Promise.resolve()
+    expect(renameWorkspace).toHaveBeenCalledWith(wid('alpha'), 'Renamed')
   })
 })

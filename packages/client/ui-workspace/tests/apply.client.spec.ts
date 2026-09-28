@@ -108,6 +108,9 @@ async function bench() {
     pinSession,
     unpinSession,
     insertSessionBefore: vi.fn(async () => ({})),
+    addFolder: vi.fn(async () => ({})),
+    removeFolder: vi.fn(async () => ({})),
+    setPrimaryFolder: vi.fn(async () => ({})),
   } as never)
   ctx.provide('sessions', {
     list: { getSnapshot: () => sessionSnapshot, subscribe },
@@ -546,6 +549,9 @@ describe('ui-workspace apply', () => {
     expect(b.rename).toHaveBeenCalledWith('ws', 'renamed')
     await browser.createWorkspace({ path: '/tmp/browser-project' })
     expect(b.create).toHaveBeenCalledWith({ path: '/tmp/browser-project' })
+    await browser.addFolder('ws' as never, '/tmp/extra')
+    await browser.removeFolder('ws' as never, '/tmp/extra')
+    await browser.setPrimaryFolder('ws' as never, '/tmp/extra')
 
     const picker = faceOf(b.slots.entries('conversation.hero.workspace')[0]!) as WorkspacePickerInjected
     await picker.createWorkspace({ path: '/tmp/project' })

@@ -84,7 +84,7 @@ async function seedWorkspace(runtime: SlotTestRuntime): Promise<void> {
 
 function collapseRecents(view: ReturnType<SlotTestRuntime['renderRoot']>): void {
   const toggle = view.queryByRole('button', { name: '折叠或展开最近会话' })
-  if (toggle !== null) fireEvent.click(toggle)
+  if (toggle !== null && toggle.getAttribute('aria-expanded') === 'true') fireEvent.click(toggle)
 }
 
 describe('session rename through the assembled browser', () => {

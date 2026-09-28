@@ -457,6 +457,36 @@ describe('workspace browser rows', () => {
     expect(screen.queryByRole('menu')).toBeNull()
   })
 
+  it('pins, edits, and removes a folder from the workspace row', () => {
+    vi.useFakeTimers()
+    const onEdit = vi.fn()
+    const onPin = vi.fn()
+    const onRemoveFolder = vi.fn()
+    const group: GroupNode = {
+      key: 'project', workspaceId: wid('project'), cwd: '/projects/project', createdAt: 0, label: 'Project',
+      sessionCount: 1, expanded: false, containsCurrent: false, pinned: true, folders: ['/projects/extra'], sessions: [],
+    }
+    try {
+      render(<ProjectRowItem
+        group={group} onToggle={vi.fn()} onCreate={vi.fn()}
+        actions={{ rename: vi.fn(), delete: vi.fn(), edit: onEdit, pin: onPin, removeFolder: onRemoveFolder }} t={t}
+      />)
+      fireEvent.click(screen.getByRole('button', { name: '工作区“Project”的操作' }))
+      fireEvent.click(screen.getByRole('menuitem', { name: '取消置顶' }))
+      expect(onPin).toHaveBeenCalledOnce()
+      fireEvent.click(screen.getByRole('button', { name: '工作区“Project”的操作' }))
+      fireEvent.mouseEnter(screen.getByRole('menuitem', { name: '移除文件夹' }))
+      fireEvent.click(screen.getByRole('menuitem', { name: '/projects/extra' }))
+      expect(onRemoveFolder).toHaveBeenCalledWith('/projects/extra')
+      fireEvent.pointerEnter(screen.getByRole('treeitem').parentElement as HTMLElement)
+      act(() => { vi.advanceTimersByTime(800) })
+      fireEvent.click(screen.getByRole('button', { name: '编辑项目' }))
+      expect(onEdit).toHaveBeenCalledOnce()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('workspace hover card shows its details and copies the full directory path', async () => {
     vi.useFakeTimers()
     const writeText = vi.fn(async () => {})

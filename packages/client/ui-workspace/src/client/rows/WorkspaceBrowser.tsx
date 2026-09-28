@@ -1666,15 +1666,16 @@ export function WorkspaceBrowser({
                 onEditRequest={(workspaceId) => {
                   const workspace = storedWorkspaces.find(item => item.workspaceId === workspaceId)
                   if (workspace === undefined) return
+                  const folders = workspaceExtraFolders(workspace)
                   setEditTarget({
                     workspaceId,
                     currentTitle: workspace.title,
                     path: workspace.path,
-                    originalFolders: workspace.folders ?? [],
+                    originalFolders: folders,
                   })
                   setEditTitle(workspace.title)
                   setEditPath(workspace.path)
-                  setEditFolders([...(workspace.folders ?? [])])
+                  setEditFolders([...folders])
                   setEditError(null)
                 }}
                 onRemoveFolderRequest={(workspaceId, path) => { void removeFolder(workspaceId, path) }}
@@ -1699,6 +1700,48 @@ export function WorkspaceBrowser({
               />
             ))}
       </div>
+
+      <WorkspaceEditDialog
+        open={editTarget !== null}
+        title={editTitle}
+        path={editPath}
+        folders={editFolders}
+        busy={editSaving || addFolderTarget !== null}
+        error={editError}
+        duplicateName={editDuplicate}
+        flowAvailable={directoryFlowAvailable}
+        onTitleChange={(next) => { setEditTitle(next); setEditError(null) }}
+        onClose={closeEdit}
+        onSave={confirmEdit}
+        onRemoveProject={() => {
+          if (editTarget === null || editSaving) return
+          setDeleteTarget({ workspaceId: editTarget.workspaceId, title: editTarget.currentTitle })
+          setDeleteError(null)
+          setEditTarget(null)
+          setEditError(null)
+          addFolderTargetRef.current = null
+          setAddFolderTarget(null)
+        }}
+        onAddFolder={() => {
+          if (editTarget === null || editSaving) return
+          addFolderTargetRef.current = editTarget.workspaceId
+          closeAddWorkspace()
+          setAddFolderTarget(editTarget.workspaceId)
+        }}
+        onRemoveFolder={(folder) => {
+          setEditFolders(folders => folders.filter(item => item !== folder))
+          setEditError(null)
+        }}
+        onSetPrimary={(folder) => {
+          setEditFolders((folders) => {
+            const without = folders.filter(item => item !== folder)
+            return editPath === '' ? without : [editPath, ...without]
+          })
+          setEditPath(folder)
+          setEditError(null)
+        }}
+        t={t}
+      />
 
       <Modal
         open={renameTarget !== null}

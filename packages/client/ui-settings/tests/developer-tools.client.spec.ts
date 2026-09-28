@@ -63,20 +63,26 @@ describe('developer tools settings', () => {
     expect(ctx.configForms.developerTools.enabled.getSnapshot()).toBe(false)
   })
 
-  it('shares one remote-browser preference across consumers and disposes it with the plugin', async () => {
+  it('persists a non-loopback browser on the serving host and disposes with the plugin', async () => {
     const ctx = new Context()
     onTestFinished(() => ctx.fiber.dispose())
-    const describeCall = vi.fn()
+    const describeCall = vi.fn().mockResolvedValue({ ok: true, value: {
+      writable: true, hasDocument: true, namespaces: [{
+        ns: DEVELOPER_TOOLS_NAMESPACE,
+        schema: DeveloperToolsSettingsSchema.toJSON(),
+        value: { enabled: true }, revision: 1, autoGenerate: true, applies: 'live', secrets: [],
+      }],
+    } })
     const remote = new TestRemote(ctx, { settings: { describe: describeCall } })
     remote.$host = { home: undefined, isLoopback: false }
     const fiber = ctx.plugin({ inject, apply: clientApply })
     await fiber.await()
     const preference = ctx.configForms.developerTools
     expect(fiber.ctx.configForms.developerTools.enabled).toBe(preference.enabled)
+    await ctx.configForms.describe().ensure()
+    expect(describeCall).toHaveBeenCalled()
+    expect(ctx.configForms.get<DeveloperToolsSettings>(DEVELOPER_TOOLS_NAMESPACE).getSnapshot().mode).toBe('host')
     expect(preference.enabled.getSnapshot()).toBe(true)
-    await preference.setEnabled(true)
-    expect(fiber.ctx.configForms.developerTools.enabled.getSnapshot()).toBe(true)
-    expect(describeCall).not.toHaveBeenCalled()
     await fiber.dispose()
     expect(ctx.get('configForms')).toBeUndefined()
   })

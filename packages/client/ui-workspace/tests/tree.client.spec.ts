@@ -237,6 +237,15 @@ describe('deriveGroups', () => {
     expect(groups.map(group => group.pinned)).toEqual([true, true, false])
   })
 
+  it('keeps extra folders projected beside the published Workspace view', () => {
+    const sessions = list(summary('owned', 1))
+    const groups = deriveGroups(sessions, [{
+      ...workspace('first', ['owned']),
+      folders: ['/projects/extra'],
+    }], noRows, noAttention, view(['first']))
+    expect(groups[0]?.folders).toEqual(['/projects/extra'])
+  })
+
   it('projects pending-interaction state into grouped and flat rows', () => {
     const awaiting = { ...summary('awaiting', 10), running: true }
     const sessions = list(awaiting)
