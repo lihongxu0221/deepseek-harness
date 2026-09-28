@@ -12,7 +12,7 @@ import { join, resolve, sep } from 'node:path'
 export const PACKAGED_WEB_HOME_DIR = '.config'
 
 /** Installation trees recreated on launch; not user data. */
-const OMITTED_HOME_SEGMENTS = new Set(['node_modules', '.dsh-module-fallback'])
+const OMITTED_HOME_SEGMENTS = new Set(['node_modules', '.dsh-module-fallback', 'desktop-chromium'])
 
 /**
  * Copy a packaged `.config` tree, omitting `node_modules` and

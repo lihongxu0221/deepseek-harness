@@ -49,7 +49,7 @@ const ROOT = resolve(import.meta.dirname, '..')
 const MANIFEST_FILENAME = 'builtin-profile-plugins.json'
 
 /** An exact semver version; range or tag specs would break reproducible builds. */
-const EXACT_VERSION_PATTERN = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/
+const EXACT_VERSION_PATTERN = /^(?:\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?|github:[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:#[0-9A-Za-z._-]+)?)$/
 
 /** The plugins this step installs, pinned to exact versions for reproducible products. */
 export interface BuiltinManifest {
@@ -268,7 +268,10 @@ export function readInstalledPluginVersion(profileDir: string, name: string): st
  * @returns true only when the installed `version` field equals the pin.
  */
 export function pluginInstalledAtPin(profileDir: string, name: string, version: string): boolean {
-  return readInstalledPluginVersion(profileDir, name) === version
+  const installed = readInstalledPluginVersion(profileDir, name)
+  if (installed === undefined) return false
+  if (version.startsWith('github:')) return true
+  return installed === version
 }
 
 /**

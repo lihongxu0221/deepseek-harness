@@ -2651,8 +2651,8 @@ describe('Workspace tree grouping', () => {
     const addFolder = vi.fn(async () => workspace('alpha', []))
     const removeFolder = vi.fn(async () => workspace('alpha', []))
     const setPrimaryFolder = vi.fn(async () => workspace('alpha', []))
-    const renameWorkspace = vi.fn(async () => { throw new Error('busy') })
-    const b = mount({
+    const renameWorkspace = vi.fn(async (): Promise<void> => { throw new Error('busy') })
+    mount({
       addFolder,
       removeFolder,
       setPrimaryFolder,

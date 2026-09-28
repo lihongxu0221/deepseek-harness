@@ -229,7 +229,7 @@ describe('deriveGroups', () => {
   it('keeps pinned Workspaces at the front in pin order', () => {
     const sessions = list(summary('owned', 1))
     const workspaces = [workspace('first', ['owned']), workspace('second', []), workspace('third', [])]
-    const groups = deriveGroups(sessions, workspaces, noArchive, noAttention, {
+    const groups = deriveGroups(sessions, workspaces, noRows, noAttention, {
       expandedGroups: [],
       pinnedWorkspaceIds: ['third', 'first'],
     })

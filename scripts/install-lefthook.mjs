@@ -618,6 +618,12 @@ function refuseScopedHooksPath(entry) {
   )
 }
 
+function loadLefthookPackage(root) {
+  const manifestPath = join(root, 'node_modules', 'lefthook', 'package.json')
+  if (!existsSync(manifestPath)) return undefined
+  return JSON.parse(readFileSync(manifestPath, 'utf8'))
+}
+
 async function main() {
   if (process.env.CI === 'true' || process.env.GITHUB_ACTIONS === 'true') return
   if (process.env.LEFTHOOK === '0') return

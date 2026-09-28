@@ -48,7 +48,7 @@ describe('loadBuiltinManifest', () => {
     expect(Object.keys(manifest.plugins)).toContain('dshmarket')
     expect(Object.keys(manifest.plugins)).toContain('dsh-free-search')
     for (const version of Object.values(manifest.plugins)) {
-      expect(version).toMatch(/^\d+\.\d+\.\d+/)
+      expect(version).toMatch(/^(?:\d+\.\d+\.\d+|github:)/)
     }
   })
 
