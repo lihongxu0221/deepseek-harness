@@ -2438,7 +2438,7 @@ importers:
         specifier: workspace:*
         version: link:../../client/ui-deliverables
       '@deepseek-ai/dsh-client-ui-desktop-update':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../../client/ui-desktop-update
       '@deepseek-ai/dsh-client-ui-directory-picker-browse':
         specifier: workspace:*
@@ -2588,7 +2588,7 @@ importers:
         specifier: workspace:*
         version: link:../../context/file-reference-local
       '@deepseek-ai/dsh-host-desktop-update':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../../host/desktop-update
       '@deepseek-ai/dsh-host-directory-picker-auto':
         specifier: workspace:*
@@ -2732,9 +2732,6 @@ importers:
         specifier: ^11.0.0
         version: 11.0.4
     devDependencies:
-      '@deepseek-ai/dsh-otel':
-        specifier: workspace:*
-        version: link:../../telemetry/otel
       '@deepseek-ai/cordis':
         specifier: workspace:~
         version: link:../../../vendor/cordis
@@ -2750,6 +2747,9 @@ importers:
       '@deepseek-ai/dsh-fs-local':
         specifier: workspace:*
         version: link:../../fs/fs-local
+      '@deepseek-ai/dsh-otel':
+        specifier: workspace:*
+        version: link:../../telemetry/otel
       '@deepseek-ai/dsh-sandbox-policy':
         specifier: workspace:*
         version: link:../../sandbox/sandbox-policy
@@ -2950,18 +2950,12 @@ importers:
         specifier: ^4.4.3
         version: 4.4.3
     devDependencies:
-      '@deepseek-ai/dsh-otel':
-        specifier: workspace:*
-        version: link:../../telemetry/otel
-      '@deepseek-ai/cordis-plugin-loader':
-        specifier: workspace:~
-        version: link:../../../vendor/loader
-      '@deepseek-ai/dsh-settings':
-        specifier: workspace:*
-        version: link:../../settings/settings
       '@deepseek-ai/cordis':
         specifier: workspace:~
         version: link:../../../vendor/cordis
+      '@deepseek-ai/cordis-plugin-loader':
+        specifier: workspace:~
+        version: link:../../../vendor/loader
       '@deepseek-ai/dsh-api-gateway':
         specifier: workspace:*
         version: link:../../api/gateway
@@ -2980,9 +2974,15 @@ importers:
       '@deepseek-ai/dsh-llm':
         specifier: workspace:*
         version: link:../../llm/llm
+      '@deepseek-ai/dsh-otel':
+        specifier: workspace:*
+        version: link:../../telemetry/otel
       '@deepseek-ai/dsh-session':
         specifier: workspace:*
         version: link:../../core/session
+      '@deepseek-ai/dsh-settings':
+        specifier: workspace:*
+        version: link:../../settings/settings
 
   packages/client/resources:
     devDependencies:
