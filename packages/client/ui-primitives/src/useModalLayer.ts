@@ -56,6 +56,10 @@ export function useModalLayer(dialog: RefObject<HTMLElement | null>, open: boole
     layers.set(document, stack)
     const layer = { element, close: () => { close.current() } }
     stack.push(layer)
+    const root = element.parentElement
+    if (root !== null) {
+      root.style.zIndex = String(1000 + (stack.length - 1) * 10)
+    }
     const initial = element.querySelector<HTMLElement>('[data-modal-autofocus]')
       ?? element.querySelector<HTMLElement>(focusable) ?? element
     if (!element.contains(document.activeElement)) focusWithoutRing(initial)
