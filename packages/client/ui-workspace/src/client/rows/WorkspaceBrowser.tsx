@@ -1350,6 +1350,10 @@ export function WorkspaceBrowser({
     && storedWorkspaces.some(workspace =>
       workspace.workspaceId !== editTarget.workspaceId && workspace.title === editTrimmed)
   const editorPickingFolder = addFolderTarget !== null
+  const handleClosePickFlow = useCallback(() => {
+    closeAddWorkspace()
+    if (editTarget === null) setAddFolderTarget(null)
+  }, [closeAddWorkspace, editTarget])
   const closeEdit = () => {
     if (editSaving) return
     setEditTarget(null)
@@ -1579,10 +1583,7 @@ export function WorkspaceBrowser({
             closeAddWorkspace()
             if (!addingFolder && editTarget === null) startSession(workspaceId)
           }}
-          onClose={() => {
-            closeAddWorkspace()
-            if (editTarget === null) setAddFolderTarget(null)
-          }}
+          onClose={handleClosePickFlow}
         />
       </div>
 
