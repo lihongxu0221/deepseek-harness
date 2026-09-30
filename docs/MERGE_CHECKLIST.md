@@ -65,22 +65,26 @@
 
 ## 二、原生与桌面进程生命周期 (Native & Process Lifecycle)
 
-### 2.1 Win32 原生文件夹选择器（`win32-dialog-worker.ts`）IPC 生命周期
+### 2.1 Win32 原生文件夹选择器（`win32-dialog-worker.ts`）IPC 生命周期与窗口可见性
 - **历史 BUG**：
-  在“编辑项目”点击“添加文件夹”时，选择窗口瞬间退出消失并返回 `null`。原因是 worker 在发出 `showing` 通知时误调用了全局 `post`，而 `post` 在发送后立刻执行了 `process.disconnect()`，触发 `process.on('disconnect', () => process.exit(0))`，使窗口还没展示就被自身杀死。
+  在“编辑项目”点击“添加文件夹”时，选择窗口瞬间退出消失并返回 `null`（或者表现为完全无响应）。原因有两个：
+  1. worker 在发出 `showing` 通知时误调用了全局 `post`，而 `post` 在发送后立刻执行了 `process.disconnect()`，触发 `process.on('disconnect', () => process.exit(0))`，使窗口还没展示就被自身杀死。
+  2. 派生 worker 子进程时如果传入了 `windowsHide: true`，Windows 会在 `STARTUPINFO` 中注入 `SW_HIDE`，导致 GUI 子进程创建的首个窗口（IFileOpenDialog）被系统判定为隐藏窗口而不渲染展示。
 - **排查要点**：
-  核查 [packages/host/directory-picker-native/src/win32-dialog-worker.ts](../packages/host/directory-picker-native/src/win32-dialog-worker.ts)：
-  ```ts
-  const post = (message: Win32DialogWorkerMessage): void => {
-    // 关键守卫：showing 阶段严禁断开 IPC，必须保持进程常驻阻塞直到用户操作完毕！
-    if (message.kind === 'showing') {
-      send(message)
-      return
-    }
-    send(message, () => { if (process.connected) process.disconnect() })
-  }
-  ```
-  确保只有在 `done` 或 `error` 终态时才执行 disconnect 退出。
+  1. 核查 [packages/host/directory-picker-native/src/win32-dialog-worker.ts](../packages/host/directory-picker-native/src/win32-dialog-worker.ts)：
+     ```ts
+     const post = (message: Win32DialogWorkerMessage): void => {
+       // 关键守卫：showing 阶段严禁断开 IPC，必须保持进程常驻阻塞直到用户操作完毕！
+       if (message.kind === 'showing') {
+         send(message)
+         return
+       }
+       send(message, () => { if (process.connected) process.disconnect() })
+     }
+     ```
+     确保只有在 `done` 或 `error` 终态时才执行 disconnect 退出。
+  2. 核查 [packages/host/directory-picker-native/src/win32-dialog-host.ts](../packages/host/directory-picker-native/src/win32-dialog-host.ts)：
+     创建对话框 worker 时必须显式声明 `windowsHide: false`，确保系统原生对话框窗口在前台可见。
 
 ### 2.2 打包 PTC 运行环境标志（`DSH_PTC_RUNTIME_NODE=1`）
 - **历史 BUG**：
