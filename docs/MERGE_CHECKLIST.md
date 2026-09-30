@@ -124,7 +124,11 @@
 
 ## 三、Web 界面与交互防崩溃红线 (Client UI & Component Stability)
 
-### 3.1 `Menu.tsx` 深度重渲崩溃与项目编辑状态解耦
+### 3.1 `Menu.tsx` 与工作区快捷操作深度重渲崩溃（`Maximum update depth exceeded` / React Error #185）
+- **`shortcuts.ts` 状态变更幂等性**：
+  [packages/client/ui-workspace/src/client/shortcuts.ts](../packages/client/ui-workspace/src/client/shortcuts.ts) 中的 `add`、`closeAdd`、`directoryBusy` 必须全部具备当前值比对守卫（例如 `if (current.addRequested) state.set(...)`），严禁无条件 `state.set` 产生新快照触发所有 store 订阅者级联死循环。
+- **`WorkspacePicker.tsx` 触发守卫与 Ref 隔离**：
+  [packages/client/ui-workspace/src/client/WorkspacePicker.tsx](../packages/client/ui-workspace/src/client/WorkspacePicker.tsx) 必须使用 `flowTriggeredRef` 守卫确保每个 `open` 会话 `openDirectoryFlow()` 最多只被调度一次；同时 `onClose` 必须通过 `onCloseRef` 隔离依赖，防止父组件重渲导致函数引用变异进而引发死循环。
 - **文件夹选取状态解耦**：
   [packages/client/ui-workspace/src/client/WorkspaceEditDialog.tsx](../packages/client/ui-workspace/src/client/WorkspaceEditDialog.tsx) 的 `busy` 属性必须仅表示保存（`editSaving`），文件夹选取中必须使用独立的 `pickingFolder` 属性（仅禁用“添加文件夹”自身）。严禁在选取过程中将整个对话框及其“取消/关闭”操作设为全局 `busy`，否则任何等待或错误都会导致页面出现“点击无响应、页面假死”现象；同时 `renderDirectoryFlow` 必须显式处理 `onError` 并重置 `addFolderTarget`。
 - **历史 BUG**：
