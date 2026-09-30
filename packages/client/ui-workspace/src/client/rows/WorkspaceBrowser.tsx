@@ -1351,7 +1351,7 @@ export function WorkspaceBrowser({
       workspace.workspaceId !== editTarget.workspaceId && workspace.title === editTrimmed)
   const editorPickingFolder = addFolderTarget !== null
   const closeEdit = () => {
-    if (editSaving || editorPickingFolder) return
+    if (editSaving) return
     setEditTarget(null)
     setEditError(null)
     addFolderTargetRef.current = null
@@ -1563,6 +1563,11 @@ export function WorkspaceBrowser({
               addFolderTargetRef.current = null
               setAddFolderTarget(null)
             },
+            onError: (message) => {
+              owner.onError(message)
+              addFolderTargetRef.current = null
+              setAddFolderTarget(null)
+            },
           })}
           addOnly
           onBusyChange={setDirectoryBusy}
@@ -1707,7 +1712,8 @@ export function WorkspaceBrowser({
         title={editTitle}
         path={editPath}
         folders={editFolders}
-        busy={editSaving || addFolderTarget !== null}
+        busy={editSaving}
+        pickingFolder={addFolderTarget !== null}
         error={editError}
         duplicateName={editDuplicate}
         flowAvailable={directoryFlowAvailable}

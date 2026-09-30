@@ -31,11 +31,12 @@ export interface Win32FolderDialog {
    */
   setTitle(title: string): number
   /**
-   * `IModalWindow::Show` with no owner window; blocks the calling thread
+   * `IModalWindow::Show` with an optional owner window; blocks the calling thread
    * until the user selects or dismisses.
+   * @param owner - optional parent window handle (defaults to the foreground window).
    * @returns the call's HRESULT (`HRESULT_CANCELLED` on dismissal).
    */
-  show(): number
+  show(owner?: unknown): number
   /**
    * `IFileDialog::GetResult` + `IShellItem::GetDisplayName(SIGDN_FILESYSPATH)`,
    * releasing the shell item and freeing the COM string.

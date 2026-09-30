@@ -40,7 +40,7 @@ export function folderLabel(path: string): string {
  * @returns the modal, or null while closed.
  */
 export function WorkspaceEditDialog({
-  open, title, path, folders, busy, error, duplicateName, flowAvailable,
+  open, title, path, folders, busy, pickingFolder = false, error, duplicateName, flowAvailable,
   onTitleChange, onClose, onSave, onRemoveProject, onAddFolder, onRemoveFolder, onSetPrimary, t,
 }: {
   open: boolean
@@ -48,6 +48,7 @@ export function WorkspaceEditDialog({
   path: string
   folders: readonly string[]
   busy: boolean
+  pickingFolder?: boolean
   error: string | null
   duplicateName: boolean
   flowAvailable: boolean
@@ -145,7 +146,7 @@ export function WorkspaceEditDialog({
         <button
           type="button"
           className={css.addFolder}
-          disabled={busy}
+          disabled={busy || pickingFolder}
           onClick={onAddFolder}
         >
           <IconProjectAddOutlineRegular />
