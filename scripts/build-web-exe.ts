@@ -362,6 +362,7 @@ class WebExeBuild {
         '--config.node-linker=hoisted',
         '--config.auto-install-peers=false',
         '--config.link-workspace-packages=true',
+        '--config.registry=https://registry.npmmirror.com',
         // Electron's osx-sign patch is unused in this CLI deploy tree.
         '--config.allow-unused-patches=true',
         // Node 26 + MSVC 18 pass clang LTO link flags; fs-ext's rebuild then

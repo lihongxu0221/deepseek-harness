@@ -303,6 +303,8 @@ export function Menu({ open, anchor, items = [], children, selectedId, selectedI
   useEffect(() => {
     if (!open) {
       triggerRef.current = null
+      walkIndex.current = null
+      setOpenSubmenuId(current => current === null ? null : null)
       return
     }
     const active = document.activeElement
@@ -317,11 +319,7 @@ export function Menu({ open, anchor, items = [], children, selectedId, selectedI
   }, [open, autoFocus])
 
   useEffect(() => {
-    if (!open) {
-      setOpenSubmenuId(null)
-      walkIndex.current = null
-      return
-    }
+    if (!open) return
     const composition = observeComposition(document)
     const onPointerDown = (e: PointerEvent) => {
       if (!(e.target instanceof Node)) return

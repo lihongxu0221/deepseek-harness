@@ -42,7 +42,10 @@ export function createWorkspaceShortcutControls(): WorkspaceShortcutControls {
     search: () => { state.set({ ...state.getSnapshot(), searchRequest: state.getSnapshot().searchRequest + 1 }) },
     add: () => { state.set(state.getSnapshot().directoryBusy ? state.getSnapshot() : { ...state.getSnapshot(), addRequested: true }) },
     closeAdd: () => { state.set({ ...state.getSnapshot(), addRequested: false }) },
-    directoryBusy: (busy: boolean) => { state.set({ ...state.getSnapshot(), directoryBusy: busy }) },
+    directoryBusy: (busy: boolean) => {
+      const current = state.getSnapshot()
+      if (current.directoryBusy !== busy) state.set({ ...current, directoryBusy: busy })
+    },
     rename: (sessionId: SessionId, currentTitle: string) => {
       state.set({ ...state.getSnapshot(), renameTarget: { sessionId, currentTitle } })
     },
