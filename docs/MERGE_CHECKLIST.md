@@ -85,6 +85,8 @@
      确保只有在 `done` 或 `error` 终态时才执行 disconnect 退出。
   2. 核查 [packages/host/directory-picker-native/src/win32-dialog-host.ts](../packages/host/directory-picker-native/src/win32-dialog-host.ts)：
      创建对话框 worker 时必须显式声明 `windowsHide: false`，确保系统原生对话框窗口在前台可见。
+  3. 核查 [packages/host/directory-picker-native/src/win32-dialog-bindings.ts](../packages/host/directory-picker-native/src/win32-dialog-bindings.ts)：
+     `IModalWindow::Show` 必须传入 `GetForegroundWindow()` 获取的宿主窗口句柄（而不是 `null`），确保系统文件夹选择框作为浏览器的模态子窗口居中弹出在最前台，绝不会被全屏浏览器遮挡在后方。
 
 ### 2.2 打包 PTC 运行环境标志（`DSH_PTC_RUNTIME_NODE=1`）
 - **历史 BUG**：
@@ -120,7 +122,9 @@
 
 ## 三、Web 界面与交互防崩溃红线 (Client UI & Component Stability)
 
-### 3.1 `Menu.tsx` 深度重渲崩溃（`Maximum update depth exceeded`）
+### 3.1 `Menu.tsx` 深度重渲崩溃与项目编辑状态解耦
+- **文件夹选取状态解耦**：
+  [packages/client/ui-workspace/src/client/WorkspaceEditDialog.tsx](../packages/client/ui-workspace/src/client/WorkspaceEditDialog.tsx) 的 `busy` 属性必须仅表示保存（`editSaving`），文件夹选取中必须使用独立的 `pickingFolder` 属性（仅禁用“添加文件夹”自身）。严禁在选取过程中将整个对话框及其“取消/关闭”操作设为全局 `busy`，否则任何等待或错误都会导致页面出现“点击无响应、页面假死”现象；同时 `renderDirectoryFlow` 必须显式处理 `onError` 并重置 `addFolderTarget`。
 - **历史 BUG**：
   在侧边栏触发任何状态变化（如打开文件选择器导致 `directoryBusy` 改变）时，工作区瞬间崩溃消失、编辑弹窗消失、界面跌落到新建会话。
 - **根因**：
