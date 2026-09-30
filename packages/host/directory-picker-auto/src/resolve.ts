@@ -13,7 +13,7 @@ export type DirectoryPickerBackendKind = 'native' | 'browse'
 
 /** Environment keys the resolution reads (a `process.env` subset). */
 export type DirectoryPickerEnv = Readonly<
-  Partial<Record<'DISPLAY' | 'WAYLAND_DISPLAY', string>>
+  Partial<Record<'DISPLAY' | 'WAYLAND_DISPLAY' | 'DSH_DIRECTORY_PICKER', string>>
 >
 
 /** Host facts the backend choice is a pure function of, sampled once at boot. */
@@ -49,6 +49,7 @@ const present = (value: string | undefined): boolean => value !== undefined && v
 export function resolveDirectoryPickerBackend(facts: DirectoryPickerHostFacts): DirectoryPickerBackendKind {
   if (facts.bindHost !== '127.0.0.1') return 'browse'
   if (facts.ssh) return 'browse'
+  if (facts.env.DSH_DIRECTORY_PICKER === 'browse') return 'browse'
   if (facts.platform === 'darwin' || facts.platform === 'win32') return 'native'
   if (facts.platform !== 'linux' || !facts.linuxChooser) return 'browse'
   return present(facts.env.DISPLAY) || present(facts.env.WAYLAND_DISPLAY) ? 'native' : 'browse'

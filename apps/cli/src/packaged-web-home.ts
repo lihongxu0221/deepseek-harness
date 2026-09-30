@@ -58,4 +58,7 @@ export function applyPackagedWebHome(
  */
 export function applyPackagedWebProfile(env: NodeJS.ProcessEnv = process.env): void {
   env[DSH_PROFILE_ENV] = PACKAGED_WEB_PROFILE
+  if (process.platform === 'win32' && env.DSH_DIRECTORY_PICKER === undefined) {
+    env.DSH_DIRECTORY_PICKER = 'browse'
+  }
 }

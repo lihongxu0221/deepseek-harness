@@ -87,6 +87,8 @@
      创建对话框 worker 时必须显式声明 `windowsHide: false`，确保系统原生对话框窗口在前台可见。
   3. 核查 [packages/host/directory-picker-native/src/win32-dialog-bindings.ts](../packages/host/directory-picker-native/src/win32-dialog-bindings.ts)：
      `IModalWindow::Show` 必须传入 `GetForegroundWindow()` 获取的宿主窗口句柄（而不是 `null`），确保系统文件夹选择框作为浏览器的模态子窗口居中弹出在最前台，绝不会被全屏浏览器遮挡在后方。
+  4. 核查 [apps/cli/src/packaged-web-home.ts](../apps/cli/src/packaged-web-home.ts) 与 [packages/host/directory-picker-auto/src/resolve.ts](../packages/host/directory-picker-auto/src/resolve.ts)：
+     Windows 打包版桌面 Web 界面必须默认使用应用内弹窗选择器（`DSH_DIRECTORY_PICKER=browse`），使“添加文件夹”与“添加工作区”直接在浏览器界面内唤起标准 DirectoryBrowser 弹窗，保证跨环境 100% 稳定响应。
 
 ### 2.2 打包 PTC 运行环境标志（`DSH_PTC_RUNTIME_NODE=1`）
 - **历史 BUG**：

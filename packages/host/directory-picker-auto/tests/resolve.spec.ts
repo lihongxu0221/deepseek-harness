@@ -21,6 +21,10 @@ describe('resolveDirectoryPickerBackend', () => {
     expect(resolveDirectoryPickerBackend({ ...attended, platform: 'win32' })).toBe('native')
   })
 
+  it('respects DSH_DIRECTORY_PICKER override', () => {
+    expect(resolveDirectoryPickerBackend({ ...attended, env: { DSH_DIRECTORY_PICKER: 'browse' } })).toBe('browse')
+  })
+
   it('resolves browse for an all-interfaces bind regardless of other signals', () => {
     expect(resolveDirectoryPickerBackend({ ...attended, bindHost: '0.0.0.0' })).toBe('browse')
   })
